@@ -26,13 +26,21 @@ export default function Sidebar({ open, onClose }: Props) {
 
   const content = (
     <div className="flex h-full w-72 flex-col gap-4 overflow-y-auto border-r border-[var(--border)] bg-[var(--panel)] p-4">
-      <nav className="flex flex-col gap-1">
+      <nav aria-label="Primary" className="flex flex-col gap-1">
         <NavItem to="/chat" label="Chat" icon="💬" onClose={onClose} />
         <NavItem to="/history" label="History" icon="🕘" onClose={onClose} />
         <NavItem to="/pipeline" label="Pipeline" icon="🚦" onClose={onClose} />
         <NavItem to="/tasks" label="Tasks" icon="⚙️" onClose={onClose} />
-        <NavItem to="/settings" label="Settings" icon="🔧" onClose={onClose} />
       </nav>
+
+      <Section title="Settings">
+        <nav aria-label="Settings" className="flex flex-col gap-1">
+          <NavItem to="/settings/modes" label="Modes" icon="🎚️" onClose={onClose} />
+          <NavItem to="/settings/provider" label="Provider" icon="🔌" onClose={onClose} />
+          <NavItem to="/settings/models" label="Models" icon="🧠" onClose={onClose} />
+          <NavItem to="/settings/agents" label="Agents" icon="🤖" onClose={onClose} />
+        </nav>
+      </Section>
 
       <Section title="Status">
         <Row k="model" v={appState?.model} />
@@ -169,6 +177,7 @@ function NavItem({
   return (
     <NavLink
       to={to}
+      end
       onClick={onClose}
       className={({ isActive }) =>
         `flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition ${
@@ -178,7 +187,7 @@ function NavItem({
         }`
       }
     >
-      <span>{icon}</span>
+      <span aria-hidden="true">{icon}</span>
       <span>{label}</span>
     </NavLink>
   );
