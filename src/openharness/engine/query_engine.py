@@ -13,7 +13,6 @@ from openharness.engine.query import AskUserPrompt, PermissionPrompt, QueryConte
 from openharness.engine.stream_events import (
     AssistantTurnComplete,
     StreamEvent,
-    ToolExecutionCompleted,
     ToolExecutionStarted,
 )
 from openharness.hooks import HookEvent, HookExecutor
