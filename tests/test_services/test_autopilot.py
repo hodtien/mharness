@@ -57,6 +57,40 @@ def test_autopilot_pick_next_prefers_highest_score(tmp_path: Path) -> None:
     assert next_card.source_kind == "ohmo_request"
 
 
+def test_autopilot_pick_next_breaks_score_ties_by_creation_order(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    first, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="First idea",
+        body="earliest",
+    )
+    second, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Second idea",
+        body="later",
+    )
+
+    assert first.score == second.score, "score parity is the precondition for this test"
+    assert first.created_at <= second.created_at
+
+    registry = store._load_registry()
+    for card in registry.cards:
+        if card.id == second.id:
+            card.updated_at = first.updated_at + 1_000_000
+    store._save_registry(registry)
+
+    chosen = store.pick_next_card()
+
+    assert chosen is not None
+    assert chosen.id == first.id, (
+        "FIFO tie-break: earliest-created queued card must run first even when "
+        "another card was updated more recently"
+    )
+
+
 def test_autopilot_scan_claude_code_candidates(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

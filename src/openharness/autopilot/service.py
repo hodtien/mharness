@@ -106,6 +106,14 @@ _DEFAULT_VERIFICATION_POLICY = {
         },
     ],
     "require_tests_before_merge": True,
+    "code_review": {
+        "enabled": True,
+        "agent": "code-reviewer",
+        "block_on": ["critical"],
+        "diff_against": "base_branch",
+        "max_diff_chars": 80000,
+        "max_turns": 6,
+    },
 }
 _DEFAULT_RELEASE_POLICY = {
     "merge_requires_human": True,
@@ -119,6 +127,22 @@ def _shorten(text: str, *, limit: int = 120) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[: limit - 3] + "..."
+
+
+def _parse_review_severity(text: str) -> str:
+    """Extract the highest severity tag from a code-reviewer agent response.
+
+    Returns one of: critical, high, medium, low, none.
+    Walks the text in priority order so an earlier mention of CRITICAL wins
+    even when later sections also list HIGH or MEDIUM findings.
+    """
+    if not text:
+        return "none"
+    haystack = text.upper()
+    for level in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
+        if level in haystack:
+            return level.lower()
+    return "none"
 
 
 def _safe_text(value: object) -> str:
@@ -254,7 +278,7 @@ class RepoAutopilotStore:
         cards = self._load_registry().cards
         if status is not None:
             cards = [card for card in cards if card.status == status]
-        return sorted(cards, key=lambda card: (-card.score, -card.updated_at, card.title.lower()))
+        return sorted(cards, key=lambda card: (-card.score, card.created_at, card.title.lower()))
 
     def get_card(self, card_id: str) -> RepoTaskCard | None:
         for card in self._load_registry().cards:
@@ -335,7 +359,7 @@ class RepoAutopilotStore:
         queued = [card for card in self._load_registry().cards if card.status == "queued"]
         if not queued:
             return None
-        return sorted(queued, key=lambda card: (-card.score, -card.updated_at, card.title.lower()))[0]
+        return sorted(queued, key=lambda card: (-card.score, card.created_at, card.title.lower()))[0]
 
     def update_status(
         self,
@@ -414,7 +438,7 @@ class RepoAutopilotStore:
             if group:
                 focus = sorted(
                     group,
-                    key=lambda card: (-card.score, -card.updated_at, card.title.lower()),
+                    key=lambda card: (-card.score, card.created_at, card.title.lower()),
                 )[0]
                 break
 
@@ -435,13 +459,13 @@ class RepoAutopilotStore:
                 lines.append(f"- Detail: {_shorten(focus.body, limit=220)}")
 
         lines.extend(["", "## In Progress"])
-        for card in sorted(running + accepted, key=lambda item: (-item.score, -item.updated_at))[:6]:
+        for card in sorted(running + accepted, key=lambda item: (-item.score, item.created_at))[:6]:
             lines.append(f"- [{card.status}] {card.id} {card.title} ({card.source_kind})")
         if not running and not accepted:
             lines.append("- None.")
 
         lines.extend(["", "## Next Up"])
-        for card in sorted(queued, key=lambda item: (-item.score, -item.updated_at))[:8]:
+        for card in sorted(queued, key=lambda item: (-item.score, item.created_at))[:8]:
             lines.append(f"- [{card.score}] {card.id} {card.title} ({card.source_kind})")
         if not queued:
             lines.append("- No queued items.")
@@ -658,7 +682,11 @@ class RepoAutopilotStore:
         policies = self.load_policies()
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
         effective_model = model or _safe_text(execution.get("default_model")) or None
-        effective_max_turns = max_turns if max_turns is not None else int(execution.get("max_turns", 12))
+        if max_turns is not None:
+            effective_max_turns = max_turns
+        else:
+            raw_max_turns = execution.get("max_turns", 12)
+            effective_max_turns = None if raw_max_turns in (None, "", 0) else int(raw_max_turns)
         effective_permission_mode = permission_mode or _safe_text(
             execution.get("permission_mode", "full_auto")
         )
@@ -762,9 +790,11 @@ class RepoAutopilotStore:
                     cwd=working_cwd,
                 )
             except Exception as exc:
+                import traceback as _tb
+                tb_text = _tb.format_exc()
                 failure_text = self._render_run_report(
                     card,
-                    agent_summary=f"Autopilot execution failed: {exc}",
+                    agent_summary=f"Autopilot execution failed: {exc}\n\nTraceback:\n```\n{tb_text}\n```",
                     verification_steps=[],
                     verification_status="not_started",
                 )
@@ -822,6 +852,16 @@ class RepoAutopilotStore:
                 metadata_updates={"assistant_summary_preview": _shorten(assistant_summary, limit=300)},
             )
             verification_steps = self._run_verification_steps(policies, cwd=working_cwd)
+            review_cfg = (policies.get("verification") or {}).get("code_review") or {}
+            if review_cfg.get("enabled", True):
+                review_step = await self._run_code_review_step(
+                    card,
+                    cwd=working_cwd,
+                    base_branch=base_branch,
+                    policies=policies,
+                    model=effective_model,
+                )
+                verification_steps.append(review_step)
             verification_text = self._render_verification_report(card, verification_steps)
             for path in (attempt_verification_report, current_verification_report):
                 atomic_write_text(path, verification_text)
@@ -1706,7 +1746,7 @@ class RepoAutopilotStore:
             key=lambda card: (
                 self._status_sort_key(card.status),
                 -card.score,
-                -card.updated_at,
+                card.created_at,
                 card.title.lower(),
             ),
         )
@@ -2043,7 +2083,7 @@ class RepoAutopilotStore:
         prompt: str,
         *,
         model: str | None,
-        max_turns: int,
+        max_turns: int | None,
         permission_mode: str,
         cwd: Path | None = None,
     ) -> str:
@@ -2078,6 +2118,89 @@ class RepoAutopilotStore:
         finally:
             await close_runtime(bundle)
         return "".join(collected).strip()
+
+    async def _run_code_review_step(
+        self,
+        card: RepoTaskCard,
+        *,
+        cwd: Path,
+        base_branch: str,
+        policies: dict[str, Any],
+        model: str | None,
+    ) -> RepoVerificationStep:
+        """Spawn the code-reviewer agent on the worktree diff and turn its severity into a step."""
+        review_cfg = (policies.get("verification") or {}).get("code_review") or {}
+        max_chars = int(review_cfg.get("max_diff_chars", 80000))
+        block_on = {str(s).lower() for s in review_cfg.get("block_on", ["critical"])}
+        max_turns = int(review_cfg.get("max_turns", 6))
+
+        try:
+            diff_text = self._run_git(
+                ["diff", f"origin/{base_branch}...HEAD"],
+                cwd=cwd,
+                check=False,
+            ).stdout or ""
+        except Exception as exc:  # git absent / no remote
+            return RepoVerificationStep(
+                command=f"agent:code-reviewer (diff vs {base_branch})",
+                returncode=0,
+                status="skipped",
+                stdout="",
+                stderr=f"could not collect diff: {exc}",
+            )
+
+        if not diff_text.strip():
+            return RepoVerificationStep(
+                command=f"agent:code-reviewer (diff vs {base_branch})",
+                returncode=0,
+                status="skipped",
+                stdout="No changes detected vs base branch.",
+                stderr="",
+            )
+
+        truncated = False
+        if len(diff_text) > max_chars:
+            diff_text = diff_text[:max_chars]
+            truncated = True
+
+        prompt = (
+            f"Review the following diff for task `{card.id}` ({card.title}).\n\n"
+            "Output format (verbatim):\n"
+            "  Severity: <CRITICAL|HIGH|MEDIUM|LOW|NONE>\n"
+            "  Findings:\n"
+            "    - <file:line> <category> <description>\n"
+            "  Summary: <one paragraph>\n\n"
+            "Apply the rules in `~/.claude/rules/common/code-review.md`. "
+            "Block on CRITICAL only.\n\n"
+            f"Diff{' (truncated)' if truncated else ''}:\n```\n{diff_text}\n```\n"
+        )
+
+        try:
+            output = await self._run_agent_prompt(
+                prompt,
+                model=model,
+                max_turns=max_turns,
+                permission_mode="full_auto",
+                cwd=cwd,
+            )
+        except Exception as exc:
+            return RepoVerificationStep(
+                command=f"agent:code-reviewer (diff vs {base_branch})",
+                returncode=1,
+                status="error",
+                stdout="",
+                stderr=f"code-reviewer agent failed: {exc}",
+            )
+
+        severity = _parse_review_severity(output)
+        is_blocking = severity in block_on
+        return RepoVerificationStep(
+            command=f"agent:code-reviewer (diff vs {base_branch})",
+            returncode=1 if is_blocking else 0,
+            status="failed" if is_blocking else "success",
+            stdout=output,
+            stderr=f"severity={severity}" if is_blocking else "",
+        )
 
     def _verification_commands(self, policies: dict[str, Any]) -> list[_VerificationCommand]:
         configured = policies.get("verification", {}).get("commands", [])
