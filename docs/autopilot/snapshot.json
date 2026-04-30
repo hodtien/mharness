@@ -1,20 +1,54 @@
 {
-  "generated_at": 1776338766.0050209,
-  "repo_name": "OpenHarness-new",
-  "repo_path": "/home/tangjiabin/OpenHarness-new",
-  "focus": null,
+  "generated_at": 1777532204.443904,
+  "repo_name": "my-harness",
+  "repo_path": "/Users/hodtien/harness/my-harness",
+  "focus": {
+    "id": "ap-22889fc5",
+    "title": "[P1.3] Backend endpoint DELETE /api/history/{session_id}",
+    "body": "Trong routes/history.py thêm DELETE /api/history/{session_id}. Xoá session-{id}.json trong project session dir; nếu latest.json trỏ tới session đó thì xử lý an toàn. Return 204 nếu xoá thành công, 404 nếu không tồn tại. Sau khi xong spawn code-reviewer để review thay đổi.",
+    "status": "running",
+    "source_kind": "manual_idea",
+    "source_ref": "",
+    "score": 120,
+    "score_reasons": [
+      "source=manual_idea",
+      "direct user-driven input",
+      "urgent signals",
+      "recently updated"
+    ],
+    "labels": [],
+    "created_at": 1777481360.5257971,
+    "updated_at": 1777527171.653339,
+    "metadata": {
+      "last_note": "autopilot execution started",
+      "url": "",
+      "execution_model": "",
+      "assistant_summary_preview": "",
+      "human_gate_pending": false,
+      "verification_failed": false,
+      "attempt_count": 1,
+      "max_attempts": 5,
+      "linked_pr_number": null,
+      "linked_pr_url": "",
+      "last_ci_conclusion": "",
+      "last_ci_summary": "",
+      "last_failure_stage": "",
+      "last_failure_summary": "",
+      "verification_steps": []
+    }
+  },
   "counts": {
-    "queued": 0,
+    "queued": 9,
     "accepted": 0,
     "preparing": 0,
-    "running": 0,
+    "running": 2,
     "verifying": 0,
     "pr_open": 0,
     "waiting_ci": 0,
     "repairing": 0,
     "completed": 0,
     "merged": 0,
-    "failed": 0,
+    "failed": 1,
     "rejected": 0,
     "superseded": 0
   },
@@ -34,26 +68,1144 @@
     "superseded"
   ],
   "columns": {
-    "queued": [],
+    "queued": [
+      {
+        "id": "ap-47ece0cb",
+        "title": "[P1.6] Frontend route /history và resume flow",
+        "body": "Tạo page /history dùng HistoryPanel. Khi click Resume, gọi POST /api/sessions với resume_id, reconnect WebSocket bằng session_id mới, navigate về /chat và hiển thị banner 'Resumed from session ...'. Sau khi xong spawn code-reviewer để review thay đổi.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 130,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777481371.448394,
+        "updated_at": 1777481371.448394,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-076d72f1",
+        "title": "[P1.5] Frontend HistoryPanel component",
+        "body": "Tạo frontend/webui/src/components/HistoryPanel.tsx. Fetch /api/history, hiển thị danh sách session: summary, model, message_count, created_at dạng readable. Có buttons Resume và Delete. Có loading, empty state, error state. Sau khi xong spawn code-reviewer để review thay đổi.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777481369.440623,
+        "updated_at": 1777530205.741073,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-ced3cc17",
+        "title": "[P1.4] Backend resume support cho POST /api/sessions",
+        "body": "Mở rộng POST /api/sessions để nhận optional body {resume_id: string}. Nếu có resume_id, load snapshot bằng load_session_by_id và tạo session mới đã nạp lại conversation messages. Nếu BackendHostConfig/QueryEngine chưa hỗ trợ initial_messages thì thêm support tối thiểu. Sau khi xong spawn code-reviewer để review thay đổi.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777481365.124862,
+        "updated_at": 1777527272.226124,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-a51c7e74",
+        "title": "[P0.1] Tách backend webui thành routers",
+        "body": "Refactor src/openharness/webui/server/app.py: tách các endpoint hiện tại ra thành các FastAPI router riêng biệt trong thư mục routes/: routes/health.py, routes/sessions.py, routes/tasks.py, routes/cron.py. app.py chỉ còn create_app() mount các router. Giữ nguyên logic, chỉ tổ chức lại code. Test: tất cả endpoint hiện có vẫn hoạt động.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777508321.164235,
+        "updated_at": 1777511558.966092,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-feebedcf",
+        "title": "[P1.1] Backend endpoint GET /api/history",
+        "body": "Tạo routes/history.py cho WebUI. Endpoint GET /api/history?limit=20 dùng openharness.services.session_storage.list_session_snapshots(cwd, limit) để trả danh sách session snapshots gồm session_id, summary, message_count, model, created_at. cwd lấy từ WebUIConfig. Mount router vào app. Sau khi xong spawn code-reviewer để review thay đổi.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777481348.033709,
+        "updated_at": 1777510418.688478,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-7179c8d1",
+        "title": "[P0.3] Thêm navigation vào Sidebar WebUI",
+        "body": "Cập nhật frontend/webui/src/components/Sidebar.tsx: thêm navigation links cho /chat, /history, /pipeline, /tasks, /settings/modes, /settings/provider, /settings/models, /settings/agents. Dùng NavLink active styling. Giữ các section Status, Tasks, Cron hiện có. Sau khi xong spawn code-reviewer để review thay đổi.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777481340.765645,
+        "updated_at": 1777510418.6884758,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-5fbd2a4c",
+        "title": "[P0.2] Thêm routing cho React WebUI",
+        "body": "Thêm react-router-dom vào frontend/webui. Bọc app bằng BrowserRouter. Tạo layout chung có Sidebar + Header + main Outlet. Route /chat dùng giao diện chat hiện tại, route / redirect về /chat. Đảm bảo SPA fallback backend vẫn phục vụ index.html cho mọi non-api path. Sau khi xong spawn code-reviewer để review thay đổi.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777481334.228359,
+        "updated_at": 1777510418.688473,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-75b0ad5c",
+        "title": "[P1.7] Header recent sessions dropdown",
+        "body": "Cập nhật Header.tsx thêm dropdown Sessions. Dropdown fetch /api/history?limit=5, hiển thị recent sessions, click item để resume nhanh, link View all chuyển tới /history. Sau khi xong spawn code-reviewer để review thay đổi.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777481373.590076,
+        "updated_at": 1777481373.590076,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-4c9d9fef",
+        "title": "[P1.8] Tests cho WebUI history routes",
+        "body": "Tạo tests/webui/test_history_routes.py. Test list empty, list có fake session, load session by id, load unknown returns 404, delete session removes file. Dùng FastAPI TestClient và temp cwd/session dir nếu cần monkeypatch. Sau khi xong spawn code-reviewer để review thay đổi.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 110,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777481378.476654,
+        "updated_at": 1777481378.476654,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      }
+    ],
     "accepted": [],
     "preparing": [],
-    "running": [],
+    "running": [
+      {
+        "id": "ap-22889fc5",
+        "title": "[P1.3] Backend endpoint DELETE /api/history/{session_id}",
+        "body": "Trong routes/history.py thêm DELETE /api/history/{session_id}. Xoá session-{id}.json trong project session dir; nếu latest.json trỏ tới session đó thì xử lý an toàn. Return 204 nếu xoá thành công, 404 nếu không tồn tại. Sau khi xong spawn code-reviewer để review thay đổi.",
+        "status": "running",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777481360.5257971,
+        "updated_at": 1777527171.653339,
+        "metadata": {
+          "last_note": "autopilot execution started",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-873ded82",
+        "title": "[P1.2] Backend endpoint GET /api/history/{session_id}",
+        "body": "Trong routes/history.py thêm GET /api/history/{session_id}. Dùng load_session_by_id(cwd, session_id). Return 404 nếu không tồn tại. Trả snapshot đã sanitize: giữ messages nhưng truncate tool_result/output quá dài để tránh response lớn. Sau khi xong spawn code-reviewer để review thay đổi.",
+        "status": "running",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777481354.72632,
+        "updated_at": 1777527088.4739761,
+        "metadata": {
+          "last_note": "autopilot execution started",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      }
+    ],
     "verifying": [],
     "pr_open": [],
     "waiting_ci": [],
     "repairing": [],
     "completed": [],
     "merged": [],
-    "failed": [],
+    "failed": [
+      {
+        "id": "ap-22135a12",
+        "title": "[P0.1] Tách backend WebUI thành FastAPI routers",
+        "body": "Refactor src/openharness/webui/server/app.py: tách endpoint hiện tại ra các router riêng trong src/openharness/webui/server/routes/: health.py, sessions.py, tasks.py, cron.py. app.py chỉ còn create_app(), auth dependency, state init và mount routers. Giữ nguyên behavior hiện tại. Thêm hoặc cập nhật tests đảm bảo /api/health, /api/meta, /api/sessions, /api/tasks, /api/cron/jobs vẫn hoạt động. Sau khi xong spawn code-reviewer để review thay đổi.",
+        "status": "failed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777481328.68591,
+        "updated_at": 1777532204.4406521,
+        "metadata": {
+          "last_note": "Failed to push branch or upsert PR: To get started with GitHub CLI, please run:  gh auth login\nAlternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "The refactor appears already done. Let me check the current state of the branch and verify the test failures.Refactor and tests already exist. Now I need to verify the actual local pytest run state. Let me run targeted tests then full suite to see what's failing.These 6 failures are confirmed pre...",
+          "human_gate_pending": false,
+          "verification_failed": true,
+          "attempt_count": 4,
+          "max_attempts": 5,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "github_pr_open_failed",
+          "last_failure_summary": "Failed to push branch or upsert PR: To get started with GitHub CLI, please run:  gh auth login\nAlternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "failed",
+              "returncode": 1
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            }
+          ]
+        }
+      }
+    ],
     "rejected": [],
     "superseded": []
   },
-  "cards": [],
-  "journal": [],
+  "cards": [
+    {
+      "id": "ap-22889fc5",
+      "title": "[P1.3] Backend endpoint DELETE /api/history/{session_id}",
+      "body": "Trong routes/history.py thêm DELETE /api/history/{session_id}. Xoá session-{id}.json trong project session dir; nếu latest.json trỏ tới session đó thì xử lý an toàn. Return 204 nếu xoá thành công, 404 nếu không tồn tại. Sau khi xong spawn code-reviewer để review thay đổi.",
+      "status": "running",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777481360.5257971,
+      "updated_at": 1777527171.653339,
+      "metadata": {
+        "last_note": "autopilot execution started",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-873ded82",
+      "title": "[P1.2] Backend endpoint GET /api/history/{session_id}",
+      "body": "Trong routes/history.py thêm GET /api/history/{session_id}. Dùng load_session_by_id(cwd, session_id). Return 404 nếu không tồn tại. Trả snapshot đã sanitize: giữ messages nhưng truncate tool_result/output quá dài để tránh response lớn. Sau khi xong spawn code-reviewer để review thay đổi.",
+      "status": "running",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777481354.72632,
+      "updated_at": 1777527088.4739761,
+      "metadata": {
+        "last_note": "autopilot execution started",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-47ece0cb",
+      "title": "[P1.6] Frontend route /history và resume flow",
+      "body": "Tạo page /history dùng HistoryPanel. Khi click Resume, gọi POST /api/sessions với resume_id, reconnect WebSocket bằng session_id mới, navigate về /chat và hiển thị banner 'Resumed from session ...'. Sau khi xong spawn code-reviewer để review thay đổi.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 130,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777481371.448394,
+      "updated_at": 1777481371.448394,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-076d72f1",
+      "title": "[P1.5] Frontend HistoryPanel component",
+      "body": "Tạo frontend/webui/src/components/HistoryPanel.tsx. Fetch /api/history, hiển thị danh sách session: summary, model, message_count, created_at dạng readable. Có buttons Resume và Delete. Có loading, empty state, error state. Sau khi xong spawn code-reviewer để review thay đổi.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777481369.440623,
+      "updated_at": 1777530205.741073,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-ced3cc17",
+      "title": "[P1.4] Backend resume support cho POST /api/sessions",
+      "body": "Mở rộng POST /api/sessions để nhận optional body {resume_id: string}. Nếu có resume_id, load snapshot bằng load_session_by_id và tạo session mới đã nạp lại conversation messages. Nếu BackendHostConfig/QueryEngine chưa hỗ trợ initial_messages thì thêm support tối thiểu. Sau khi xong spawn code-reviewer để review thay đổi.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777481365.124862,
+      "updated_at": 1777527272.226124,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-a51c7e74",
+      "title": "[P0.1] Tách backend webui thành routers",
+      "body": "Refactor src/openharness/webui/server/app.py: tách các endpoint hiện tại ra thành các FastAPI router riêng biệt trong thư mục routes/: routes/health.py, routes/sessions.py, routes/tasks.py, routes/cron.py. app.py chỉ còn create_app() mount các router. Giữ nguyên logic, chỉ tổ chức lại code. Test: tất cả endpoint hiện có vẫn hoạt động.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777508321.164235,
+      "updated_at": 1777511558.966092,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-feebedcf",
+      "title": "[P1.1] Backend endpoint GET /api/history",
+      "body": "Tạo routes/history.py cho WebUI. Endpoint GET /api/history?limit=20 dùng openharness.services.session_storage.list_session_snapshots(cwd, limit) để trả danh sách session snapshots gồm session_id, summary, message_count, model, created_at. cwd lấy từ WebUIConfig. Mount router vào app. Sau khi xong spawn code-reviewer để review thay đổi.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777481348.033709,
+      "updated_at": 1777510418.688478,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-7179c8d1",
+      "title": "[P0.3] Thêm navigation vào Sidebar WebUI",
+      "body": "Cập nhật frontend/webui/src/components/Sidebar.tsx: thêm navigation links cho /chat, /history, /pipeline, /tasks, /settings/modes, /settings/provider, /settings/models, /settings/agents. Dùng NavLink active styling. Giữ các section Status, Tasks, Cron hiện có. Sau khi xong spawn code-reviewer để review thay đổi.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777481340.765645,
+      "updated_at": 1777510418.6884758,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-5fbd2a4c",
+      "title": "[P0.2] Thêm routing cho React WebUI",
+      "body": "Thêm react-router-dom vào frontend/webui. Bọc app bằng BrowserRouter. Tạo layout chung có Sidebar + Header + main Outlet. Route /chat dùng giao diện chat hiện tại, route / redirect về /chat. Đảm bảo SPA fallback backend vẫn phục vụ index.html cho mọi non-api path. Sau khi xong spawn code-reviewer để review thay đổi.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777481334.228359,
+      "updated_at": 1777510418.688473,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-75b0ad5c",
+      "title": "[P1.7] Header recent sessions dropdown",
+      "body": "Cập nhật Header.tsx thêm dropdown Sessions. Dropdown fetch /api/history?limit=5, hiển thị recent sessions, click item để resume nhanh, link View all chuyển tới /history. Sau khi xong spawn code-reviewer để review thay đổi.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777481373.590076,
+      "updated_at": 1777481373.590076,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-4c9d9fef",
+      "title": "[P1.8] Tests cho WebUI history routes",
+      "body": "Tạo tests/webui/test_history_routes.py. Test list empty, list có fake session, load session by id, load unknown returns 404, delete session removes file. Dùng FastAPI TestClient và temp cwd/session dir nếu cần monkeypatch. Sau khi xong spawn code-reviewer để review thay đổi.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 110,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777481378.476654,
+      "updated_at": 1777481378.476654,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-22135a12",
+      "title": "[P0.1] Tách backend WebUI thành FastAPI routers",
+      "body": "Refactor src/openharness/webui/server/app.py: tách endpoint hiện tại ra các router riêng trong src/openharness/webui/server/routes/: health.py, sessions.py, tasks.py, cron.py. app.py chỉ còn create_app(), auth dependency, state init và mount routers. Giữ nguyên behavior hiện tại. Thêm hoặc cập nhật tests đảm bảo /api/health, /api/meta, /api/sessions, /api/tasks, /api/cron/jobs vẫn hoạt động. Sau khi xong spawn code-reviewer để review thay đổi.",
+      "status": "failed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777481328.68591,
+      "updated_at": 1777532204.4406521,
+      "metadata": {
+        "last_note": "Failed to push branch or upsert PR: To get started with GitHub CLI, please run:  gh auth login\nAlternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "The refactor appears already done. Let me check the current state of the branch and verify the test failures.Refactor and tests already exist. Now I need to verify the actual local pytest run state. Let me run targeted tests then full suite to see what's failing.These 6 failures are confirmed pre...",
+        "human_gate_pending": false,
+        "verification_failed": true,
+        "attempt_count": 4,
+        "max_attempts": 5,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "github_pr_open_failed",
+        "last_failure_summary": "Failed to push branch or upsert PR: To get started with GitHub CLI, please run:  gh auth login\nAlternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "failed",
+            "returncode": 1
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          }
+        ]
+      }
+    }
+  ],
+  "journal": [
+    {
+      "timestamp": 1777529646.0529048,
+      "kind": "verification_failed",
+      "summary": "[P1.5] Frontend HistoryPanel component: local verification failed, retrying",
+      "task_id": "ap-076d72f1",
+      "metadata": {
+        "attempt_count": 2
+      }
+    },
+    {
+      "timestamp": 1777529646.739159,
+      "kind": "status_repairing",
+      "summary": "repairing: [P1.5] Frontend HistoryPanel component (repairing failed run)",
+      "task_id": "ap-076d72f1",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777530114.924064,
+      "kind": "run_finished",
+      "summary": "Agent run finished for [P1.5] Frontend HistoryPanel component",
+      "task_id": "ap-076d72f1",
+      "metadata": {
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-076d72f1-attempt-03-run.md",
+        "attempt_count": 3
+      }
+    },
+    {
+      "timestamp": 1777530114.927238,
+      "kind": "status_verifying",
+      "summary": "verifying: [P1.5] Frontend HistoryPanel component (running verification gates)",
+      "task_id": "ap-076d72f1",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777530132.989938,
+      "kind": "status_repairing",
+      "summary": "repairing: [P1.5] Frontend HistoryPanel component (local verification failed; retrying)",
+      "task_id": "ap-076d72f1",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777530132.9959989,
+      "kind": "verification_failed",
+      "summary": "[P1.5] Frontend HistoryPanel component: local verification failed, retrying",
+      "task_id": "ap-076d72f1",
+      "metadata": {
+        "attempt_count": 3
+      }
+    },
+    {
+      "timestamp": 1777530133.7273972,
+      "kind": "status_repairing",
+      "summary": "repairing: [P1.5] Frontend HistoryPanel component (repairing failed run)",
+      "task_id": "ap-076d72f1",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777530205.7428339,
+      "kind": "status_failed",
+      "summary": "failed: [P1.5] Frontend HistoryPanel component (agent execution failed: [Errno 2] No such file or directory: '/Users/hodtien/...)",
+      "task_id": "ap-076d72f1",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777530205.748796,
+      "kind": "run_failed",
+      "summary": "[P1.5] Frontend HistoryPanel component: agent execution failed",
+      "task_id": "ap-076d72f1",
+      "metadata": {
+        "error": "[Errno 2] No such file or directory: '/Users/hodtien/.openharness/worktrees/autopilot+ap-076d72f1/src tests'",
+        "attempt_count": 4
+      }
+    },
+    {
+      "timestamp": 1777530250.959417,
+      "kind": "status_preparing",
+      "summary": "preparing: [P0.1] Tách backend WebUI thành FastAPI routers (preparing isolated worktree)",
+      "task_id": "ap-22135a12",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777530251.645247,
+      "kind": "status_running",
+      "summary": "running: [P0.1] Tách backend WebUI thành FastAPI routers (autopilot execution started)",
+      "task_id": "ap-22135a12",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777530856.340926,
+      "kind": "run_finished",
+      "summary": "Agent run finished for [P0.1] Tách backend WebUI thành FastAPI routers",
+      "task_id": "ap-22135a12",
+      "metadata": {
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-22135a12-attempt-01-run.md",
+        "attempt_count": 1
+      }
+    },
+    {
+      "timestamp": 1777530856.343812,
+      "kind": "status_verifying",
+      "summary": "verifying: [P0.1] Tách backend WebUI thành FastAPI routers (running verification gates)",
+      "task_id": "ap-22135a12",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777530873.534071,
+      "kind": "status_repairing",
+      "summary": "repairing: [P0.1] Tách backend WebUI thành FastAPI routers (local verification failed; retrying)",
+      "task_id": "ap-22135a12",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777530873.5390878,
+      "kind": "verification_failed",
+      "summary": "[P0.1] Tách backend WebUI thành FastAPI routers: local verification failed, retrying",
+      "task_id": "ap-22135a12",
+      "metadata": {
+        "attempt_count": 1
+      }
+    },
+    {
+      "timestamp": 1777530875.407018,
+      "kind": "status_repairing",
+      "summary": "repairing: [P0.1] Tách backend WebUI thành FastAPI routers (repairing failed run)",
+      "task_id": "ap-22135a12",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777531219.448801,
+      "kind": "run_finished",
+      "summary": "Agent run finished for [P0.1] Tách backend WebUI thành FastAPI routers",
+      "task_id": "ap-22135a12",
+      "metadata": {
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-22135a12-attempt-02-run.md",
+        "attempt_count": 2
+      }
+    },
+    {
+      "timestamp": 1777531219.450881,
+      "kind": "status_verifying",
+      "summary": "verifying: [P0.1] Tách backend WebUI thành FastAPI routers (running verification gates)",
+      "task_id": "ap-22135a12",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777531237.237144,
+      "kind": "status_repairing",
+      "summary": "repairing: [P0.1] Tách backend WebUI thành FastAPI routers (local verification failed; retrying)",
+      "task_id": "ap-22135a12",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777531237.241907,
+      "kind": "verification_failed",
+      "summary": "[P0.1] Tách backend WebUI thành FastAPI routers: local verification failed, retrying",
+      "task_id": "ap-22135a12",
+      "metadata": {
+        "attempt_count": 2
+      }
+    },
+    {
+      "timestamp": 1777531238.1717901,
+      "kind": "status_repairing",
+      "summary": "repairing: [P0.1] Tách backend WebUI thành FastAPI routers (repairing failed run)",
+      "task_id": "ap-22135a12",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777531411.173673,
+      "kind": "run_finished",
+      "summary": "Agent run finished for [P0.1] Tách backend WebUI thành FastAPI routers",
+      "task_id": "ap-22135a12",
+      "metadata": {
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-22135a12-attempt-03-run.md",
+        "attempt_count": 3
+      }
+    },
+    {
+      "timestamp": 1777531411.1761448,
+      "kind": "status_verifying",
+      "summary": "verifying: [P0.1] Tách backend WebUI thành FastAPI routers (running verification gates)",
+      "task_id": "ap-22135a12",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777531428.808886,
+      "kind": "status_repairing",
+      "summary": "repairing: [P0.1] Tách backend WebUI thành FastAPI routers (local verification failed; retrying)",
+      "task_id": "ap-22135a12",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777531428.8131268,
+      "kind": "verification_failed",
+      "summary": "[P0.1] Tách backend WebUI thành FastAPI routers: local verification failed, retrying",
+      "task_id": "ap-22135a12",
+      "metadata": {
+        "attempt_count": 3
+      }
+    },
+    {
+      "timestamp": 1777531429.438813,
+      "kind": "status_repairing",
+      "summary": "repairing: [P0.1] Tách backend WebUI thành FastAPI routers (repairing failed run)",
+      "task_id": "ap-22135a12",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777532185.502338,
+      "kind": "run_finished",
+      "summary": "Agent run finished for [P0.1] Tách backend WebUI thành FastAPI routers",
+      "task_id": "ap-22135a12",
+      "metadata": {
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-22135a12-attempt-04-run.md",
+        "attempt_count": 4
+      }
+    },
+    {
+      "timestamp": 1777532185.505546,
+      "kind": "status_verifying",
+      "summary": "verifying: [P0.1] Tách backend WebUI thành FastAPI routers (running verification gates)",
+      "task_id": "ap-22135a12",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777532202.1494222,
+      "kind": "existing_progress_detected",
+      "summary": "[P0.1] Tách backend WebUI thành FastAPI routers: reusing existing local branch progress",
+      "task_id": "ap-22135a12",
+      "metadata": {
+        "attempt_count": 4,
+        "head_branch": "autopilot/ap-22135a12"
+      }
+    },
+    {
+      "timestamp": 1777532204.441868,
+      "kind": "status_failed",
+      "summary": "failed: [P0.1] Tách backend WebUI thành FastAPI routers (Failed to push branch or upsert PR: To get started with GitHub CLI, please ru...)",
+      "task_id": "ap-22135a12",
+      "metadata": {}
+    }
+  ],
   "policies": {
-    "autopilot": "/home/tangjiabin/OpenHarness-new/.openharness/autopilot/autopilot_policy.yaml",
-    "verification": "/home/tangjiabin/OpenHarness-new/.openharness/autopilot/verification_policy.yaml",
-    "release": "/home/tangjiabin/OpenHarness-new/.openharness/autopilot/release_policy.yaml"
+    "autopilot": "/Users/hodtien/harness/my-harness/.openharness/autopilot/autopilot_policy.yaml",
+    "verification": "/Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml",
+    "release": "/Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
   },
-  "active_context": "# Active Repo Context\n\nGenerated at: 2026-04-16 11:05:49 UTC\n\n## Current Task Focus\n- No active repo task focus yet.\n\n## In Progress\n- None.\n\n## Next Up\n- No queued items.\n\n## Recently Completed\n- None yet.\n\n## Recent Failures\n- None.\n\n## Recent Repo Journal\n- Journal is empty.\n\n## Policies\n- Autopilot: /home/tangjiabin/OpenHarness-new/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /home/tangjiabin/OpenHarness-new/.openharness/autopilot/verification_policy.yaml\n- Release: /home/tangjiabin/OpenHarness-new/.openharness/autopilot/release_policy.yaml"
+  "active_context": "# Active Repo Context\n\nGenerated at: 2026-04-30 06:56:44 UTC\n\n## Current Task Focus\n- [running] [P1.3] Backend endpoint DELETE /api/history/{session_id} (manual_idea, score=120)\n- Detail: Trong routes/history.py thêm DELETE /api/history/{session_id}. Xoá session-{id}.json trong project session dir; nếu latest.json trỏ tới session đó thì xử lý an toàn. Return 204 nếu xoá thành công, 404 nếu không tồn tạ...\n\n## In Progress\n- [running] ap-22889fc5 [P1.3] Backend endpoint DELETE /api/history/{session_id} (manual_idea)\n- [running] ap-873ded82 [P1.2] Backend endpoint GET /api/history/{session_id} (manual_idea)\n\n## Next Up\n- [130] ap-47ece0cb [P1.6] Frontend route /history và resume flow (manual_idea)\n- [120] ap-076d72f1 [P1.5] Frontend HistoryPanel component (manual_idea)\n- [120] ap-ced3cc17 [P1.4] Backend resume support cho POST /api/sessions (manual_idea)\n- [120] ap-a51c7e74 [P0.1] Tách backend webui thành routers (manual_idea)\n- [120] ap-feebedcf [P1.1] Backend endpoint GET /api/history (manual_idea)\n- [120] ap-7179c8d1 [P0.3] Thêm navigation vào Sidebar WebUI (manual_idea)\n- [120] ap-5fbd2a4c [P0.2] Thêm routing cho React WebUI (manual_idea)\n- [120] ap-75b0ad5c [P1.7] Header recent sessions dropdown (manual_idea)\n\n## Recently Completed\n- None yet.\n\n## Recent Failures\n- [failed] ap-22135a12 [P0.1] Tách backend WebUI thành FastAPI routers\n\n## Recent Repo Journal\n- 04-30 06:43 status_verifying: verifying: [P0.1] Tách backend WebUI thành FastAPI routers (running verification gates)\n- 04-30 06:43 status_repairing: repairing: [P0.1] Tách backend WebUI thành FastAPI routers (local verification failed; retrying)\n- 04-30 06:43 verification_failed: [P0.1] Tách backend WebUI thành FastAPI routers: local verification failed, retrying\n- 04-30 06:43 status_repairing: repairing: [P0.1] Tách backend WebUI thành FastAPI routers (repairing failed run)\n- 04-30 06:56 run_finished: Agent run finished for [P0.1] Tách backend WebUI thành FastAPI routers\n- 04-30 06:56 status_verifying: verifying: [P0.1] Tách backend WebUI thành FastAPI routers (running verification gates)\n- 04-30 06:56 existing_progress_detected: [P0.1] Tách backend WebUI thành FastAPI routers: reusing existing local branch progress\n- 04-30 06:56 status_failed: failed: [P0.1] Tách backend WebUI thành FastAPI routers (Failed to push branch or upsert PR: To get started with GitHub CLI, please ru...)\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
 }
