@@ -13,7 +13,7 @@ from typing import Any
 
 import httpx
 
-from openharness.api.client import ApiMessageCompleteEvent, ApiMessageRequest, SupportsStreamingMessages
+from openharness.api.client import ApiMessageCompleteEvent, ApiMessageRequest, ApiTextDeltaEvent, SupportsStreamingMessages
 from openharness.engine.messages import ConversationMessage
 from openharness.hooks.events import HookEvent
 from openharness.hooks.loader import HookRegistry
@@ -193,7 +193,7 @@ class HookExecutor:
         async for event_item in self._context.api_client.stream_message(request):
             if isinstance(event_item, ApiMessageCompleteEvent):
                 final_event = event_item
-            else:
+            elif isinstance(event_item, ApiTextDeltaEvent):
                 text_chunks.append(event_item.text)
 
         text = "".join(text_chunks)

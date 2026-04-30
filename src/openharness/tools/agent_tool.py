@@ -6,6 +6,8 @@ import logging
 
 from pydantic import BaseModel, Field
 
+from openharness.config.claude_bridge import resolve_agent_model
+from openharness.config.settings import load_settings
 from openharness.coordinator.agent_definitions import get_agent_definition
 from openharness.coordinator.coordinator_mode import get_team_registry
 from openharness.hooks import HookEvent
@@ -58,6 +60,38 @@ class AgentTool(BaseTool):
         team = arguments.team or "default"
         agent_name = arguments.subagent_type or "agent"
 
+        # Resolve model via precedence chain:
+        # arguments.model > agent_def.model > resolve_agent_model() (profile/claude active).
+        # When a fallback chain is configured for the agent, ``model_chain``
+        # carries every model in priority order so callers can retry on
+        # transient failures. The primary (``resolved_model``) is always the
+        # first entry.
+        resolved_model = arguments.model or (agent_def.model if agent_def else None)
+        model_chain: tuple[str, ...] = (resolved_model,) if resolved_model else ()
+        if not resolved_model:
+            try:
+                binding = resolve_agent_model(load_settings(), agent_name)
+                resolved_model = binding.model
+                model_chain = binding.chain
+            except Exception:
+                resolved_model = None
+                model_chain = ()
+
+        # Drop any model the active profile explicitly disallows. This catches
+        # the common deprecated-model case before we hand the chain to the
+        # subprocess.
+        if model_chain:
+            try:
+                _, profile = load_settings().resolve_profile()
+                allowed = set(profile.allowed_models or [])
+            except Exception:
+                allowed = set()
+            if allowed:
+                filtered = tuple(m for m in model_chain if m in allowed)
+                if filtered:
+                    model_chain = filtered
+                    resolved_model = filtered[0]
+
         # Use subprocess backend so spawned agents are registered in
         # BackgroundTaskManager and are pollable by the task tools.
         # in_process tasks return asyncio-internal IDs that task tools
@@ -71,7 +105,7 @@ class AgentTool(BaseTool):
             prompt=arguments.prompt,
             cwd=str(context.cwd),
             parent_session_id="main",
-            model=arguments.model or (agent_def.model if agent_def else None),
+            model=resolved_model,
             command=arguments.command,
             system_prompt=agent_def.system_prompt if agent_def else None,
             permissions=agent_def.permissions if agent_def else [],

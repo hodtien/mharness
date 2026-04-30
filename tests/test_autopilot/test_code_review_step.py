@@ -1,0 +1,47 @@
+"""Tests for autopilot code-review verification step."""
+
+from __future__ import annotations
+
+from openharness.autopilot.service import (
+    _DEFAULT_VERIFICATION_POLICY,
+    _parse_review_severity,
+)
+
+
+def test_default_policy_includes_code_review_block():
+    assert "code_review" in _DEFAULT_VERIFICATION_POLICY
+    cr = _DEFAULT_VERIFICATION_POLICY["code_review"]
+    assert cr["enabled"] is True
+    assert cr["agent"] == "code-reviewer"
+    assert "critical" in cr["block_on"]
+
+
+def test_parse_severity_detects_critical():
+    text = "Found a hardcoded API key.\nSeverity: CRITICAL"
+    assert _parse_review_severity(text) == "critical"
+
+
+def test_parse_severity_detects_high():
+    assert _parse_review_severity("Severity: HIGH") == "high"
+
+
+def test_parse_severity_detects_medium():
+    assert _parse_review_severity("note: medium maintainability concern -> MEDIUM") == "medium"
+
+
+def test_parse_severity_detects_low():
+    assert _parse_review_severity("Severity: LOW") == "low"
+
+
+def test_parse_severity_returns_none_when_absent():
+    assert _parse_review_severity("All good. No issues.") == "none"
+
+
+def test_parse_severity_handles_empty_input():
+    assert _parse_review_severity("") == "none"
+    assert _parse_review_severity(None) == "none"  # type: ignore[arg-type]
+
+
+def test_parse_severity_priority_order_critical_wins():
+    text = "Has CRITICAL bug, also HIGH style issue and LOW typo."
+    assert _parse_review_severity(text) == "critical"

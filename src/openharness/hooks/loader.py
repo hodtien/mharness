@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from openharness.hooks.builtins import register_builtins
 from openharness.hooks.events import HookEvent
 from openharness.hooks.schemas import HookDefinition
 
@@ -57,4 +58,6 @@ def load_hook_registry(settings, plugins=None) -> HookRegistry:
                 continue
             for hook in hooks:
                 registry.register(event, hook)
+    disable_builtin = bool(getattr(settings, "disable_builtin_review", False))
+    register_builtins(registry, disabled=disable_builtin)
     return registry

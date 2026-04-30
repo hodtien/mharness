@@ -18,3 +18,4 @@ class HookEvent(str, Enum):
     NOTIFICATION = "notification"
     STOP = "stop"
     SUBAGENT_STOP = "subagent_stop"
+    TURN_COMPLETE = "turn_complete"

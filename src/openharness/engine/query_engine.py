@@ -10,10 +10,47 @@ from openharness.engine.cost_tracker import CostTracker
 from openharness.coordinator.coordinator_mode import get_coordinator_user_context
 from openharness.engine.messages import ConversationMessage, TextBlock, ToolResultBlock
 from openharness.engine.query import AskUserPrompt, PermissionPrompt, QueryContext, remember_user_goal, run_query
-from openharness.engine.stream_events import AssistantTurnComplete, StreamEvent
+from openharness.engine.stream_events import (
+    AssistantTurnComplete,
+    StreamEvent,
+    ToolExecutionCompleted,
+    ToolExecutionStarted,
+)
 from openharness.hooks import HookEvent, HookExecutor
 from openharness.permissions.checker import PermissionChecker
 from openharness.tools.base import ToolRegistry
+
+
+_FILE_MUTATING_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit"})
+
+
+class TurnDiffCollector:
+    """Track file-modifying tool calls within a single assistant turn."""
+
+    def __init__(self) -> None:
+        self._modified_files: list[str] = []
+        self._tool_calls: list[dict[str, str]] = []
+
+    def observe(self, event: StreamEvent) -> None:
+        if isinstance(event, ToolExecutionStarted):
+            self._tool_calls.append({"tool_name": event.tool_name})
+            if event.tool_name in _FILE_MUTATING_TOOLS:
+                path = event.tool_input.get("file_path") or event.tool_input.get("path", "")
+                if path and path not in self._modified_files:
+                    self._modified_files.append(path)
+
+    def reset(self) -> None:
+        self._modified_files.clear()
+        self._tool_calls.clear()
+
+    def build_payload(self, *, model: str, turn_index: int) -> dict:
+        return {
+            "event": HookEvent.TURN_COMPLETE.value,
+            "turn_index": turn_index,
+            "modified_files": list(self._modified_files),
+            "tool_calls": list(self._tool_calls),
+            "model": model,
+        }
 
 
 class QueryEngine:
@@ -182,9 +219,19 @@ class QueryEngine:
         coordinator_context = self._build_coordinator_context_message()
         if coordinator_context is not None:
             query_messages.append(coordinator_context)
+        collector = TurnDiffCollector()
+        turn_index = 0
         async for event, usage in run_query(context, query_messages):
+            collector.observe(event)
             if isinstance(event, AssistantTurnComplete):
                 self._messages = list(query_messages)
+                turn_index += 1
+                if self._hook_executor is not None:
+                    await self._hook_executor.execute(
+                        HookEvent.TURN_COMPLETE,
+                        collector.build_payload(model=self._model, turn_index=turn_index),
+                    )
+                collector.reset()
             if usage is not None:
                 self._cost_tracker.add(usage)
             yield event
@@ -207,7 +254,18 @@ class QueryEngine:
             hook_executor=self._hook_executor,
             tool_metadata=self._tool_metadata,
         )
+        collector = TurnDiffCollector()
+        turn_index = 0
         async for event, usage in run_query(context, self._messages):
+            collector.observe(event)
+            if isinstance(event, AssistantTurnComplete):
+                turn_index += 1
+                if self._hook_executor is not None:
+                    await self._hook_executor.execute(
+                        HookEvent.TURN_COMPLETE,
+                        collector.build_payload(model=self._model, turn_index=turn_index),
+                    )
+                collector.reset()
             if usage is not None:
                 self._cost_tracker.add(usage)
             yield event
