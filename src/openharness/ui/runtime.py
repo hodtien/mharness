@@ -11,6 +11,7 @@ from typing import Any, Awaitable, Callable, Iterable
 from openharness.api.client import AnthropicApiClient, SupportsStreamingMessages
 from openharness.api.codex_client import CodexApiClient
 from openharness.api.copilot_client import CopilotClient
+from openharness.api.fallback import FallbackApiClient
 from openharness.api.openai_client import OpenAICompatibleClient
 from openharness.api.provider import auth_status, detect_provider
 from openharness.bridge import get_bridge_manager
@@ -114,8 +115,34 @@ class RuntimeBundle:
         return "\n".join(lines)
 
 
-def _resolve_api_client_from_settings(settings) -> SupportsStreamingMessages:
-    """Build the appropriate API client for the resolved settings."""
+def _resolve_main_model_chain(settings) -> tuple[str, ...]:
+    """Return the fallback chain for the main session, primary first.
+
+    Looks up ``agent_models["main"]`` in the Claude bridge config when present.
+    Returns ``(settings.model,)`` (no fallback) when nothing is configured.
+    """
+    try:
+        from openharness.config.claude_bridge import read_claude_settings
+        claude = read_claude_settings()
+        if claude is not None:
+            chain = claude.agent_models.get("main")
+            if chain:
+                return tuple(chain)
+    except Exception:
+        pass
+    return (settings.model,) if settings.model else ()
+
+
+def _resolve_api_client_from_settings(
+    settings,
+    model_chain: tuple[str, ...] | None = None,
+) -> SupportsStreamingMessages:
+    """Build the appropriate API client for the resolved settings.
+
+    When *model_chain* has more than one entry the base client is wrapped with
+    :class:`FallbackApiClient` so terminal failures automatically fall through
+    to the next model in the chain.
+    """
     # Ensure profile fields (base_url, model, api_format) are projected to settings
     settings = settings.materialize_active_profile()
 
@@ -139,32 +166,37 @@ def _resolve_api_client_from_settings(settings) -> SupportsStreamingMessages:
             if settings.model in {"claude-sonnet-4-20250514", "claude-sonnet-4-6", "sonnet", "default"}
             else settings.model
         )
-        return CopilotClient(model=copilot_model)
-    if settings.provider == "openai_codex":
+        base_client: SupportsStreamingMessages = CopilotClient(model=copilot_model)
+    elif settings.provider == "openai_codex":
         auth = _safe_resolve_auth()
-        return CodexApiClient(
+        base_client = CodexApiClient(
             auth_token=auth.value,
             base_url=settings.base_url,
         )
-    if settings.provider == "anthropic_claude":
-        return AnthropicApiClient(
+    elif settings.provider == "anthropic_claude":
+        base_client = AnthropicApiClient(
             auth_token=_safe_resolve_auth().value,
             base_url=settings.base_url,
             claude_oauth=True,
             auth_token_resolver=lambda: settings.resolve_auth().value,
         )
-    if settings.api_format in ("openai", "openai_compat"):
+    elif settings.api_format in ("openai", "openai_compat"):
         auth = _safe_resolve_auth()
-        return OpenAICompatibleClient(
+        base_client = OpenAICompatibleClient(
             api_key=auth.value,
             base_url=settings.base_url,
             timeout=settings.timeout,
         )
-    auth = _safe_resolve_auth()
-    return AnthropicApiClient(
-        api_key=auth.value,
-        base_url=settings.base_url,
-    )
+    else:
+        auth = _safe_resolve_auth()
+        base_client = AnthropicApiClient(
+            api_key=auth.value,
+            base_url=settings.base_url,
+        )
+
+    if model_chain and len(model_chain) > 1:
+        return FallbackApiClient(base_client, model_chain)
+    return base_client
 
 
 async def build_runtime(
@@ -208,7 +240,10 @@ async def build_runtime(
     if api_client:
         resolved_api_client = api_client
     else:
-        resolved_api_client = _resolve_api_client_from_settings(settings)
+        resolved_api_client = _resolve_api_client_from_settings(
+            settings,
+            model_chain=_resolve_main_model_chain(settings),
+        )
     mcp_manager = McpClientManager(load_mcp_server_configs(settings, plugins))
     await mcp_manager.connect_all()
     tool_registry = create_default_tool_registry(mcp_manager)

@@ -174,9 +174,18 @@ class ReactBackendHost:
                 await close_runtime(self._bundle)
         return 0
 
+    async def _read_raw_request(self) -> bytes | None:
+        """Read one raw request line from the transport.
+
+        Returns ``None`` on EOF / disconnect. Subclasses (e.g. WebSocket) override
+        this to source requests from a different transport while keeping the
+        rest of the dispatch loop unchanged.
+        """
+        return await asyncio.to_thread(sys.stdin.buffer.readline)
+
     async def _read_requests(self) -> None:
         while True:
-            raw = await asyncio.to_thread(sys.stdin.buffer.readline)
+            raw = await self._read_raw_request()
             if not raw:
                 await self._request_queue.put(FrontendRequest(type="shutdown"))
                 return
@@ -769,17 +778,26 @@ class ReactBackendHost:
         finally:
             self._question_requests.pop(request_id, None)
 
+    async def _write_event(self, payload_bytes: bytes) -> None:
+        """Write a serialised event to the transport.
+
+        The default implementation writes to ``sys.stdout``.  Subclasses
+        (e.g. WebSocket) override this to push events over the network while
+        the rest of the emit logic stays in :meth:`_emit`.
+        """
+        buffer = getattr(sys.stdout, "buffer", None)
+        if buffer is not None:
+            buffer.write(payload_bytes)
+            buffer.flush()
+            return
+        sys.stdout.write(payload_bytes.decode("utf-8"))
+        sys.stdout.flush()
+
     async def _emit(self, event: BackendEvent) -> None:
         log.debug("emit event: type=%s tool=%s", event.type, getattr(event, "tool_name", None))
         async with self._write_lock:
             payload = _PROTOCOL_PREFIX + event.model_dump_json() + "\n"
-            buffer = getattr(sys.stdout, "buffer", None)
-            if buffer is not None:
-                buffer.write(payload.encode("utf-8"))
-                buffer.flush()
-                return
-            sys.stdout.write(payload)
-            sys.stdout.flush()
+            await self._write_event(payload.encode("utf-8"))
 
 
 async def run_backend_host(

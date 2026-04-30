@@ -1,13 +1,19 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, openWebSocket, type WsHandle } from "./api/client";
 import { useSession, clearPermission, clearQuestion, clearSelect } from "./store/session";
-import Transcript from "./components/Transcript";
-import InputBar from "./components/InputBar";
 import Header from "./components/Header";
 import PermissionModal from "./components/PermissionModal";
 import QuestionModal from "./components/QuestionModal";
 import SelectModal from "./components/SelectModal";
 import Sidebar from "./components/Sidebar";
+import ChatPage from "./pages/ChatPage";
+import PlaceholderPage from "./pages/PlaceholderPage";
+
+function RootRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/chat${location.search}`} replace />;
+}
 
 export default function App() {
   const wsRef = useRef<WsHandle | null>(null);
@@ -59,17 +65,33 @@ export default function App() {
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      {/* Sidebar — hidden on mobile unless toggled */}
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      {/* Main column */}
       <div className="flex flex-1 flex-col min-w-0">
         <Header onToggleSidebar={() => setSidebarOpen((v) => !v)} onInterrupt={sendInterrupt} />
-        <Transcript />
-        <InputBar onSend={sendLine} />
+        <Routes>
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="/chat" element={<ChatPage onSend={sendLine} />} />
+          <Route
+            path="/history"
+            element={<PlaceholderPage title="History" description="Chat history will appear here." />}
+          />
+          <Route
+            path="/pipeline"
+            element={<PlaceholderPage title="Pipeline" description="Autopilot pipeline dashboard." />}
+          />
+          <Route
+            path="/tasks"
+            element={<PlaceholderPage title="Tasks" description="Background task dashboard." />}
+          />
+          <Route
+            path="/settings/*"
+            element={<PlaceholderPage title="Settings" description="Provider, model, and agent settings." />}
+          />
+          <Route path="*" element={<Navigate to="/chat" replace />} />
+        </Routes>
       </div>
 
-      {/* Modals */}
       <PermissionModal onRespond={sendPermission} />
       <QuestionModal onRespond={sendQuestionAnswer} />
       <SelectModal onSelect={sendSelectChoice} />

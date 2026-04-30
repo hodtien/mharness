@@ -37,6 +37,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+webui = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+]
 dev = [
     "pexpect>=4.9.0",
     "pytest>=8.0.0",
@@ -72,6 +76,8 @@ exclude = [
 "frontend/terminal/package.json" = "openharness/_frontend/package.json"
 "frontend/terminal/tsconfig.json" = "openharness/_frontend/tsconfig.json"
 "frontend/terminal/src" = "openharness/_frontend/src"
+# Web UI frontend (must be built first: `cd frontend/webui && npm install && npm run build`).
+"frontend/webui/dist" = "openharness/_webui_frontend"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

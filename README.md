@@ -252,6 +252,15 @@ ohmo gateway start    # start the gateway — ohmo is now live in your chat app
 
 ohmo runs on your existing **Claude Code subscription** or **Codex subscription** — no extra API key needed.
 
+### 5. Web UI (Browser & Mobile)
+
+Chat with OpenHarness from any browser — including your phone. See **[docs/WEBUI.md](docs/WEBUI.md)** for mobile, LAN, and remote tunnel setup.
+
+```bash
+oh webui                              # open the printed URL in a browser
+oh webui --host 0.0.0.0 --port 8765  # LAN / phone access
+```
+
 ### Non-Interactive Mode (Pipes & Scripts)
 
 ```bash
@@ -603,6 +612,10 @@ React/Ink TUI with full interactive experience:
 - **Session resume**: `/resume` → pick from history
 - **Animated spinner**: Real-time feedback during tool execution
 - **Keyboard shortcuts**: Shown at the bottom, context-aware
+
+### 🌐 Web UI
+
+Browser-based interface — same runtime as the TUI, accessible from your phone or any device. One command to launch, supports Cloudflare Tunnel / Tailscale / ngrok for remote access. → **[docs/WEBUI.md](docs/WEBUI.md)**
 
 ### 📡 CLI
 

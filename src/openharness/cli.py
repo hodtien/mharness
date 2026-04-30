@@ -768,6 +768,7 @@ auth_app = typer.Typer(name="auth", help="Manage authentication")
 provider_app = typer.Typer(name="provider", help="Manage provider profiles")
 cron_app = typer.Typer(name="cron", help="Manage cron scheduler and jobs")
 autopilot_app = typer.Typer(name="autopilot", help="Manage repo autopilot")
+model_app = typer.Typer(name="model", help="Manage active model via ~/.claude/settings.json")
 
 app.add_typer(mcp_app)
 app.add_typer(plugin_app)
@@ -775,6 +776,192 @@ app.add_typer(auth_app)
 app.add_typer(provider_app)
 app.add_typer(cron_app)
 app.add_typer(autopilot_app)
+app.add_typer(model_app)
+
+
+# ---- webui ----
+
+@app.command("webui")
+def webui(
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind host (use 0.0.0.0 to expose)"),
+    port: int = typer.Option(8765, "--port", help="HTTP port"),
+    token: Optional[str] = typer.Option(None, "--token", help="Auth token (auto-generated if omitted)"),
+    cwd: Optional[str] = typer.Option(None, "--cwd", help="Working directory for sessions"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Default model alias / id"),
+    api_format: Optional[str] = typer.Option(None, "--api-format", help="anthropic | openai | copilot"),
+    permission_mode: Optional[str] = typer.Option(None, "--permission-mode"),
+    debug: bool = typer.Option(False, "--debug", "-d", help="Verbose logging"),
+) -> None:
+    """Launch the browser-based Web UI server."""
+    try:
+        from openharness.webui import WebUIConfig, serve
+    except ImportError as exc:
+        typer.echo(
+            "Web UI dependencies are missing. Install with:\n"
+            "  pip install 'openharness-ai[webui]'\n"
+            f"\nUnderlying error: {exc}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    cfg_kwargs: dict[str, object] = {
+        "host": host,
+        "port": port,
+        "cwd": cwd,
+        "model": model,
+        "api_format": api_format,
+        "permission_mode": permission_mode,
+        "debug": debug,
+    }
+    if token:
+        cfg_kwargs["token"] = token
+    cfg = WebUIConfig(**cfg_kwargs)
+    serve(cfg)
+
+
+# ---- model subcommands ----
+
+@model_app.command("list")
+def model_list() -> None:
+    """List models registered in ~/.claude/settings.json."""
+    from openharness.config.claude_bridge import read_claude_settings
+
+    claude = read_claude_settings()
+    if claude is None:
+        typer.echo("~/.claude/settings.json not found.")
+        raise typer.Exit(code=1)
+    if not claude.models:
+        typer.echo("No models registered.")
+        return
+    active = claude.active_model or ""
+    for name, entry in sorted(claude.models.items()):
+        marker = "*" if name == active else " "
+        desc = f"  — {entry.description}" if entry.description else ""
+        typer.echo(f"{marker} {name} ({entry.model}){desc}")
+
+
+@model_app.command("current")
+def model_current() -> None:
+    """Show the currently active model from ~/.claude/settings.json."""
+    from openharness.config.claude_bridge import read_claude_settings
+
+    claude = read_claude_settings()
+    if claude is None:
+        typer.echo("~/.claude/settings.json not found.")
+        raise typer.Exit(code=1)
+    typer.echo(claude.active_model or "(none)")
+
+
+@model_app.command("use")
+def model_use(name: str = typer.Argument(..., help="Model name from ~/.claude/settings.json")) -> None:
+    """Set the active model in ~/.claude/settings.json."""
+    from openharness.config.claude_bridge import read_claude_settings, write_claude_model
+
+    claude = read_claude_settings()
+    if claude is None:
+        typer.echo("~/.claude/settings.json not found.")
+        raise typer.Exit(code=1)
+    if claude.models and name not in claude.models:
+        typer.echo(f"Unknown model '{name}'. Use `oh model list` to see options.")
+        raise typer.Exit(code=2)
+    if not write_claude_model(name):
+        typer.echo("Failed to write ~/.claude/settings.json.")
+        raise typer.Exit(code=1)
+    typer.echo(f"Active model set to: {name}")
+
+
+# ---- model agent subcommands ----
+
+agent_model_app = typer.Typer(name="agent", help="Per-agent model mapping in ~/.claude/settings.json")
+model_app.add_typer(agent_model_app)
+
+
+@agent_model_app.command("list")
+def model_agent_list() -> None:
+    """List all per-agent model bindings."""
+    from openharness.config.claude_bridge import read_claude_settings
+
+    claude = read_claude_settings()
+    if claude is None:
+        typer.echo("~/.claude/settings.json not found.")
+        raise typer.Exit(code=1)
+    if not claude.agent_models:
+        typer.echo("No per-agent bindings. Use `oh model agent set <agent> <model>`.")
+        return
+    for agent, chain in sorted(claude.agent_models.items()):
+        if len(chain) == 1:
+            typer.echo(f"  {agent} → {chain[0]}")
+        else:
+            primary, *fallbacks = chain
+            typer.echo(f"  {agent} → {primary} (fallbacks: {', '.join(fallbacks)})")
+
+
+@agent_model_app.command("get")
+def model_agent_get(agent: str = typer.Argument(..., help="Agent name (e.g. 'planner')")) -> None:
+    """Show the model bound to a specific agent (resolved via full precedence)."""
+    from openharness.config.claude_bridge import resolve_agent_model
+    from openharness.config.settings import load_settings
+
+    binding = resolve_agent_model(load_settings(), agent)
+    if binding.fallbacks:
+        typer.echo(
+            f"{binding.agent} → {binding.model} "
+            f"(fallbacks: {', '.join(binding.fallbacks)}, source: {binding.source})"
+        )
+    else:
+        typer.echo(f"{binding.agent} → {binding.model} (source: {binding.source})")
+
+
+@agent_model_app.command("set")
+def model_agent_set(
+    agent: str = typer.Argument(..., help="Agent name"),
+    model: str = typer.Argument(
+        ...,
+        help="Model name, or comma-separated fallback chain (primary first). "
+             "Example: 'claude-opus-4-7,claude-architect-backup,claude-sonnet-4-6'",
+    ),
+) -> None:
+    """Bind ``agent`` to a model (or fallback chain) in ``agent_models``."""
+    from openharness.config.claude_bridge import read_claude_settings, write_agent_model
+
+    claude = read_claude_settings()
+    if claude is None:
+        typer.echo("~/.claude/settings.json not found.")
+        raise typer.Exit(code=1)
+
+    chain = [m.strip() for m in model.split(",") if m.strip()]
+    if not chain:
+        typer.echo("Empty model chain.")
+        raise typer.Exit(code=2)
+    if claude.models:
+        unknown = [m for m in chain if m not in claude.models]
+        if unknown:
+            typer.echo(
+                f"Unknown model(s): {', '.join(unknown)}. "
+                "Use `oh model list` to see options."
+            )
+            raise typer.Exit(code=2)
+
+    payload: str | list[str] = chain[0] if len(chain) == 1 else chain
+    if not write_agent_model(agent, payload):
+        typer.echo("Failed to write ~/.claude/settings.json.")
+        raise typer.Exit(code=1)
+
+    if len(chain) == 1:
+        typer.echo(f"{agent} → {chain[0]}")
+    else:
+        typer.echo(f"{agent} → {chain[0]} (fallbacks: {', '.join(chain[1:])})")
+
+
+@agent_model_app.command("unset")
+def model_agent_unset(agent: str = typer.Argument(..., help="Agent name")) -> None:
+    """Remove the binding for ``agent`` from ``agent_models``."""
+    from openharness.config.claude_bridge import delete_agent_model
+
+    if not delete_agent_model(agent):
+        typer.echo("Failed to write ~/.claude/settings.json.")
+        raise typer.Exit(code=1)
+    typer.echo(f"Unset binding for: {agent}")
 
 
 # ---- mcp subcommands ----

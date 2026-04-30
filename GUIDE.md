@@ -23,7 +23,7 @@ cd ~/harness/my-harness
 # Tạo venv & cài
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+~/.local/bin/uv pip install -e .
 
 # Thêm vào PATH (one-time)
 echo 'export PATH="$HOME/harness/my-harness/.venv/bin:$PATH"' >> ~/.zshrc
@@ -441,7 +441,7 @@ oh webui
 ```
 
 Mở URL trên trong browser. Token được capture từ `?token=…` rồi lưu vào
-`localStorage` (`oh:token`), nên các lần refresh sau không cần query string.
+`localStorage` (`oh_token`), nên các lần refresh sau không cần query string.
 
 ### Các flag chính (`oh webui --help`)
 

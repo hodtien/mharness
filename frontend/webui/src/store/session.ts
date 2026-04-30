@@ -30,6 +30,18 @@ interface SelectRequest {
   options: SelectOption[];
 }
 
+export interface CompactProgress {
+  phase: string;
+  trigger?: string;
+  message?: string;
+  attempt?: number;
+}
+
+export interface SwarmInfo {
+  teammates: Array<Record<string, unknown>>;
+  notifications: Array<Record<string, unknown>>;
+}
+
 interface SessionStore {
   connectionStatus: "connecting" | "open" | "closed";
   appState: AppStatePayload | null;
@@ -40,6 +52,10 @@ interface SessionStore {
   pendingPermission: PermissionRequest | null;
   pendingQuestion: QuestionRequest | null;
   pendingSelect: SelectRequest | null;
+  compact: CompactProgress | null;
+  todoMarkdown: string | null;
+  planMode: string | null;
+  swarm: SwarmInfo | null;
   // setters
   setStatus: (s: "connecting" | "open" | "closed", detail?: string) => void;
   ingest: (evt: BackendEvent) => void;
@@ -60,6 +76,10 @@ export const useSession = create<SessionStore>((set, get) => ({
   pendingPermission: null,
   pendingQuestion: null,
   pendingSelect: null,
+  compact: null,
+  todoMarkdown: null,
+  planMode: null,
+  swarm: null,
 
   setStatus: (s, detail) =>
     set((state) => ({
@@ -89,6 +109,10 @@ export const useSession = create<SessionStore>((set, get) => ({
       pendingPermission: null,
       pendingQuestion: null,
       pendingSelect: null,
+      compact: null,
+      todoMarkdown: null,
+      planMode: null,
+      swarm: null,
     }),
 
   ingest: (evt) => {
@@ -118,6 +142,10 @@ export const useSession = create<SessionStore>((set, get) => ({
       }
       case "transcript_item": {
         if (!evt.item) return;
+        // Suppress backend echo of user lines: the frontend already appended
+        // the user message optimistically via `appendUser` when sending. The
+        // backend emits its own user transcript_item that would duplicate it.
+        if (evt.item.role === "user") return;
         const item: DisplayItem = { ...evt.item, id: newId() };
         set({ transcript: [...state.transcript, item] });
         break;
@@ -233,6 +261,62 @@ export const useSession = create<SessionStore>((set, get) => ({
             },
           });
         }
+        break;
+      }
+      case "compact_progress": {
+        const phase = evt.compact_phase || "unknown";
+        const isTerminal = phase === "compact_end" || phase === "compact_failed";
+        const cp: CompactProgress = {
+          phase,
+          trigger: evt.compact_trigger || undefined,
+          message: evt.message || undefined,
+          attempt: evt.attempt || undefined,
+        };
+        set({
+          compact: isTerminal ? null : cp,
+          transcript: [
+            ...state.transcript,
+            {
+              id: newId(),
+              role: "system",
+              text: isTerminal
+                ? `✅ ${cp.message || `Compaction ${phase === "compact_end" ? "complete" : "failed"}`}`
+                : `⏳ ${cp.message || `Compacting (${cp.phase})`}`,
+            },
+          ],
+        });
+        break;
+      }
+      case "todo_update": {
+        set({ todoMarkdown: evt.todo_markdown || null });
+        break;
+      }
+      case "plan_mode_change": {
+        const mode = evt.plan_mode || null;
+        // Skip noisy duplicates: only append a transcript line when the mode actually changes.
+        if (mode === state.planMode) {
+          break;
+        }
+        set({
+          planMode: mode,
+          transcript: [
+            ...state.transcript,
+            {
+              id: newId(),
+              role: "system",
+              text: `🔒 Permission mode changed to: ${mode || "unknown"}`,
+            },
+          ],
+        });
+        break;
+      }
+      case "swarm_status": {
+        set({
+          swarm: {
+            teammates: evt.swarm_teammates || [],
+            notifications: evt.swarm_notifications || [],
+          },
+        });
         break;
       }
       case "clear_transcript": {

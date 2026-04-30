@@ -7,6 +7,7 @@ interface Props {
 
 export default function SelectModal({ onSelect }: Props) {
   const req = useSession((s) => s.pendingSelect);
+  const busy = useSession((s) => s.busy);
 
   // Dismiss on Escape key.
   useEffect(() => {
@@ -34,23 +35,33 @@ export default function SelectModal({ onSelect }: Props) {
         </div>
         <div className="mb-4 text-base font-semibold">{req.title}</div>
 
-        <ul className="max-h-80 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--panel-2)]">
+        <ul
+          role="listbox"
+          aria-label={req.title}
+          className="max-h-80 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--panel-2)]"
+        >
           {req.options.length === 0 ? (
             <li className="px-3 py-3 text-sm text-[var(--text-dim)]">
               (no options)
             </li>
           ) : (
-            req.options.map((opt) => {
+            req.options.map((opt, idx) => {
               const isActive = !!opt.active;
               return (
-                <li key={opt.value}>
+                <li
+                  key={`${opt.value}-${idx}`}
+                  role="option"
+                  aria-selected={isActive}
+                >
                   <button
                     type="button"
+                    disabled={busy}
                     onClick={() => {
+                      if (busy) return;
                       onSelect(req.command, opt.value);
                     }}
                     className={
-                      "flex w-full items-start gap-3 border-b border-[var(--border)] px-3 py-2 text-left text-sm last:border-b-0 transition-colors " +
+                      "flex w-full items-start gap-3 border-b border-[var(--border)] px-3 py-2 text-left text-sm last:border-b-0 transition-colors disabled:cursor-not-allowed disabled:opacity-50 " +
                       (isActive
                         ? "bg-[var(--accent-strong)]/15 text-[var(--text)]"
                         : "hover:bg-[var(--panel)] text-[var(--text)]")
