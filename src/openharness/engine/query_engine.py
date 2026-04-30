@@ -6,11 +6,9 @@ import logging
 from pathlib import Path
 from typing import AsyncIterator
 
-log = logging.getLogger(__name__)
-
 from openharness.api.client import SupportsStreamingMessages
-from openharness.engine.cost_tracker import CostTracker
 from openharness.coordinator.coordinator_mode import get_coordinator_user_context
+from openharness.engine.cost_tracker import CostTracker
 from openharness.engine.messages import ConversationMessage, TextBlock, ToolResultBlock
 from openharness.engine.query import AskUserPrompt, PermissionPrompt, QueryContext, remember_user_goal, run_query
 from openharness.engine.stream_events import (
@@ -22,6 +20,7 @@ from openharness.hooks import HookEvent, HookExecutor
 from openharness.permissions.checker import PermissionChecker
 from openharness.tools.base import ToolRegistry
 
+log = logging.getLogger(__name__)
 
 _FILE_MUTATING_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit"})
 
