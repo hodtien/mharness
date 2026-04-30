@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import AsyncIterator
+
+log = logging.getLogger(__name__)
 
 from openharness.api.client import SupportsStreamingMessages
 from openharness.engine.cost_tracker import CostTracker
@@ -227,10 +230,13 @@ class QueryEngine:
                 self._messages = list(query_messages)
                 turn_index += 1
                 if self._hook_executor is not None:
-                    await self._hook_executor.execute(
-                        HookEvent.TURN_COMPLETE,
-                        collector.build_payload(model=self._model, turn_index=turn_index),
-                    )
+                    try:
+                        await self._hook_executor.execute(
+                            HookEvent.TURN_COMPLETE,
+                            collector.build_payload(model=self._model, turn_index=turn_index),
+                        )
+                    except Exception as hook_exc:
+                        log.warning("TURN_COMPLETE hook failed (non-fatal): %s", hook_exc)
                 collector.reset()
             if usage is not None:
                 self._cost_tracker.add(usage)
@@ -261,10 +267,13 @@ class QueryEngine:
             if isinstance(event, AssistantTurnComplete):
                 turn_index += 1
                 if self._hook_executor is not None:
-                    await self._hook_executor.execute(
-                        HookEvent.TURN_COMPLETE,
-                        collector.build_payload(model=self._model, turn_index=turn_index),
-                    )
+                    try:
+                        await self._hook_executor.execute(
+                            HookEvent.TURN_COMPLETE,
+                            collector.build_payload(model=self._model, turn_index=turn_index),
+                        )
+                    except Exception as hook_exc:
+                        log.warning("TURN_COMPLETE hook failed (non-fatal): %s", hook_exc)
                 collector.reset()
             if usage is not None:
                 self._cost_tracker.add(usage)

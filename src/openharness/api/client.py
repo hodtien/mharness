@@ -240,7 +240,12 @@ class AnthropicApiClient:
                     if text:
                         yield ApiTextDeltaEvent(text=text)
 
-                final_message = await stream.get_final_message()
+                try:
+                    final_message = await stream.get_final_message()
+                except AssertionError as assert_exc:
+                    raise RequestFailure(
+                        "API stream returned no message snapshot — likely empty or aborted upstream response"
+                    ) from assert_exc
         except APIError as exc:
             if isinstance(exc, APIStatusError) and exc.status_code in RETRYABLE_STATUS_CODES:
                 raise  # Let retry logic handle it
