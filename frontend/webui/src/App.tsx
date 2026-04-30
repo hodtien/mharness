@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { api, openWebSocket, type WsHandle } from "./api/client";
 import { useSession, clearPermission, clearQuestion, clearSelect } from "./store/session";
 import Header from "./components/Header";
@@ -15,9 +15,30 @@ function RootRedirect() {
   return <Navigate to={`/chat${location.search}`} replace />;
 }
 
+interface LayoutProps {
+  onInterrupt: () => void;
+}
+
+function AppLayout({ onInterrupt }: LayoutProps) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  return (
+    <div className="flex h-full w-full overflow-hidden">
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <div className="flex flex-1 flex-col min-w-0">
+        <Header
+          onToggleSidebar={() => setSidebarOpen((v) => !v)}
+          onInterrupt={onInterrupt}
+        />
+        <main className="flex flex-1 flex-col min-h-0">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const wsRef = useRef<WsHandle | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { setStatus, ingest, appendUser } = useSession();
 
   const setupSession = useCallback(async () => {
@@ -64,12 +85,9 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-
-      <div className="flex flex-1 flex-col min-w-0">
-        <Header onToggleSidebar={() => setSidebarOpen((v) => !v)} onInterrupt={sendInterrupt} />
-        <Routes>
+    <>
+      <Routes>
+        <Route element={<AppLayout onInterrupt={sendInterrupt} />}>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/chat" element={<ChatPage onSend={sendLine} />} />
           <Route
@@ -89,12 +107,12 @@ export default function App() {
             element={<PlaceholderPage title="Settings" description="Provider, model, and agent settings." />}
           />
           <Route path="*" element={<Navigate to="/chat" replace />} />
-        </Routes>
-      </div>
+        </Route>
+      </Routes>
 
       <PermissionModal onRespond={sendPermission} />
       <QuestionModal onRespond={sendQuestionAnswer} />
       <SelectModal onSelect={sendSelectChoice} />
-    </div>
+    </>
   );
 }
