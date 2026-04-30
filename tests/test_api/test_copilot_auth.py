@@ -246,11 +246,16 @@ class TestPollForAccessToken:
 
     def test_timeout_raises_runtime_error(self, monkeypatch):
         """Polling beyond the deadline should raise RuntimeError."""
-        # Make monotonic() return values past the deadline immediately
-        monotonic_calls = iter([0.0, 0.0, 999.0])
+        # Make monotonic() return values past the deadline immediately.
+        # Use a pop+fallback (instead of iter+next) so any extra monotonic
+        # calls during teardown (asyncio loop bookkeeping under pytest-asyncio
+        # autouse fixtures) don't surface a StopIteration.
+        monotonic_values = [0.0, 0.0, 999.0]
 
         def fake_monotonic() -> float:
-            return next(monotonic_calls)
+            if monotonic_values:
+                return monotonic_values.pop(0)
+            return 999.0
 
         def fake_post(*args: Any, **kwargs: Any) -> FakeHttpResponse:
             return FakeHttpResponse(_json={"error": "authorization_pending"})
