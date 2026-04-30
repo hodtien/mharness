@@ -66,8 +66,6 @@ def require_token(
         prefix = "Bearer "
         if authorization.startswith(prefix):
             candidate = authorization[len(prefix):].strip() or None
-        else:
-            candidate = authorization.strip() or None
     if candidate is None:
         candidate = token_query
 
