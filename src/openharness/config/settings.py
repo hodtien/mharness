@@ -881,9 +881,26 @@ def load_settings(config_path: Path | None = None) -> Settings:
                     "profiles": merged_profiles,
                 }
             )
-        return _apply_env_overrides(settings.materialize_active_profile())
+        settings = _apply_env_overrides(settings.materialize_active_profile())
+        return _apply_claude_bridge_safely(settings)
 
-    return _apply_env_overrides(Settings().materialize_active_profile())
+    return _apply_claude_bridge_safely(
+        _apply_env_overrides(Settings().materialize_active_profile())
+    )
+
+
+def _apply_claude_bridge_safely(settings: Settings) -> Settings:
+    """Merge ``~/.claude/settings.json`` router profile, never failing.
+
+    Imported lazily to avoid a circular dependency between
+    ``config.settings`` and ``config.claude_bridge``.
+    """
+    try:
+        from openharness.config.claude_bridge import apply_claude_bridge
+
+        return apply_claude_bridge(settings)
+    except Exception:
+        return settings
 
 
 def save_settings(settings: Settings, config_path: Path | None = None) -> None:

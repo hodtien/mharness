@@ -132,6 +132,11 @@ class TestLoadSaveSettings:
         monkeypatch.delenv("OPENHARNESS_BASE_URL", raising=False)
         monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
         monkeypatch.delenv("OPENHARNESS_MODEL", raising=False)
+        # Isolate from real ~/.claude/settings.json so the bridge is a no-op.
+        from openharness.config import claude_bridge
+        monkeypatch.setattr(
+            claude_bridge, "CLAUDE_SETTINGS_PATH", tmp_path / "no-claude.json"
+        )
         path = tmp_path / "nonexistent.json"
         s = load_settings(path)
         assert s == Settings().materialize_active_profile()
