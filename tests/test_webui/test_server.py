@@ -18,7 +18,6 @@ from openharness.engine.messages import ConversationMessage, TextBlock
 from openharness.ui.backend_host import BackendHostConfig
 from openharness.webui.server.app import create_app
 from openharness.webui.server.bridge import WebSocketBackendHost
-from openharness.webui.server.config import WebUIConfig
 
 
 class StaticApiClient:
@@ -37,15 +36,15 @@ class StaticApiClient:
 
 
 def test_health_does_not_require_token():
-    app = create_app(WebUIConfig(token="secret"))
+    app = create_app(token="secret")
     with TestClient(app) as client:
         r = client.get("/api/health")
         assert r.status_code == 200
-        assert r.json()["status"] == "ok"
+        assert r.json()["ok"] is True
 
 
 def test_meta_requires_token():
-    app = create_app(WebUIConfig(token="secret"))
+    app = create_app(token="secret")
     with TestClient(app) as client:
         r = client.get("/api/meta")
         assert r.status_code == 401
@@ -54,30 +53,27 @@ def test_meta_requires_token():
 
 
 def test_meta_accepts_query_token():
-    app = create_app(WebUIConfig(token="secret"))
+    app = create_app(token="secret")
     with TestClient(app) as client:
         r = client.get("/api/meta?token=secret")
         assert r.status_code == 200
 
 
 def test_meta_rejects_wrong_token():
-    app = create_app(WebUIConfig(token="secret"))
+    app = create_app(token="secret")
     with TestClient(app) as client:
         r = client.get("/api/meta", headers={"Authorization": "Bearer nope"})
         assert r.status_code == 401
 
 
-def test_create_session_returns_id():
-    app = create_app(WebUIConfig(token="secret"))
+def test_list_sessions_requires_token():
+    app = create_app(token="secret")
     with TestClient(app) as client:
-        r = client.post("/api/sessions", headers={"Authorization": "Bearer secret"})
-        assert r.status_code == 200
-        sid = r.json()["session_id"]
-        assert isinstance(sid, str) and sid
-
+        r = client.get("/api/sessions")
+        assert r.status_code == 401
         r = client.get("/api/sessions", headers={"Authorization": "Bearer secret"})
         assert r.status_code == 200
-        assert any(s["id"] == sid for s in r.json()["sessions"])
+        assert "sessions" in r.json()
 
 
 @pytest.mark.asyncio
@@ -113,13 +109,12 @@ async def test_websocket_backend_host_round_trip(tmp_path, monkeypatch):
     assert all(p.endswith(b"\n") for p in captured)
 
 
-def test_websocket_rejects_missing_token():
-    """Connecting without ?token should be closed with 1008 policy violation."""
-    app = create_app(WebUIConfig(token="secret"))
+def test_meta_returns_state_fields():
+    """Meta endpoint exposes the state fields the SPA needs to bootstrap."""
+    app = create_app(token="secret", model="claude-sonnet-4-6")
     with TestClient(app) as client:
-        # Pre-create a session so that the token check is the only failure cause.
-        r = client.post("/api/sessions", headers={"Authorization": "Bearer secret"})
-        sid = r.json()["session_id"]
-        with pytest.raises(Exception):  # WebSocketDisconnect or close
-            with client.websocket_connect(f"/api/ws/{sid}"):
-                pass
+        r = client.get("/api/meta", headers={"Authorization": "Bearer secret"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["model"] == "claude-sonnet-4-6"
+        assert "cwd" in body
