@@ -16,7 +16,6 @@ from typing import AsyncIterator
 
 from openharness.api.client import (
     ApiMessageRequest,
-    ApiRetryEvent,
     ApiStreamEvent,
     SupportsStreamingMessages,
 )

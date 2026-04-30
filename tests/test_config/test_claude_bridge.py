@@ -22,7 +22,7 @@ from openharness.config.claude_bridge import (
     write_agent_model,
     write_claude_model,
 )
-from openharness.config.settings import ProviderProfile, Settings
+from openharness.config.settings import Settings
 
 
 def _fixture_payload() -> dict:

@@ -22,7 +22,7 @@ def serve(config: WebUIConfig) -> None:
     app = create_app(config)
 
     url = f"http://{config.host}:{config.port}/?token={config.token}"
-    print(f"\n  🌐 OpenHarness Web UI ready at:\n")
+    print("\n  🌐 OpenHarness Web UI ready at:\n")
     print(f"     {url}\n")
     if config.host == "0.0.0.0":
         print("  ⚠️  Server is bound to all interfaces (public). Be careful!")
