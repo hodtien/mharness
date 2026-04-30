@@ -333,6 +333,34 @@ async def test_query_engine_allows_unbounded_turns_when_max_turns_is_none(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_query_engine_treats_zero_max_turns_as_unbounded(tmp_path: Path):
+    engine = QueryEngine(
+        api_client=FakeApiClient(
+            [
+                _FakeResponse(
+                    message=ConversationMessage(
+                        role="assistant",
+                        content=[TextBlock(text="done")],
+                    ),
+                    usage=UsageSnapshot(input_tokens=4, output_tokens=3),
+                ),
+            ]
+        ),
+        tool_registry=create_default_tool_registry(),
+        permission_checker=PermissionChecker(PermissionSettings(mode=PermissionMode.FULL_AUTO)),
+        cwd=tmp_path,
+        model="claude-test",
+        system_prompt="system",
+        max_turns=0,
+    )
+
+    events = [event async for event in engine.submit_message("hello")]
+
+    assert isinstance(events[-1], AssistantTurnComplete)
+    assert engine.max_turns is None
+
+
+@pytest.mark.asyncio
 async def test_query_engine_surfaces_retry_status_events(tmp_path: Path):
     engine = QueryEngine(
         api_client=RetryThenSuccessApiClient(),

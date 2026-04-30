@@ -85,7 +85,7 @@ class QueryEngine:
         self._max_tokens = max_tokens
         self._context_window_tokens = context_window_tokens
         self._auto_compact_threshold_tokens = auto_compact_threshold_tokens
-        self._max_turns = max_turns
+        self.set_max_turns(max_turns)
         self._permission_prompt = permission_prompt
         self._ask_user_prompt = ask_user_prompt
         self._hook_executor = hook_executor
@@ -147,7 +147,7 @@ class QueryEngine:
 
     def set_max_turns(self, max_turns: int | None) -> None:
         """Update the maximum number of agentic turns per user input."""
-        self._max_turns = None if max_turns is None else max(1, int(max_turns))
+        self._max_turns = None if max_turns in (None, 0) else max(1, int(max_turns))
 
     def set_permission_checker(self, checker: PermissionChecker) -> None:
         """Update the active permission checker for future turns."""

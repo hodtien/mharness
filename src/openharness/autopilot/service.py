@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shlex
 import subprocess
 import tempfile
@@ -133,15 +134,15 @@ def _parse_review_severity(text: str) -> str:
     """Extract the highest severity tag from a code-reviewer agent response.
 
     Returns one of: critical, high, medium, low, none.
-    Walks the text in priority order so an earlier mention of CRITICAL wins
-    even when later sections also list HIGH or MEDIUM findings.
+    Prefers an explicit ``Severity: <LEVEL>`` line so that prose like
+    "No CRITICAL issues" does not falsely elevate the result.
+    Returns none when no explicit line is found.
     """
     if not text:
         return "none"
-    haystack = text.upper()
-    for level in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
-        if level in haystack:
-            return level.lower()
+    explicit = re.search(r"^\s*Severity:\s*(CRITICAL|HIGH|MEDIUM|LOW|NONE)\s*$", text, re.IGNORECASE | re.MULTILINE)
+    if explicit:
+        return explicit.group(1).lower()
     return "none"
 
 
