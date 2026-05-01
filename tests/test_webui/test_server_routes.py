@@ -235,6 +235,79 @@ def test_history_delete_keeps_latest_pointing_to_other_session(
     assert newer_path.exists()
 
 
+def test_post_sessions_requires_auth(tmp_path) -> None:
+    client = _client(tmp_path)
+    assert client.post("/api/sessions").status_code == 401
+
+
+def test_post_sessions_creates_fresh_session_without_body(tmp_path, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/sessions", headers={"Authorization": "Bearer test-token"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body["session_id"], str) and body["session_id"]
+    assert body["resumed_from"] is None
+    assert body["active"] is False
+
+    manager = client.app.state.webui_session_manager
+    entry = manager.get(body["session_id"])
+    assert entry is not None
+    assert entry.host._config.restore_messages is None
+
+
+def test_post_sessions_with_resume_id_loads_snapshot(tmp_path, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    save_session_snapshot(
+        cwd=tmp_path,
+        model="sonnet",
+        system_prompt="system",
+        messages=[ConversationMessage.from_user_text("resume me please")],
+        usage=UsageSnapshot(),
+        session_id="resume99",
+    )
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/sessions",
+        headers={"Authorization": "Bearer test-token"},
+        json={"resume_id": "resume99"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["resumed_from"] == "resume99"
+
+    manager = client.app.state.webui_session_manager
+    entry = manager.get(body["session_id"])
+    assert entry is not None
+    restored = entry.host._config.restore_messages
+    assert restored is not None and len(restored) == 1
+    assert restored[0]["role"] == "user"
+
+
+def test_post_sessions_unknown_resume_id_returns_404(tmp_path, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/sessions",
+        headers={"Authorization": "Bearer test-token"},
+        json={"resume_id": "missing"},
+    )
+    assert response.status_code == 404
+
+
 def test_history_delete_removes_latest_only_session(tmp_path, monkeypatch) -> None:
     data_dir = tmp_path / "data"
     data_dir.mkdir()

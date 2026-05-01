@@ -21,6 +21,7 @@ class SessionEntry:
     host: WebSocketBackendHost
     task: asyncio.Task | None = None
     created_at: float = field(default_factory=time.time)
+    resumed_from: str | None = None
 
 
 class SessionManager:
@@ -30,7 +31,13 @@ class SessionManager:
         self._config = config
         self._sessions: dict[str, SessionEntry] = {}
 
-    def create_session(self) -> SessionEntry:
+    def create_session(
+        self,
+        *,
+        restore_messages: list[dict] | None = None,
+        restore_tool_metadata: dict[str, object] | None = None,
+        resumed_from: str | None = None,
+    ) -> SessionEntry:
         session_id = uuid4().hex[:12]
         host_config = BackendHostConfig(
             model=self._config.model,
@@ -41,9 +48,11 @@ class SessionManager:
             cwd=self._config.cwd,
             permission_mode=self._config.permission_mode,
             enforce_max_turns=False,
+            restore_messages=list(restore_messages) if restore_messages else None,
+            restore_tool_metadata=dict(restore_tool_metadata) if restore_tool_metadata else None,
         )
         host = WebSocketBackendHost(host_config)
-        entry = SessionEntry(id=session_id, host=host)
+        entry = SessionEntry(id=session_id, host=host, resumed_from=resumed_from)
         self._sessions[session_id] = entry
         return entry
 
@@ -56,6 +65,7 @@ class SessionManager:
                 "id": entry.id,
                 "created_at": entry.created_at,
                 "active": entry.task is not None and not entry.task.done(),
+                "resumed_from": entry.resumed_from,
             }
             for entry in self._sessions.values()
         ]
