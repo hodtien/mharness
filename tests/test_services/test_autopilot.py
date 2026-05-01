@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from types import MethodType, SimpleNamespace
 
@@ -651,3 +652,124 @@ def test_merge_pull_request_does_not_request_branch_deletion(tmp_path: Path, mon
 
     assert captured["args"] == ["pr", "merge", "41", "--squash"]
     assert captured["check"] is True
+
+
+def test_create_pr_succeeds_on_first_attempt(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    body_path = tmp_path / "body.md"
+    body_path.write_text("body", encoding="utf-8")
+    store = RepoAutopilotStore(repo)
+    calls: list[list[str]] = []
+
+    def fake_run_gh(args, *, cwd=None, check=False):
+        calls.append(args)
+        return subprocess.CompletedProcess(["gh", *args], 0, "", "")
+
+    monkeypatch.setattr(store, "_run_gh", fake_run_gh)
+
+    store._create_pull_request(
+        head_branch="autopilot/ap-test",
+        base_branch="main",
+        title="Autopilot: Test",
+        body_path=body_path,
+    )
+
+    assert calls == [
+        [
+            "pr",
+            "create",
+            "--title",
+            "Autopilot: Test",
+            "--body-file",
+            str(body_path),
+            "--base",
+            "main",
+            "--head",
+            "autopilot/ap-test",
+        ],
+    ]
+
+
+def test_create_pr_retries_with_explicit_repo_on_head_resolution_error(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    body_path = tmp_path / "body.md"
+    body_path.write_text("body", encoding="utf-8")
+    store = RepoAutopilotStore(repo)
+    calls: list[list[str]] = []
+
+    def fake_run_gh(args, *, cwd=None, check=False):
+        calls.append(args)
+        if args[:2] == ["repo", "view"]:
+            return subprocess.CompletedProcess(["gh", *args], 0, '{"nameWithOwner":"hodtien/mharness"}', "")
+        if len(calls) == 1:
+            return subprocess.CompletedProcess(
+                ["gh", *args],
+                1,
+                "",
+                "GraphQL: Head sha can't be blank, Base sha can't be blank, No commits between main and autopilot/ap-test, Head ref must be a branch",
+            )
+        return subprocess.CompletedProcess(["gh", *args], 0, "", "")
+
+    monkeypatch.setattr(store, "_run_gh", fake_run_gh)
+
+    store._create_pull_request(
+        head_branch="autopilot/ap-test",
+        base_branch="main",
+        title="Autopilot: Test",
+        body_path=body_path,
+    )
+
+    assert calls[0] == [
+        "pr",
+        "create",
+        "--title",
+        "Autopilot: Test",
+        "--body-file",
+        str(body_path),
+        "--base",
+        "main",
+        "--head",
+        "autopilot/ap-test",
+    ]
+    assert calls[1] == ["repo", "view", "--json", "nameWithOwner"]
+    assert calls[2] == [
+        "pr",
+        "create",
+        "--repo",
+        "hodtien/mharness",
+        "--title",
+        "Autopilot: Test",
+        "--body-file",
+        str(body_path),
+        "--base",
+        "main",
+        "--head",
+        "hodtien:autopilot/ap-test",
+    ]
+
+
+def test_create_pr_raises_on_non_resolution_error(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    body_path = tmp_path / "body.md"
+    body_path.write_text("body", encoding="utf-8")
+    store = RepoAutopilotStore(repo)
+
+    def fake_run_gh(args, *, cwd=None, check=False):
+        return subprocess.CompletedProcess(["gh", *args], 1, "", "authentication required")
+
+    monkeypatch.setattr(store, "_run_gh", fake_run_gh)
+
+    try:
+        store._create_pull_request(
+            head_branch="autopilot/ap-test",
+            base_branch="main",
+            title="Autopilot: Test",
+            body_path=body_path,
+        )
+    except subprocess.CalledProcessError as exc:
+        assert exc.stderr == "authentication required"
+    else:
+        raise AssertionError("Expected CalledProcessError for non-resolution gh error")

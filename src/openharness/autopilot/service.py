@@ -1459,21 +1459,11 @@ class RepoAutopilotStore:
             handle.write(body)
             body_path = Path(handle.name)
         try:
-            self._run_gh(
-                [
-                    "pr",
-                    "create",
-                    "--title",
-                    title,
-                    "--body-file",
-                    str(body_path),
-                    "--base",
-                    base_branch,
-                    "--head",
-                    head_branch,
-                ],
-                cwd=self._cwd,
-                check=True,
+            self._create_pull_request(
+                head_branch=head_branch,
+                base_branch=base_branch,
+                title=title,
+                body_path=body_path,
             )
         finally:
             body_path.unlink(missing_ok=True)
@@ -1483,6 +1473,75 @@ class RepoAutopilotStore:
             raise RuntimeError(f"PR creation succeeded but PR for branch {head_branch} was not discoverable.")
         self._best_effort_add_labels(created.get("number"), ["autopilot"])
         return created
+
+    def _create_pull_request(
+        self,
+        *,
+        head_branch: str,
+        base_branch: str,
+        title: str,
+        body_path: Path,
+    ) -> None:
+        """Create a GitHub PR, retrying with explicit --repo and owner-qualified head on resolution errors."""
+        result = self._run_gh(
+            [
+                "pr",
+                "create",
+                "--title",
+                title,
+                "--body-file",
+                str(body_path),
+                "--base",
+                base_branch,
+                "--head",
+                head_branch,
+            ],
+            cwd=self._cwd,
+        )
+        if result.returncode == 0:
+            return
+
+        stderr = (result.stderr or "").lower()
+        _resolution_errors = (
+            "head sha can't be blank",
+            "base sha can't be blank",
+            "no commits between",
+            "head ref must be a branch",
+        )
+        if not any(phrase in stderr for phrase in _resolution_errors):
+            raise subprocess.CalledProcessError(result.returncode, "gh pr create", result.stdout, result.stderr)
+
+        log.warning(
+            "gh pr create failed with head/base resolution error; retrying with explicit --repo and owner-qualified head: %s",
+            (result.stderr or "").strip(),
+        )
+        try:
+            repo_full = self._current_repo_full_name()
+        except Exception as exc:
+            raise RuntimeError(
+                f"gh pr create failed and could not resolve repo name for fallback: {exc}",
+            ) from exc
+
+        owner = repo_full.split("/")[0]
+        qualified_head = f"{owner}:{head_branch}"
+        self._run_gh(
+            [
+                "pr",
+                "create",
+                "--repo",
+                repo_full,
+                "--title",
+                title,
+                "--body-file",
+                str(body_path),
+                "--base",
+                base_branch,
+                "--head",
+                qualified_head,
+            ],
+            cwd=self._cwd,
+            check=True,
+        )
 
     def _comment_on_issue(self, issue_number: int, comment: str) -> None:
         try:
