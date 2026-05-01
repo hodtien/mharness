@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
-from openharness.services.session_storage import list_session_snapshots, load_session_by_id
+from openharness.services.session_storage import (
+    delete_session_by_id,
+    list_session_snapshots,
+    load_session_by_id,
+)
 from openharness.webui.server.state import WebUIState, get_state, require_token
 
 router = APIRouter(
@@ -76,3 +80,14 @@ def get_history_detail(
     if snapshot is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return _truncate_tool_results(snapshot)
+
+
+@router.delete("/{session_id}", status_code=204)
+def delete_history(
+    session_id: str,
+    state: WebUIState = Depends(get_state),
+) -> Response:
+    """Delete the persisted snapshot for ``session_id``."""
+    if not delete_session_by_id(state.cwd, session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return Response(status_code=204)

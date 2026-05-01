@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from openharness.services.session_storage import save_session_snapshot
+from openharness.services.session_storage import get_project_session_dir, save_session_snapshot
 from openharness.api.usage import UsageSnapshot
 from openharness.engine.messages import ConversationMessage, ToolResultBlock, ToolUseBlock
 from openharness.webui.server.app import create_app
@@ -155,3 +155,107 @@ def test_history_detail_returns_session_and_truncates_tool_results(tmp_path, mon
         "/api/history/missing", headers={"Authorization": "Bearer test-token"}
     )
     assert missing.status_code == 404
+
+
+def test_history_delete_removes_session_and_clears_latest_when_matching(
+    tmp_path, monkeypatch
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    save_session_snapshot(
+        cwd=tmp_path,
+        model="sonnet",
+        system_prompt="system",
+        messages=[ConversationMessage.from_user_text("hello history")],
+        usage=UsageSnapshot(),
+        session_id="abc123",
+    )
+    session_dir = get_project_session_dir(tmp_path)
+    session_path = session_dir / "session-abc123.json"
+    latest_path = session_dir / "latest.json"
+    assert session_path.exists()
+    assert latest_path.exists()
+
+    client = _client(tmp_path)
+
+    assert client.delete("/api/history/abc123").status_code == 401
+
+    response = client.delete(
+        "/api/history/abc123", headers={"Authorization": "Bearer test-token"}
+    )
+    assert response.status_code == 204
+    assert response.content == b""
+    assert not session_path.exists()
+    assert not latest_path.exists()
+
+    missing = client.delete(
+        "/api/history/abc123", headers={"Authorization": "Bearer test-token"}
+    )
+    assert missing.status_code == 404
+
+
+def test_history_delete_keeps_latest_pointing_to_other_session(
+    tmp_path, monkeypatch
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    save_session_snapshot(
+        cwd=tmp_path,
+        model="sonnet",
+        system_prompt="system",
+        messages=[ConversationMessage.from_user_text("first")],
+        usage=UsageSnapshot(),
+        session_id="aaa111",
+    )
+    save_session_snapshot(
+        cwd=tmp_path,
+        model="sonnet",
+        system_prompt="system",
+        messages=[ConversationMessage.from_user_text("second")],
+        usage=UsageSnapshot(),
+        session_id="bbb222",
+    )
+    session_dir = get_project_session_dir(tmp_path)
+    older_path = session_dir / "session-aaa111.json"
+    newer_path = session_dir / "session-bbb222.json"
+    latest_path = session_dir / "latest.json"
+    assert latest_path.exists()
+
+    client = _client(tmp_path)
+
+    response = client.delete(
+        "/api/history/aaa111", headers={"Authorization": "Bearer test-token"}
+    )
+    assert response.status_code == 204
+    assert not older_path.exists()
+    # latest.json points to the most recently saved session (bbb222), so it stays.
+    assert latest_path.exists()
+    assert newer_path.exists()
+
+
+def test_history_delete_removes_latest_only_session(tmp_path, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    save_session_snapshot(
+        cwd=tmp_path,
+        model="sonnet",
+        system_prompt="system",
+        messages=[ConversationMessage.from_user_text("latest only")],
+        usage=UsageSnapshot(),
+        session_id="abc123",
+    )
+    session_dir = get_project_session_dir(tmp_path)
+    (session_dir / "session-abc123.json").unlink()
+    latest_path = session_dir / "latest.json"
+    assert latest_path.exists()
+
+    client = _client(tmp_path)
+
+    response = client.delete(
+        "/api/history/abc123", headers={"Authorization": "Bearer test-token"}
+    )
+    assert response.status_code == 204
+    assert not latest_path.exists()
