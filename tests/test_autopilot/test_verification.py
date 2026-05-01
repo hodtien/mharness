@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ from openharness.autopilot.service import (
     _DEFAULT_VERIFICATION_POLICY,
     RepoAutopilotStore,
     _parse_verification_entry,
+    _verification_subprocess_env,
 )
 
 
@@ -232,3 +234,110 @@ def test_run_verification_end_to_end_without_shell(
     assert len(steps) == 1
     assert steps[0].status == "success"
     assert steps[0].returncode == 0
+
+
+def test_run_verification_skips_failures_that_exist_on_base_branch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Completed:
+        returncode = 1
+        stdout = ""
+        stderr = "failed"
+
+    monkeypatch.setattr(service.subprocess, "run", lambda *args, **kwargs: _Completed())
+    monkeypatch.setattr(service, "_looks_available", lambda command, cwd: True)
+
+    store = _build_store(tmp_path)
+    baseline_step = service.RepoVerificationStep(
+        command="pytest -q",
+        returncode=1,
+        status="failed",
+        stderr="baseline failed",
+    )
+    monkeypatch.setattr(
+        store,
+        "_run_baseline_verification_command",
+        lambda *args, **kwargs: baseline_step,
+    )
+
+    steps = store._run_verification_steps({"verification": {"commands": ["pytest -q"]}}, cwd=tmp_path)
+
+    assert steps[0].status == "skipped"
+    assert "also fails on the base branch" in steps[0].stderr
+
+
+def test_run_verification_keeps_failure_when_base_branch_passes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Completed:
+        returncode = 1
+        stdout = ""
+        stderr = "failed"
+
+    monkeypatch.setattr(service.subprocess, "run", lambda *args, **kwargs: _Completed())
+    monkeypatch.setattr(service, "_looks_available", lambda command, cwd: True)
+
+    store = _build_store(tmp_path)
+    baseline_step = service.RepoVerificationStep(
+        command="pytest -q",
+        returncode=0,
+        status="success",
+    )
+    monkeypatch.setattr(
+        store,
+        "_run_baseline_verification_command",
+        lambda *args, **kwargs: baseline_step,
+    )
+
+    steps = store._run_verification_steps({"verification": {"commands": ["pytest -q"]}}, cwd=tmp_path)
+
+    assert steps[0].status == "failed"
+    assert "also fails on the base branch" not in steps[0].stderr
+
+
+def test_run_verification_honors_preexisting_failure_opt_out(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Completed:
+        returncode = 1
+        stdout = ""
+        stderr = "failed"
+
+    monkeypatch.setattr(service.subprocess, "run", lambda *args, **kwargs: _Completed())
+    monkeypatch.setattr(service, "_looks_available", lambda command, cwd: True)
+
+    store = _build_store(tmp_path)
+    monkeypatch.setattr(
+        store,
+        "_run_baseline_verification_command",
+        lambda *args, **kwargs: pytest.fail("baseline should not run when disabled"),
+    )
+
+    steps = store._run_verification_steps(
+        {"verification": {"commands": ["pytest -q"], "ignore_preexisting_failures": False}},
+        cwd=tmp_path,
+    )
+
+    assert steps[0].status == "failed"
+
+
+def test_verification_subprocess_env_removes_inherited_cwd_keys(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PWD", "/wrong")
+    monkeypatch.setenv("OLDPWD", "/old")
+    monkeypatch.setenv("INIT_CWD", "/init")
+    monkeypatch.setenv("PROJECT_CWD", "/project")
+    monkeypatch.setenv("PATH", os.environ.get("PATH", ""))
+
+    env = _verification_subprocess_env(tmp_path)
+
+    assert env["PWD"] == str(tmp_path)
+    assert "OLDPWD" not in env
+    assert "INIT_CWD" not in env
+    assert "PROJECT_CWD" not in env
+    assert "PATH" in env

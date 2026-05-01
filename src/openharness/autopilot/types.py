@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 RepoTaskStatus = Literal[
     "queued",
@@ -30,6 +31,19 @@ RepoTaskSource = Literal[
 ]
 
 
+def _coerce_timestamp(v: Any) -> float:
+    if isinstance(v, datetime):
+        return v.timestamp()
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        try:
+            return float(v)
+        except ValueError:
+            return datetime.fromisoformat(v.replace("Z", "+00:00")).timestamp()
+    return float(v)
+
+
 class RepoTaskCard(BaseModel):
     """One normalized repo-level work item."""
 
@@ -46,6 +60,11 @@ class RepoTaskCard(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: float
     updated_at: float
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def _coerce_ts(cls, v: Any) -> float:
+        return _coerce_timestamp(v)
 
 
 class RepoJournalEntry(BaseModel):
@@ -64,6 +83,11 @@ class RepoAutopilotRegistry(BaseModel):
     version: int = 1
     updated_at: float = 0.0
     cards: list[RepoTaskCard] = Field(default_factory=list)
+
+    @field_validator("updated_at", mode="before")
+    @classmethod
+    def _coerce_ts(cls, v: Any) -> float:
+        return _coerce_timestamp(v)
 
 
 class RepoVerificationStep(BaseModel):

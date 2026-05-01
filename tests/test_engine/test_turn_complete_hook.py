@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
-from openharness.engine.query_engine import TurnDiffCollector
+import pytest
+from pydantic import BaseModel
+
+from openharness.api.client import ApiMessageCompleteEvent
+from openharness.api.usage import UsageSnapshot
+from openharness.engine.messages import ConversationMessage, TextBlock, ToolUseBlock
+from openharness.engine.query_engine import QueryEngine, TurnDiffCollector
 from openharness.engine.stream_events import (
     AssistantTextDelta,
     ToolExecutionCompleted,
     ToolExecutionStarted,
 )
+from openharness.config.settings import PermissionSettings
 from openharness.hooks.events import HookEvent
+from openharness.hooks.types import AggregatedHookResult
+from openharness.permissions import PermissionChecker, PermissionMode
+from openharness.tools.base import BaseTool, ToolExecutionContext, ToolRegistry, ToolResult
 
 
 def _started(name: str, tool_input: dict) -> ToolExecutionStarted:
@@ -60,3 +70,72 @@ def test_collector_reset_clears_state():
     payload = c.build_payload(model="m", turn_index=2)
     assert payload["modified_files"] == []
     assert payload["tool_calls"] == []
+
+
+class ScriptedApiClient:
+    def __init__(self, messages: list[ConversationMessage]) -> None:
+        self._messages = list(messages)
+
+    async def stream_message(self, request):
+        del request
+        message = self._messages.pop(0)
+        yield ApiMessageCompleteEvent(
+            message=message,
+            usage=UsageSnapshot(input_tokens=1, output_tokens=1),
+            stop_reason=None,
+        )
+
+
+class RecordingHookExecutor:
+    def __init__(self) -> None:
+        self.turn_complete_payloads: list[dict] = []
+
+    async def execute(self, event: HookEvent, payload: dict) -> AggregatedHookResult:
+        if event == HookEvent.TURN_COMPLETE:
+            self.turn_complete_payloads.append(payload)
+        return AggregatedHookResult()
+
+
+class ReadInput(BaseModel):
+    file_path: str
+
+
+class FakeReadTool(BaseTool):
+    name = "Read"
+    description = "Reads a synthetic file."
+    input_model = ReadInput
+
+    async def execute(self, arguments: ReadInput, context: ToolExecutionContext) -> ToolResult:
+        del arguments, context
+        return ToolResult(output="contents")
+
+
+@pytest.mark.asyncio
+async def test_turn_complete_hook_waits_for_final_assistant_turn(tmp_path):
+    api_client = ScriptedApiClient(
+        [
+            ConversationMessage(
+                role="assistant",
+                content=[ToolUseBlock(id="toolu_read", name="Read", input={"file_path": "x.py"})],
+            ),
+            ConversationMessage(role="assistant", content=[TextBlock(text="done")]),
+        ]
+    )
+    hooks = RecordingHookExecutor()
+    registry = ToolRegistry()
+    registry.register(FakeReadTool())
+    engine = QueryEngine(
+        api_client=api_client,
+        tool_registry=registry,
+        cwd=tmp_path,
+        model="test-model",
+        hook_executor=hooks,
+        permission_checker=PermissionChecker(PermissionSettings(mode=PermissionMode.FULL_AUTO)),
+        system_prompt="",
+    )
+
+    events = [event async for event in engine.submit_message("inspect")]
+
+    assert events[-1].message.text == "done"
+    assert len(hooks.turn_complete_payloads) == 1
+    assert hooks.turn_complete_payloads[0]["tool_calls"] == [{"tool_name": "Read"}]

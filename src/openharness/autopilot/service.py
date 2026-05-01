@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import shlex
@@ -40,6 +41,8 @@ from openharness.config.paths import (
 from openharness.engine.stream_events import AssistantTextDelta, AssistantTurnComplete, ErrorEvent
 from openharness.swarm.worktree import WorktreeManager
 from openharness.utils.fs import atomic_write_text
+
+log = logging.getLogger(__name__)
 
 _SOURCE_BASE_SCORES: dict[RepoTaskSource, int] = {
     "ohmo_request": 100,
@@ -107,6 +110,7 @@ _DEFAULT_VERIFICATION_POLICY = {
         },
     ],
     "require_tests_before_merge": True,
+    "ignore_preexisting_failures": True,
     "code_review": {
         "enabled": True,
         "agent": "code-reviewer",
@@ -159,6 +163,13 @@ def _json_default(value: object) -> object:
 
 
 _SHELL_METACHARS = frozenset(";&|`$<>\n\r")
+_VERIFICATION_ENV_CWD_KEYS = frozenset({"PWD", "OLDPWD", "INIT_CWD", "PROJECT_CWD"})
+
+
+def _verification_subprocess_env(cwd: Path) -> dict[str, str]:
+    env = {key: value for key, value in os.environ.items() if key not in _VERIFICATION_ENV_CWD_KEYS}
+    env["PWD"] = str(cwd)
+    return env
 
 
 @dataclass(frozen=True)
@@ -2217,6 +2228,11 @@ class RepoAutopilotStore:
 
     def _run_verification_steps(self, policies: dict[str, Any], *, cwd: Path | None = None) -> list[RepoVerificationStep]:
         steps: list[RepoVerificationStep] = []
+        baseline_cache: dict[str, RepoVerificationStep] = {}
+        verification_policy = policies.get("verification") or {}
+        ignore_preexisting = bool(verification_policy.get("ignore_preexisting_failures", True))
+        base_branch = self._base_branch(policies)
+        active_cwd = cwd or self._cwd
         for cmd in self._verification_commands(policies):
             if cmd.error is not None:
                 steps.append(
@@ -2228,55 +2244,97 @@ class RepoAutopilotStore:
                     )
                 )
                 continue
-            target: str | list[str] = cmd.raw if cmd.shell else list(cmd.argv)
-            try:
-                completed = subprocess.run(
-                    target,
-                    cwd=cwd or self._cwd,
-                    shell=cmd.shell,
-                    text=True,
-                    capture_output=True,
-                    check=False,
-                    timeout=1800,
+            step = self._run_verification_command(cmd, cwd=active_cwd)
+            if ignore_preexisting and step.status in {"failed", "error"}:
+                baseline_step = self._run_baseline_verification_command(
+                    cmd,
+                    base_branch=base_branch,
+                    cache=baseline_cache,
                 )
-                steps.append(
-                    RepoVerificationStep(
-                        command=cmd.raw,
-                        returncode=completed.returncode,
-                        status="success" if completed.returncode == 0 else "failed",
-                        stdout=(completed.stdout or "")[-4000:],
-                        stderr=(completed.stderr or "")[-4000:],
+                if baseline_step is not None and baseline_step.status in {"failed", "error"}:
+                    step = step.model_copy(
+                        update={
+                            "status": "skipped",
+                            "stderr": (
+                                (step.stderr or "")
+                                + "\nSkipped: verification command also fails on the base branch."
+                            ).strip(),
+                        }
                     )
-                )
-            except FileNotFoundError as exc:
-                steps.append(
-                    RepoVerificationStep(
-                        command=cmd.raw,
-                        returncode=-1,
-                        status="error",
-                        stderr=f"executable not found: {exc}",
-                    )
-                )
-            except subprocess.TimeoutExpired as exc:
-                steps.append(
-                    RepoVerificationStep(
-                        command=cmd.raw,
-                        returncode=-1,
-                        status="error",
-                        stdout=_safe_text(getattr(exc, "stdout", ""))[-4000:],
-                        stderr=f"Timed out after {exc.timeout}s",
-                    )
-                )
-            except Exception as exc:  # pragma: no cover - defensive
-                steps.append(
-                    RepoVerificationStep(
-                        command=cmd.raw,
-                        returncode=-1,
-                        status="error",
-                        stderr=str(exc),
-                    )
-                )
+            steps.append(step)
         return steps
+
+    def _run_verification_command(self, cmd: _VerificationCommand, *, cwd: Path) -> RepoVerificationStep:
+        target: str | list[str] = cmd.raw if cmd.shell else list(cmd.argv)
+        try:
+            completed = subprocess.run(
+                target,
+                cwd=cwd,
+                env=_verification_subprocess_env(cwd),
+                shell=cmd.shell,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=1800,
+            )
+            return RepoVerificationStep(
+                command=cmd.raw,
+                returncode=completed.returncode,
+                status="success" if completed.returncode == 0 else "failed",
+                stdout=(completed.stdout or "")[-4000:],
+                stderr=(completed.stderr or "")[-4000:],
+            )
+        except FileNotFoundError as exc:
+            return RepoVerificationStep(
+                command=cmd.raw,
+                returncode=-1,
+                status="error",
+                stderr=f"executable not found: {exc}",
+            )
+        except subprocess.TimeoutExpired as exc:
+            return RepoVerificationStep(
+                command=cmd.raw,
+                returncode=-1,
+                status="error",
+                stdout=_safe_text(getattr(exc, "stdout", ""))[-4000:],
+                stderr=f"Timed out after {exc.timeout}s",
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            return RepoVerificationStep(
+                command=cmd.raw,
+                returncode=-1,
+                status="error",
+                stderr=str(exc),
+            )
+
+    def _run_baseline_verification_command(
+        self,
+        cmd: _VerificationCommand,
+        *,
+        base_branch: str,
+        cache: dict[str, RepoVerificationStep],
+    ) -> RepoVerificationStep | None:
+        if cmd.raw in cache:
+            return cache[cmd.raw]
+        try:
+            is_git = self._is_git_repo(self._cwd)
+        except Exception:
+            is_git = False
+        if not is_git:
+            return None
+        with tempfile.TemporaryDirectory(prefix="openharness-baseline-") as tmp:
+            baseline_cwd = Path(tmp) / "repo"
+            try:
+                self._run_git(["worktree", "add", "--detach", str(baseline_cwd), f"origin/{base_branch}"], check=True)
+                step = self._run_verification_command(cmd, cwd=baseline_cwd)
+            except Exception as exc:
+                log.warning("Skipping baseline verification for %r: %s", cmd.raw, exc)
+                return None
+            finally:
+                if baseline_cwd.exists():
+                    self._run_git(["worktree", "remove", "--force", str(baseline_cwd)])
+        cache[cmd.raw] = step
+        return step
 
     def _render_verification_report(
         self,

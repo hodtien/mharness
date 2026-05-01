@@ -227,7 +227,7 @@ class QueryEngine:
             if isinstance(event, AssistantTurnComplete):
                 self._messages = list(query_messages)
                 turn_index += 1
-                if self._hook_executor is not None:
+                if self._hook_executor is not None and not event.message.tool_uses:
                     try:
                         await self._hook_executor.execute(
                             HookEvent.TURN_COMPLETE,
@@ -235,7 +235,8 @@ class QueryEngine:
                         )
                     except Exception as hook_exc:
                         log.warning("TURN_COMPLETE hook failed (non-fatal): %s", hook_exc)
-                collector.reset()
+                if not event.message.tool_uses:
+                    collector.reset()  # accumulates across all tool-call turns; resets only on the final text turn
             if usage is not None:
                 self._cost_tracker.add(usage)
             yield event
@@ -264,7 +265,7 @@ class QueryEngine:
             collector.observe(event)
             if isinstance(event, AssistantTurnComplete):
                 turn_index += 1
-                if self._hook_executor is not None:
+                if self._hook_executor is not None and not event.message.tool_uses:
                     try:
                         await self._hook_executor.execute(
                             HookEvent.TURN_COMPLETE,
@@ -272,7 +273,8 @@ class QueryEngine:
                         )
                     except Exception as hook_exc:
                         log.warning("TURN_COMPLETE hook failed (non-fatal): %s", hook_exc)
-                collector.reset()
+                if not event.message.tool_uses:
+                    collector.reset()  # accumulates across all tool-call turns; resets only on the final text turn
             if usage is not None:
                 self._cost_tracker.add(usage)
             yield event

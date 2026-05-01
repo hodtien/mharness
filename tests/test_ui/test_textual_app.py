@@ -33,6 +33,8 @@ class ScriptedApiClient:
 
     async def stream_message(self, request):
         del request
+        if not self._messages:
+            return
         message = self._messages.pop(0)
         yield ApiMessageCompleteEvent(
             message=message,
