@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from openharness.webui.server.app import create_app
+
+
+@pytest.fixture(autouse=True)
+def _isolate_config_dir(tmp_path, monkeypatch):
+    """Redirect ~/.openharness/settings.json into a tmp dir for these tests."""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
 
 
 def _client(tmp_path, *, token: str = "test-token") -> TestClient:
@@ -32,3 +41,117 @@ def test_modes_returns_settings_fallback(tmp_path) -> None:
     assert isinstance(body["passes"], int)
     assert isinstance(body["theme"], str)
     assert isinstance(body["output_style"], str)
+
+
+def test_patch_modes_requires_auth(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    assert client.patch("/api/modes", json={"effort": "high"}).status_code == 401
+
+
+def test_patch_modes_empty_body_rejected(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/modes",
+        json={},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 400
+    assert "At least one field" in response.json()["detail"]
+
+
+def test_patch_modes_invalid_permission_mode_rejected(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/modes",
+        json={"permission_mode": "invalid"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 422
+
+
+def test_patch_modes_invalid_effort_rejected(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/modes",
+        json={"effort": "ultrahigh"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 422
+
+
+def test_patch_modes_passes_too_low_rejected(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/modes",
+        json={"passes": 0},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 422
+
+
+def test_patch_modes_passes_too_high_rejected(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/modes",
+        json={"passes": 6},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 422
+
+
+def test_patch_modes_returns_updated_state(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/modes",
+        json={"effort": "high", "passes": 3, "fast_mode": True},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["effort"] == "high"
+    assert body["passes"] == 3
+    assert body["fast_mode"] is True
+
+
+def test_patch_modes_all_valid_fields(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/modes",
+        json={
+            "permission_mode": "plan",
+            "effort": "low",
+            "passes": 2,
+            "fast_mode": False,
+            "output_style": "minimal",
+            "theme": "dark",
+        },
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["permission_mode"] == "plan"
+    assert body["effort"] == "low"
+    assert body["passes"] == 2
+    assert body["fast_mode"] is False
+    assert body["output_style"] == "minimal"
+    assert body["theme"] == "dark"
+
+
+def test_patch_modes_permission_mode_values(tmp_path) -> None:
+    """Every accepted permission_mode value is accepted without 422."""
+    client = _client(tmp_path)
+    for mode in ("default", "plan", "full_auto"):
+        response = client.patch(
+            "/api/modes",
+            json={"permission_mode": mode},
+            headers={"Authorization": "Bearer test-token"},
+        )
+        assert response.status_code == 200, f"mode={mode} should be accepted"
