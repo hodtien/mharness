@@ -74,6 +74,23 @@ class SessionManager:
         """Return all session entries (used by /modes to find active session state)."""
         return list(self._sessions.values())
 
+    def update_provider_defaults(
+        self,
+        *,
+        model: str | None,
+        api_format: str | None,
+        base_url: str | None,
+    ) -> None:
+        """Update default provider fields on the shared :class:`WebUIConfig`.
+
+        New sessions created via :meth:`create_session` will pick up these
+        values when building their :class:`BackendHostConfig`. Existing live
+        sessions keep their current config until the next reconnect.
+        """
+        self._config.model = model
+        self._config.api_format = api_format
+        self._config.base_url = base_url
+
     async def remove(self, session_id: str) -> None:
         entry = self._sessions.pop(session_id, None)
         if entry and entry.task and not entry.task.done():

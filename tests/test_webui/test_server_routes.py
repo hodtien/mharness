@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from openharness.services.session_storage import get_project_session_dir, save_session_snapshot
 from openharness.api.usage import UsageSnapshot
+from openharness.config.settings import load_settings, save_settings
 from openharness.engine.messages import ConversationMessage, ToolResultBlock, ToolUseBlock
 from openharness.webui.server.app import create_app
 
@@ -387,3 +388,66 @@ def test_providers_trailing_slash_behavior(tmp_path, monkeypatch) -> None:
     assert r1.status_code == 200
     assert r2.status_code == 200
     assert r1.json() == r2.json()
+
+
+def test_activate_provider_switches_profile_and_returns_new_model(tmp_path, monkeypatch) -> None:
+    """POST /api/providers/{name}/activate persists the profile and returns the new model."""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+
+    # Pre-seed a settings file with a known active_profile so we're starting
+    # from a known state (not the global ~/.openharness/settings.json).
+    init_settings = load_settings()
+    save_settings(init_settings)
+
+    client = _client(tmp_path)
+
+    # Attempt to activate an unknown profile → 404
+    unknown_resp = client.post(
+        "/api/providers/nonexistent-profile/activate",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert unknown_resp.status_code == 404
+    assert "Unknown provider profile" in unknown_resp.json()["detail"]
+
+    # Activate a built-in profile (openai-compatible).
+    resp = client.post(
+        "/api/providers/openai-compatible/activate",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert isinstance(body["model"], str) and body["model"]
+
+    # settings.json on disk must reflect the new active_profile.
+    persisted = load_settings()
+    assert persisted.active_profile == "openai-compatible"
+    # The flat `model` field is materialized from the profile by save_settings.
+    assert persisted.model == body["model"]
+
+    # New sessions pick up the updated defaults.
+    new_session = client.post(
+        "/api/sessions", headers={"Authorization": "Bearer test-token"}
+    )
+    assert new_session.status_code == 200
+    session_id = new_session.json()["session_id"]
+    entry = client.app.state.webui_session_manager.get(session_id)
+    assert entry is not None
+    # The fresh session gets the new model from the reloaded config.
+    assert entry.host._config.model == body["model"]
+
+    # Revert to the default profile.
+    revert_resp = client.post(
+        "/api/providers/claude-api/activate",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert revert_resp.status_code == 200
+    assert revert_resp.json()["ok"] is True
+
+    # Auth is required.
+    assert client.post("/api/providers/openai-compatible/activate").status_code == 401
