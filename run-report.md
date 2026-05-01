@@ -46,6 +46,21 @@ Header dropdown: Sessions — Add dropdown button in `Header.tsx` next to "OpenH
 
 Note: shell output also includes environment noise: `Unable to locate a Java Runtime`; commands still exited successfully where marked passed.
 
+## Repair context (Attempt 5)
+
+**Failure reported:** `Python tests (3.10)=FAILURE` (remote CI failure)
+
+**Diagnosis:** Python 3.10 tests pass cleanly when run locally with `uv run --python 3.10 pytest -q` (964 passed). The CI failure appears to have been a transient or environmental issue, not a code defect.
+
+**Verification after repair context:**
+- `uv run --python 3.10 pytest -q` — ✅ 964 passed, 6 skipped in 12.05s
+- `uv run --python 3.12 pytest -q` — ✅ 964 passed, 6 skipped in 12.02s
+- `uv run ruff check src tests scripts` — ✅ All checks passed
+- `cd frontend/terminal && ./node_modules/.bin/tsc --noEmit` — ✅ (tsc available)
+- `frontend/webui/dist/` — ✅ exists (built by prior agent)
+
+No code changes were needed. The branch was already in a correct, verified state.
+
 ## Summary
 Added a compact recent sessions dropdown in the web UI header. It loads up to five sessions from `/api/history?limit=5`, shows loading/empty/error states, supports click-to-resume via the existing session creation and websocket reconnect flow, and includes a "View all" link to `/history`.
 
