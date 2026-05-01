@@ -56,8 +56,11 @@ interface SessionStore {
   todoMarkdown: string | null;
   planMode: string | null;
   swarm: SwarmInfo | null;
+  /** The session ID that was resumed (shown in Transcript banner). */
+  resumedFrom: string | null;
   // setters
   setStatus: (s: "connecting" | "open" | "closed", detail?: string) => void;
+  setResumedFrom: (id: string | null) => void;
   ingest: (evt: BackendEvent) => void;
   appendUser: (text: string) => void;
   setError: (msg: string | null) => void;
@@ -80,6 +83,7 @@ export const useSession = create<SessionStore>((set, get) => ({
   todoMarkdown: null,
   planMode: null,
   swarm: null,
+  resumedFrom: null,
 
   setStatus: (s, detail) =>
     set((state) => ({
@@ -100,6 +104,8 @@ export const useSession = create<SessionStore>((set, get) => ({
 
   setError: (msg) => set({ errorBanner: msg }),
 
+  setResumedFrom: (id) => set({ resumedFrom: id }),
+
   reset: () =>
     set({
       transcript: [],
@@ -113,16 +119,27 @@ export const useSession = create<SessionStore>((set, get) => ({
       todoMarkdown: null,
       planMode: null,
       swarm: null,
+      resumedFrom: null,
     }),
 
   ingest: (evt) => {
     const state = get();
     switch (evt.type) {
       case "ready": {
+        const resumedBanner = state.resumedFrom
+          ? [
+              {
+                id: newId(),
+                role: "system" as const,
+                text: `Resumed from session ${state.resumedFrom}`,
+              },
+            ]
+          : [];
         set({
           appState: evt.state || null,
           tasks: evt.tasks || [],
           transcript: [
+            ...resumedBanner,
             {
               id: newId(),
               role: "system",
