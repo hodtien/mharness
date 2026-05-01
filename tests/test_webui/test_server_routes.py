@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from openharness.services.session_storage import save_session_snapshot
 from openharness.api.usage import UsageSnapshot
-from openharness.engine.messages import ConversationMessage
+from openharness.engine.messages import ConversationMessage, ToolResultBlock, ToolUseBlock
 from openharness.webui.server.app import create_app
 
 
@@ -114,3 +114,44 @@ def test_history_endpoint_requires_auth_and_lists_session_snapshots(tmp_path, mo
             }
         ]
     }
+
+
+def test_history_detail_returns_session_and_truncates_tool_results(tmp_path, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    long_result = "x" * 501
+    tool_use = ToolUseBlock(id="toolu_123", name="read_file", input={})
+    save_session_snapshot(
+        cwd=tmp_path,
+        model="sonnet",
+        system_prompt="system",
+        messages=[
+            ConversationMessage.from_user_text("hello history"),
+            ConversationMessage(role="assistant", content=[tool_use]),
+            ConversationMessage.from_user_content(
+                [ToolResultBlock(tool_use_id="toolu_123", content=long_result)]
+            ),
+        ],
+        usage=UsageSnapshot(),
+        session_id="abc123",
+    )
+    client = _client(tmp_path)
+
+    response = client.get(
+        "/api/history/abc123", headers={"Authorization": "Bearer test-token"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["session_id"] == "abc123"
+    result = body["messages"][2]["content"][0]
+    assert result["type"] == "tool_result"
+    assert result["content"] == f"{'x' * 500}… [truncated 1 chars]"
+    assert result["truncated"] is True
+    assert result["original_length"] == 501
+
+    missing = client.get(
+        "/api/history/missing", headers={"Authorization": "Bearer test-token"}
+    )
+    assert missing.status_code == 404
