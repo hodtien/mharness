@@ -332,3 +332,58 @@ def test_history_delete_removes_latest_only_session(tmp_path, monkeypatch) -> No
     )
     assert response.status_code == 204
     assert not latest_path.exists()
+
+
+def test_providers_endpoint_requires_auth_and_returns_list(tmp_path, monkeypatch) -> None:
+    """GET /api/providers returns the merged profile catalog with flags."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    client = _client(tmp_path)
+
+    # No auth → 401
+    assert client.get("/api/providers").status_code == 401
+
+    response = client.get(
+        "/api/providers", headers={"Authorization": "Bearer test-token"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "providers" in body
+    assert isinstance(body["providers"], list)
+
+    # Built-in profiles are always present
+    ids = {p["id"] for p in body["providers"]}
+    for builtin in ("claude-api", "openai-compatible", "moonshot"):
+        assert builtin in ids, f"Expected built-in profile {builtin} in {ids}"
+
+    # Every item has the expected shape
+    for item in body["providers"]:
+        assert "id" in item
+        assert "label" in item
+        assert "provider" in item
+        assert "api_format" in item
+        assert "default_model" in item
+        assert "base_url" in item
+        assert isinstance(item["has_credentials"], bool)
+        assert isinstance(item["is_active"], bool)
+
+    # Exactly one profile is active
+    active = [p for p in body["providers"] if p["is_active"]]
+    assert len(active) == 1
+
+
+def test_providers_trailing_slash_behavior(tmp_path, monkeypatch) -> None:
+    """GET /api/providers/ returns the same list as GET /api/providers."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    client = _client(tmp_path)
+
+    r1 = client.get("/api/providers", headers={"Authorization": "Bearer test-token"})
+    r2 = client.get("/api/providers/", headers={"Authorization": "Bearer test-token"})
+
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r1.json() == r2.json()
