@@ -820,3 +820,345 @@ def test_current_repo_full_name_falls_back_to_gh_when_origin_unavailable(tmp_pat
     monkeypatch.setattr(store, "_gh_json", lambda args, *, cwd=None: {"nameWithOwner": "fallback/repo"})
 
     assert store._current_repo_full_name() == "fallback/repo"
+
+
+def _remote_review_policy(*, enabled: bool = True) -> dict:
+    return {
+        "autopilot": {
+            "github": {
+                "remote_code_review": {
+                    "enabled": enabled,
+                    "block_on": ["critical"],
+                    "max_turns": 6,
+                    "max_diff_chars": 80000,
+                }
+            }
+        }
+    }
+
+
+def _green_pr_snapshot(pr_number: int) -> tuple[str, str, dict, list]:
+    return (
+        "success",
+        "All reported remote checks passed.",
+        {"url": f"https://example/pr/{pr_number}", "labels": ["autopilot:merge"], "isDraft": False},
+        [],
+    )
+
+
+def test_remote_code_review_step_skips_when_disabled(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Review opt out", body="disabled")
+
+    calls = {"gh": 0, "agent": 0}
+    monkeypatch.setattr(
+        store,
+        "_run_gh",
+        lambda *args, **kwargs: calls.__setitem__("gh", calls["gh"] + 1),
+    )
+
+    async def fake_run_agent_prompt(*args, **kwargs):
+        calls["agent"] += 1
+        return "Severity: NONE"
+
+    monkeypatch.setattr(store, "_run_agent_prompt", fake_run_agent_prompt)
+
+    import asyncio
+
+    step = asyncio.run(
+        store._run_remote_code_review_step(
+            card,
+            12,
+            policies=_remote_review_policy(enabled=False),
+            model=None,
+        )
+    )
+
+    assert step.status == "skipped"
+    assert calls == {"gh": 0, "agent": 0}
+
+
+def test_remote_code_review_step_blocks_on_critical(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Review critical", body="review")
+
+    monkeypatch.setattr(
+        store,
+        "_run_gh",
+        lambda args, *, cwd=None, check=False: subprocess.CompletedProcess(
+            args,
+            0,
+            stdout="diff --git a/a b/a",
+            stderr="",
+        ),
+    )
+
+    async def fake_run_agent_prompt(prompt, *, model, max_turns, permission_mode, cwd=None):
+        assert "Review GitHub PR #12" in prompt
+        return "Severity: CRITICAL\nFindings:\n  - a.py:1 bug broken\nSummary: blocked"
+
+    monkeypatch.setattr(store, "_run_agent_prompt", fake_run_agent_prompt)
+
+    import asyncio
+
+    step = asyncio.run(
+        store._run_remote_code_review_step(
+            card,
+            12,
+            policies=_remote_review_policy(),
+            model="test-model",
+        )
+    )
+
+    assert step.status == "failed"
+    assert step.returncode == 1
+    assert step.stderr == "severity=critical"
+
+
+def test_remote_code_review_blocks_merge_and_sets_human_gate(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #88: Existing autopilot PR",
+        body="open",
+        source_ref="pr:88",
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        return _green_pr_snapshot(pr_number)
+
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=1,
+            status="failed",
+            stderr="severity=critical",
+        )
+
+    merged = {"called": False}
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci",
+        fake_wait_for_pr_ci,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: merged.__setitem__("called", True),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    updated = store.get_card(card.id)
+
+    assert result.status == "completed"
+    assert merged["called"] is False
+    assert updated is not None
+    assert updated.metadata["human_gate_pending"] is True
+    assert updated.metadata["remote_review_status"] == "failed"
+
+
+def test_remote_code_review_error_routes_to_human_gate(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #89: Existing autopilot PR",
+        body="open",
+        source_ref="pr:89",
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        return _green_pr_snapshot(pr_number)
+
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=2,
+            status="error",
+            stderr="gh pr diff failed",
+        )
+
+    merged = {"called": False}
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci",
+        fake_wait_for_pr_ci,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: merged.__setitem__("called", True),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    updated = store.get_card(card.id)
+
+    assert result.status == "completed"
+    assert merged["called"] is False
+    assert updated is not None
+    assert updated.metadata["human_gate_pending"] is True
+    assert updated.metadata["remote_review_status"] == "error"
+
+
+def test_pull_base_branch_called_after_merge(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #90: Existing autopilot PR",
+        body="open",
+        source_ref="pr:90",
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        return _green_pr_snapshot(pr_number)
+
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=0,
+            status="success",
+            stdout="Severity: NONE",
+        )
+
+    pulled = {"base_branch": None}
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci",
+        fake_wait_for_pr_ci,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pull_base_branch",
+        lambda self, *, base_branch: pulled.__setitem__("base_branch", base_branch),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+
+    assert result.status == "merged"
+    assert pulled["base_branch"] == "main"
+
+
+def test_pull_base_branch_failure_is_non_fatal(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #91: Existing autopilot PR",
+        body="open",
+        source_ref="pr:91",
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        return _green_pr_snapshot(pr_number)
+
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=0,
+            status="success",
+            stdout="Severity: NONE",
+        )
+
+    def fail_pull(self, *, base_branch: str):
+        raise RuntimeError("not fast-forward")
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci",
+        fake_wait_for_pr_ci,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: None,
+    )
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._pull_base_branch", fail_pull)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    journal = (repo / ".openharness" / "autopilot" / "journal.jsonl").read_text(encoding="utf-8")
+
+    assert result.status == "merged"
+    assert "merge_warning" in journal
+    assert "post-merge pull failed" in journal
+
+
+def test_pull_base_branch_fetch_and_ff_only(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    calls = []
+
+    def fake_run_git(args, *, cwd=None, check=False):
+        calls.append((args, cwd, check))
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(store, "_run_git", fake_run_git)
+
+    store._pull_base_branch(base_branch="main")
+
+    assert calls == [
+        (["fetch", "origin", "main"], repo, True),
+        (["pull", "--ff-only", "origin", "main"], repo, True),
+    ]

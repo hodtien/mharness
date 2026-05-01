@@ -84,6 +84,12 @@ _DEFAULT_AUTOPILOT_POLICY = {
             "mode": "label_gated",
             "required_label": "autopilot:merge",
         },
+        "remote_code_review": {
+            "enabled": True,
+            "block_on": ["critical"],
+            "max_turns": 6,
+            "max_diff_chars": 80000,
+        },
     },
     "repair": {
         "max_rounds": 2,
@@ -1120,6 +1126,58 @@ class RepoAutopilotStore:
                 )
 
             if self._automerge_eligible(pr_snapshot, policies):
+                remote_review_step = await self._run_remote_code_review_step(
+                    card,
+                    linked_pr_number,
+                    policies=policies,
+                    model=effective_model,
+                    base_branch=base_branch,
+                )
+                verification_steps.append(remote_review_step)
+                verification_text = self._render_verification_report(card, verification_steps)
+                for path in (attempt_verification_report, current_verification_report):
+                    atomic_write_text(path, verification_text)
+                if remote_review_step.status in {"failed", "error"}:
+                    summary = (
+                        remote_review_step.stderr
+                        or remote_review_step.stdout
+                        or "remote code review blocked merge"
+                    )
+                    self.update_status(
+                        card.id,
+                        status="completed",
+                        note=f"PR #{linked_pr_number} requires human gate after remote review",
+                        metadata_updates={
+                            "human_gate_pending": True,
+                            "linked_pr_number": linked_pr_number,
+                            "linked_pr_url": pr_url,
+                            "remote_review_status": remote_review_step.status,
+                        },
+                    )
+                    self.append_journal(
+                        kind="human_gate_pending",
+                        summary=f"{card.title}: remote review requires human gate for PR #{linked_pr_number}",
+                        task_id=card.id,
+                        metadata={"pr_number": linked_pr_number, "remote_review_status": remote_review_step.status},
+                    )
+                    self._comment_on_pr(linked_pr_number, self._comment_terminal_failure(summary))
+                    if issue_number is not None:
+                        self._comment_on_issue(issue_number, self._comment_terminal_failure(summary))
+                    if use_worktree:
+                        await worktree_manager.remove_worktree(self._worktree_slug(card))
+                    return RepoRunResult(
+                        card_id=card.id,
+                        status="completed",
+                        assistant_summary=assistant_summary,
+                        run_report_path=str(current_run_report),
+                        verification_report_path=str(current_verification_report),
+                        verification_steps=verification_steps,
+                        attempt_count=attempt_count,
+                        worktree_path=str(working_cwd),
+                        pr_number=linked_pr_number,
+                        pr_url=pr_url,
+                    )
+
                 self._merge_pull_request(linked_pr_number)
                 self.update_status(
                     card.id,
@@ -1138,6 +1196,15 @@ class RepoAutopilotStore:
                     self._comment_on_issue(issue_number, self._comment_merged(linked_pr_number))
                 if use_worktree:
                     await worktree_manager.remove_worktree(self._worktree_slug(card))
+                try:
+                    self._pull_base_branch(base_branch=base_branch)
+                except Exception as exc:
+                    self.append_journal(
+                        kind="merge_warning",
+                        summary=f"post-merge pull failed: {exc}",
+                        task_id=card.id,
+                        metadata={"pr_number": linked_pr_number},
+                    )
                 return RepoRunResult(
                     card_id=card.id,
                     status="merged",
@@ -1330,6 +1397,11 @@ class RepoAutopilotStore:
 
     def _git_push_branch(self, cwd: Path, branch: str) -> None:
         self._run_git(["push", "-u", "origin", branch], cwd=cwd, check=True)
+
+    def _pull_base_branch(self, *, base_branch: str, cwd: Path | None = None) -> None:
+        target = cwd or self._cwd
+        self._run_git(["fetch", "origin", base_branch], cwd=target, check=True)
+        self._run_git(["pull", "--ff-only", "origin", base_branch], cwd=target, check=True)
 
     def _git_branch_has_progress(self, cwd: Path, *, base_branch: str) -> bool:
         completed = self._run_git(
@@ -1785,6 +1857,45 @@ class RepoAutopilotStore:
                 pr_url=pr_url,
             )
         if self._automerge_eligible(pr_snapshot, policies):
+            remote_review_step = await self._run_remote_code_review_step(
+                card,
+                pr_number,
+                policies=policies,
+                model=None,
+                base_branch=self._base_branch(policies),
+            )
+            atomic_write_text(
+                current_verification_report,
+                self._render_verification_report(card, [remote_review_step]),
+            )
+            if remote_review_step.status in {"failed", "error"}:
+                summary = (
+                    remote_review_step.stderr
+                    or remote_review_step.stdout
+                    or "remote code review blocked merge"
+                )
+                self.update_status(
+                    card.id,
+                    status="completed",
+                    note=f"existing PR #{pr_number} requires human gate after remote review",
+                    metadata_updates={
+                        "linked_pr_number": pr_number,
+                        "linked_pr_url": pr_url,
+                        "human_gate_pending": True,
+                        "remote_review_status": remote_review_step.status,
+                    },
+                )
+                self._comment_on_pr(pr_number, self._comment_terminal_failure(summary))
+                return RepoRunResult(
+                    card_id=card.id,
+                    status="completed",
+                    run_report_path=str(current_run_report),
+                    verification_report_path=str(current_verification_report),
+                    verification_steps=[remote_review_step],
+                    pr_number=pr_number,
+                    pr_url=pr_url,
+                )
+
             self._merge_pull_request(pr_number)
             self.update_status(
                 card.id,
@@ -1793,11 +1904,21 @@ class RepoAutopilotStore:
                 metadata_updates={"linked_pr_number": pr_number, "linked_pr_url": pr_url},
             )
             self._comment_on_pr(pr_number, self._comment_merged(pr_number))
+            try:
+                self._pull_base_branch(base_branch=self._base_branch(policies))
+            except Exception as exc:
+                self.append_journal(
+                    kind="merge_warning",
+                    summary=f"post-merge pull failed: {exc}",
+                    task_id=card.id,
+                    metadata={"pr_number": pr_number},
+                )
             return RepoRunResult(
                 card_id=card.id,
                 status="merged",
                 run_report_path=str(current_run_report),
                 verification_report_path=str(current_verification_report),
+                verification_steps=[remote_review_step],
                 pr_number=pr_number,
                 pr_url=pr_url,
             )
@@ -2200,6 +2321,94 @@ class RepoAutopilotStore:
         finally:
             await close_runtime(bundle)
         return "".join(collected).strip()
+
+    async def _run_remote_code_review_step(
+        self,
+        card: RepoTaskCard,
+        pr_number: int,
+        *,
+        policies: dict[str, Any],
+        model: str | None,
+        base_branch: str = "main",
+    ) -> RepoVerificationStep:
+        review_cfg = (policies.get("autopilot", {}).get("github", {}) or {}).get("remote_code_review", {}) or {}
+        if not review_cfg.get("enabled", True):
+            return RepoVerificationStep(
+                command=f"agent:code-reviewer (PR #{pr_number} diff vs {base_branch})",
+                returncode=0,
+                status="skipped",
+                stdout="Remote PR code review disabled by policy.",
+                stderr="",
+            )
+
+        max_chars = int(review_cfg.get("max_diff_chars", 80000))
+        block_on = {str(s).lower() for s in review_cfg.get("block_on", ["critical"])}
+        max_turns = int(review_cfg.get("max_turns", 6))
+        command = f"agent:code-reviewer (PR #{pr_number} diff vs {base_branch})"
+
+        diff_result = self._run_gh(["pr", "diff", str(pr_number)], cwd=self._cwd)
+        if diff_result.returncode != 0:
+            return RepoVerificationStep(
+                command=command,
+                returncode=diff_result.returncode,
+                status="error",
+                stdout=diff_result.stdout or "",
+                stderr=(diff_result.stderr or "gh pr diff failed").strip(),
+            )
+
+        diff_text = diff_result.stdout or ""
+        if not diff_text.strip():
+            return RepoVerificationStep(
+                command=command,
+                returncode=0,
+                status="skipped",
+                stdout="No PR diff detected.",
+                stderr="",
+            )
+
+        truncated = False
+        if len(diff_text) > max_chars:
+            diff_text = diff_text[:max_chars]
+            truncated = True
+
+        prompt = (
+            f"Review GitHub PR #{pr_number} for task `{card.id}` ({card.title}) against `{base_branch}`.\n\n"
+            "Output format (verbatim):\n"
+            "  Severity: <CRITICAL|HIGH|MEDIUM|LOW|NONE>\n"
+            "  Findings:\n"
+            "    - <file:line> <category> <description>\n"
+            "  Summary: <one paragraph>\n\n"
+            "Apply the rules in `~/.claude/rules/common/code-review.md`. "
+            "Block on CRITICAL only.\n\n"
+            f"PR diff{' (truncated)' if truncated else ''}:\n```\n{diff_text}\n```\n"
+        )
+
+        try:
+            output = await self._run_agent_prompt(
+                prompt,
+                model=model,
+                max_turns=max_turns,
+                permission_mode="full_auto",
+                cwd=self._cwd,
+            )
+        except Exception as exc:
+            return RepoVerificationStep(
+                command=command,
+                returncode=1,
+                status="error",
+                stdout="",
+                stderr=f"remote code-reviewer agent failed: {exc}",
+            )
+
+        severity = _parse_review_severity(output)
+        is_blocking = severity in block_on
+        return RepoVerificationStep(
+            command=command,
+            returncode=1 if is_blocking else 0,
+            status="failed" if is_blocking else "success",
+            stdout=output,
+            stderr=f"severity={severity}" if is_blocking else "",
+        )
 
     async def _run_code_review_step(
         self,
