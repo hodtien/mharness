@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "../api/client";
 
 /**
  * Session metadata returned by `GET /api/history`.
@@ -46,15 +47,6 @@ export function formatRelativeTime(createdAt: number): string {
   return `${diffDays}d ago`;
 }
 
-async function readError(res: Response): Promise<string> {
-  try {
-    const text = await res.text();
-    return text || `${res.status} ${res.statusText}`;
-  } catch {
-    return `${res.status} ${res.statusText}`;
-  }
-}
-
 export default function HistoryPanel({
   endpoint = HISTORY_ENDPOINT,
   onResume,
@@ -70,15 +62,11 @@ export default function HistoryPanel({
       setState("loading");
       setError(null);
       try {
-        const res = await fetch(endpoint, { signal });
-        if (!res.ok) {
-          throw new Error(await readError(res));
-        }
-        const data = await res.json();
+        const data = await apiFetch<HistorySession[] | { sessions: HistorySession[] }>(endpoint, { signal });
         const list: HistorySession[] = Array.isArray(data)
           ? data
-          : Array.isArray(data?.sessions)
-            ? data.sessions
+          : Array.isArray((data as { sessions: HistorySession[] })?.sessions)
+            ? (data as { sessions: HistorySession[] }).sessions
             : [];
         setSessions(list);
         setState("ready");
@@ -115,13 +103,9 @@ export default function HistoryPanel({
 
       setBusyId(session.session_id);
       try {
-        const res = await fetch(
-          `${endpoint}/${encodeURIComponent(session.session_id)}`,
-          { method: "DELETE" },
-        );
-        if (!res.ok) {
-          throw new Error(await readError(res));
-        }
+        await apiFetch(`${endpoint}/${encodeURIComponent(session.session_id)}`, {
+          method: "DELETE",
+        });
         setSessions((prev) =>
           prev.filter((s) => s.session_id !== session.session_id),
         );
@@ -156,7 +140,8 @@ export default function HistoryPanel({
       </header>
 
       {state === "loading" && sessions.length === 0 ? (
-        <div role="status" aria-live="polite" className="flex flex-col gap-2">
+        <div role="status" aria-live="polite" aria-label="Loading history" className="flex flex-col gap-2">
+          <span className="sr-only">Loading history…</span>
           {Array.from({ length: 3 }).map((_, index) => (
             <div
               key={index}

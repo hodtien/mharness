@@ -27,7 +27,7 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(path, {
     ...init,
@@ -39,6 +39,13 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     throw new Error(`${res.status} ${res.statusText}: ${await res.text()}`);
+  }
+  if (res.status === 204) {
+    return undefined as T;
+  }
+  const contentLength = res.headers?.get?.("content-length");
+  if (contentLength === "0") {
+    return undefined as T;
   }
   return res.json() as Promise<T>;
 }

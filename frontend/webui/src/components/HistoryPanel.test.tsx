@@ -2,7 +2,23 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import HistoryPanel, { formatRelativeTime, type HistorySession } from "./HistoryPanel";
 
-function mockFetchWithSessions(sessions: HistorySession[]) {
+function setupLocalStorageMock() {
+  let store: Record<string, string> = {};
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
+  });
+}
+
+function mockApiFetchWithSessions(sessions: HistorySession[]) {
   const fetchMock = vi.fn().mockResolvedValue({
     ok: true,
     json: async () => ({ sessions }),
@@ -13,7 +29,8 @@ function mockFetchWithSessions(sessions: HistorySession[]) {
 
 describe("HistoryPanel", () => {
   it("renders 'No previous sessions' when empty", async () => {
-    mockFetchWithSessions([]);
+    setupLocalStorageMock();
+    mockApiFetchWithSessions([]);
 
     render(<HistoryPanel />);
 
@@ -21,7 +38,8 @@ describe("HistoryPanel", () => {
   });
 
   it("calls /api/history on mount", async () => {
-    const fetchMock = mockFetchWithSessions([]);
+    setupLocalStorageMock();
+    const fetchMock = mockApiFetchWithSessions([]);
 
     render(<HistoryPanel />);
 
@@ -30,7 +48,8 @@ describe("HistoryPanel", () => {
   });
 
   it("truncates summaries to 60 chars", async () => {
-    mockFetchWithSessions([
+    setupLocalStorageMock();
+    mockApiFetchWithSessions([
       {
         session_id: "session-1",
         summary: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890",
