@@ -773,3 +773,50 @@ def test_create_pr_raises_on_non_resolution_error(tmp_path: Path, monkeypatch) -
         assert exc.stderr == "authentication required"
     else:
         raise AssertionError("Expected CalledProcessError for non-resolution gh error")
+
+
+def test_current_repo_full_name_prefers_origin_remote(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    def fake_run_git(args, *, cwd=None, check=False):
+        assert args == ["remote", "get-url", "origin"]
+        return subprocess.CompletedProcess(
+            ["git", *args],
+            0,
+            "https://github.com/hodtien/mharness.git\n",
+            "",
+        )
+
+    monkeypatch.setattr(store, "_run_git", fake_run_git)
+    monkeypatch.setattr(store, "_gh_json", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("gh should not run")))
+
+    assert store._current_repo_full_name() == "hodtien/mharness"
+
+
+def test_current_repo_full_name_handles_ssh_origin_remote(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    def fake_run_git(args, *, cwd=None, check=False):
+        return subprocess.CompletedProcess(["git", *args], 0, "git@github.com:hodtien/mharness.git\n", "")
+
+    monkeypatch.setattr(store, "_run_git", fake_run_git)
+
+    assert store._current_repo_full_name() == "hodtien/mharness"
+
+
+def test_current_repo_full_name_falls_back_to_gh_when_origin_unavailable(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    def fake_run_git(args, *, cwd=None, check=False):
+        return subprocess.CompletedProcess(["git", *args], 1, "", "no origin")
+
+    monkeypatch.setattr(store, "_run_git", fake_run_git)
+    monkeypatch.setattr(store, "_gh_json", lambda args, *, cwd=None: {"nameWithOwner": "fallback/repo"})
+
+    assert store._current_repo_full_name() == "fallback/repo"

@@ -1369,10 +1369,21 @@ class RepoAutopilotStore:
         return _source_ref_number(card.source_ref, "pr")
 
     def _current_repo_full_name(self) -> str:
+        completed = self._run_git(["remote", "get-url", "origin"], cwd=self._cwd)
+        if completed.returncode == 0:
+            url = (completed.stdout or "").strip()
+            for pattern in (
+                r"^https://github\.com/([^/]+/[^/]+?)(?:\.git)?$",
+                r"^git@github\.com:([^/]+/[^/]+?)(?:\.git)?$",
+            ):
+                m = re.match(pattern, url)
+                if m:
+                    return m.group(1)
+
         info = self._gh_json(["repo", "view", "--json", "nameWithOwner"], cwd=self._cwd) or {}
         repo = _safe_text(info.get("nameWithOwner"))
         if not repo:
-            raise RuntimeError("Unable to resolve GitHub repository name with `gh repo view`.")
+            raise RuntimeError("Unable to resolve GitHub repository name from origin remote or `gh repo view`.")
         return repo
 
     def _find_open_pr_for_branch(self, head_branch: str) -> dict[str, Any] | None:
@@ -1517,7 +1528,7 @@ class RepoAutopilotStore:
         )
         try:
             repo_full = self._current_repo_full_name()
-        except Exception as exc:
+        except RuntimeError as exc:
             raise RuntimeError(
                 f"gh pr create failed and could not resolve repo name for fallback: {exc}",
             ) from exc
