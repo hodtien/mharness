@@ -182,6 +182,8 @@ export default function HistoryPanel({
           {sessions.map((session) => {
             const isBusy = busyId === session.session_id;
             const summary = session.summary || "(no summary)";
+            const displaySummary =
+              summary.length > 60 ? `${summary.slice(0, 60)}…` : summary;
             return (
               <li
                 key={session.session_id}
@@ -190,7 +192,7 @@ export default function HistoryPanel({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium" title={summary}>
-                      {summary.length > 60 ? summary.slice(0, 60) + "…" : summary}
+                      {displaySummary}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--text-dim)]">
                       <span

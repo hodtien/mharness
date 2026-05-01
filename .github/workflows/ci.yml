@@ -10,6 +10,8 @@ jobs:
   python-tests:
     name: Python tests (${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    env:
+      UV_PROJECT_ENVIRONMENT: .venv-${{ matrix.python-version }}
     strategy:
       fail-fast: false
       matrix:
@@ -29,6 +31,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Install dependencies
         run: uv sync --extra dev
@@ -52,6 +55,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Install dependencies
         run: uv sync --extra dev
