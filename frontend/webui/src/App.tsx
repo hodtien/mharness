@@ -9,6 +9,7 @@ import SelectModal from "./components/SelectModal";
 import Sidebar from "./components/Sidebar";
 import ChatPage from "./pages/ChatPage";
 import HistoryPage from "./pages/HistoryPage";
+import ModesSettingsPage from "./pages/ModesSettingsPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 
 function RootRedirect() {
@@ -125,6 +126,10 @@ export default function App() {
           <Route
             path="/tasks"
             element={<PlaceholderPage title="Tasks" description="Background task dashboard." />}
+          />
+          <Route
+            path="/settings/modes"
+            element={<ModesSettingsPage />}
           />
           <Route
             path="/settings/*"

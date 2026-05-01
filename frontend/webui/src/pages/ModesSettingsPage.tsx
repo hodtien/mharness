@@ -1,0 +1,226 @@
+import { useEffect, useRef, useState } from "react";
+import { api, type ModesPayload, type ModesPatch } from "../api/client";
+
+type PermissionMode = "default" | "plan" | "full_auto";
+type Effort = "low" | "medium" | "high";
+
+const permissionOptions: Array<{ value: PermissionMode; label: string; description: string }> = [
+  { value: "default", label: "Default", description: "Ask before risky actions; balanced control." },
+  { value: "plan", label: "Plan", description: "Review a plan before code or tool changes." },
+  { value: "full_auto", label: "Full Auto", description: "Run safe tasks with minimal interruption." },
+];
+
+const outputStyles = ["default", "concise", "detailed", "json"];
+const themes = ["default", "dark", "light", "system"];
+
+export default function ModesSettingsPage() {
+  const [modes, setModes] = useState<ModesPayload | null>(null);
+  const [passesInput, setPassesInput] = useState("1");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const passesTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getModes()
+      .then((data) => {
+        if (cancelled) return;
+        setModes(data);
+        setPassesInput(String(data.passes));
+      })
+      .catch((err) => {
+        if (!cancelled) setError(String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      if (passesTimer.current !== null) window.clearTimeout(passesTimer.current);
+    };
+  }, []);
+
+  const patchModes = async (patch: ModesPatch) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.patchModes(patch);
+      setModes(updated);
+      if (patch.passes !== undefined) setPassesInput(String(updated.passes));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateMode = (patch: ModesPatch) => {
+    setModes((current) => (current ? { ...current, ...patch } : current));
+    void patchModes(patch);
+  };
+
+  const updatePasses = (value: string) => {
+    setPassesInput(value);
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) return;
+    setModes((current) => (current ? { ...current, passes: parsed } : current));
+    if (passesTimer.current !== null) window.clearTimeout(passesTimer.current);
+    passesTimer.current = window.setTimeout(() => {
+      void patchModes({ passes: parsed });
+    }, 300);
+  };
+
+  if (loading) {
+    return <div className="p-6 text-sm text-[var(--text-dim)]">Loading modes…</div>;
+  }
+
+  if (!modes) {
+    return (
+      <div className="p-6 text-sm text-red-300">
+        Failed to load modes{error ? `: ${error}` : "."}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 overflow-y-auto p-6">
+      <div className="w-full max-w-3xl space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-[var(--text)]">Modes</h1>
+          <p className="mt-1 text-sm text-[var(--text-dim)]">
+            Configure runtime behavior for OpenHarness sessions.
+          </p>
+        </div>
+
+        {error && (
+          <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
+            {error}
+          </div>
+        )}
+
+        <Section title="Permission Mode" description="Choose how much confirmation OpenHarness should request.">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {permissionOptions.map((option) => (
+              <label
+                key={option.value}
+                className={`cursor-pointer rounded-lg border p-4 transition ${
+                  modes.permission_mode === option.value
+                    ? "border-cyan-400/60 bg-cyan-400/10"
+                    : "border-[var(--border)] bg-[var(--panel-2)] hover:border-cyan-400/30"
+                }`}
+              >
+                <input
+                  className="sr-only"
+                  type="radio"
+                  name="permission_mode"
+                  checked={modes.permission_mode === option.value}
+                  onChange={() => updateMode({ permission_mode: option.value })}
+                />
+                <div className="font-medium text-[var(--text)]">{option.label}</div>
+                <div className="mt-1 text-xs leading-relaxed text-[var(--text-dim)]">
+                  {option.description}
+                </div>
+              </label>
+            ))}
+          </div>
+        </Section>
+
+        <Section title="Effort">
+          <div className="inline-flex overflow-hidden rounded-lg border border-[var(--border)]">
+            {(["low", "medium", "high"] as Effort[]).map((effort) => (
+              <button
+                key={effort}
+                type="button"
+                onClick={() => updateMode({ effort })}
+                className={`px-4 py-2 text-sm capitalize transition ${
+                  modes.effort === effort
+                    ? "bg-cyan-400/20 text-cyan-100"
+                    : "bg-[var(--panel-2)] text-[var(--text-dim)] hover:text-[var(--text)]"
+                }`}
+              >
+                {effort}
+              </button>
+            ))}
+          </div>
+        </Section>
+
+        <Section title="Passes" description="Number of agent passes, from 1 to 5.">
+          <input
+            aria-label="Passes"
+            type="number"
+            min={1}
+            max={5}
+            value={passesInput}
+            onChange={(event) => updatePasses(event.target.value)}
+            className="w-28 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[var(--text)] outline-none focus:border-cyan-400/60"
+          />
+        </Section>
+
+        <Section title="Fast Mode">
+          <label className="inline-flex cursor-pointer items-center gap-3">
+            <input
+              type="checkbox"
+              className="h-5 w-5 accent-cyan-400"
+              checked={modes.fast_mode}
+              onChange={(event) => updateMode({ fast_mode: event.target.checked })}
+            />
+            <span className="text-sm text-[var(--text-dim)]">Use faster responses when available.</span>
+          </label>
+        </Section>
+
+        <div className="grid gap-6 sm:grid-cols-2">
+          <Section title="Output Style">
+            <Select
+              value={modes.output_style}
+              options={uniqueOption(outputStyles, modes.output_style)}
+              onChange={(output_style) => updateMode({ output_style })}
+            />
+          </Section>
+          <Section title="Theme">
+            <Select
+              value={modes.theme}
+              options={uniqueOption(themes, modes.theme)}
+              onChange={(theme) => updateMode({ theme })}
+            />
+          </Section>
+        </div>
+
+        <div className="text-xs text-[var(--text-dim)]">{saving ? "Saving…" : "Changes save automatically."}</div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-lg">
+      <div className="mb-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--text)]">{title}</h2>
+        {description && <p className="mt-1 text-xs text-[var(--text-dim)]">{description}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Select({ value, options, onChange }: { value: string; options: string[]; onChange: (value: string) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[var(--text)] outline-none focus:border-cyan-400/60"
+    >
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function uniqueOption(options: string[], current: string) {
+  return Array.from(new Set([current, ...options].filter(Boolean)));
+}
