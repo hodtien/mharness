@@ -207,6 +207,30 @@ def load_session_by_id(cwd: str | Path, session_id: str) -> dict[str, Any] | Non
     return None
 
 
+def delete_session_by_id(cwd: str | Path, session_id: str) -> bool:
+    """Delete a specific session by ID and clear latest when it points to it."""
+    if "/" in session_id or "\\" in session_id:
+        return False
+
+    session_dir = get_project_session_dir(cwd)
+    session_path = session_dir / f"session-{session_id}.json"
+    deleted = False
+    if session_path.exists():
+        session_path.unlink()
+        deleted = True
+
+    latest_path = session_dir / "latest.json"
+    try:
+        data = json.loads(latest_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        data = {}
+    if data.get("session_id") == session_id:
+        latest_path.unlink()
+        deleted = True
+
+    return deleted
+
+
 def export_session_markdown(
     *,
     cwd: str | Path,
