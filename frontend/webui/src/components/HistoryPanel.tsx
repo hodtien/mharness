@@ -28,13 +28,22 @@ type LoadState = "loading" | "ready" | "error";
 
 const HISTORY_ENDPOINT = "/api/history";
 
-function formatCreatedAt(createdAt: number): string {
+export function formatRelativeTime(createdAt: number): string {
   if (!createdAt || !Number.isFinite(createdAt)) return "—";
-  // Backend stores seconds; Date expects milliseconds.
+
   const ms = createdAt < 1e12 ? createdAt * 1000 : createdAt;
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString();
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+
+  if (diffSeconds < 60) return "just now";
+
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
 }
 
 async function readError(res: Response): Promise<string> {
@@ -147,12 +156,13 @@ export default function HistoryPanel({
       </header>
 
       {state === "loading" && sessions.length === 0 ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="flex flex-1 items-center justify-center text-sm text-[var(--text-dim)]"
-        >
-          Loading history…
+        <div role="status" aria-live="polite" className="flex flex-col gap-2">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div
+              key={index}
+              className="animate-pulse h-16 rounded-lg border border-[var(--border)] bg-[var(--panel-2)]"
+            />
+          ))}
         </div>
       ) : null}
 
@@ -175,7 +185,7 @@ export default function HistoryPanel({
 
       {state === "ready" && sessions.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-1 text-sm text-[var(--text-dim)]">
-          <div className="text-base">No saved sessions yet</div>
+          <div className="text-base">No previous sessions</div>
           <div className="text-xs">
             Sessions you start will appear here once they have messages.
           </div>
@@ -195,17 +205,20 @@ export default function HistoryPanel({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium" title={summary}>
-                      {summary}
+                      {summary.length > 60 ? summary.slice(0, 60) + "…" : summary}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--text-dim)]">
-                      <span title="Model">
-                        {session.model || "model: —"}
+                      <span
+                        title="Model"
+                        className="rounded bg-[var(--accent-strong)]/20 px-1.5 py-0.5 text-[10px] font-medium text-[var(--text)]"
+                      >
+                        {session.model || "—"}
                       </span>
                       <span title="Message count">
                         {session.message_count} msg
                       </span>
                       <span title="Created at">
-                        {formatCreatedAt(session.created_at)}
+                        {formatRelativeTime(session.created_at)}
                       </span>
                     </div>
                   </div>

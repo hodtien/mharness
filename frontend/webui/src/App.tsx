@@ -8,6 +8,7 @@ import QuestionModal from "./components/QuestionModal";
 import SelectModal from "./components/SelectModal";
 import Sidebar from "./components/Sidebar";
 import ChatPage from "./pages/ChatPage";
+import HistoryPage from "./pages/HistoryPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 
 function RootRedirect() {
@@ -90,10 +91,7 @@ export default function App() {
         <Route element={<AppLayout onInterrupt={sendInterrupt} />}>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/chat" element={<ChatPage onSend={sendLine} />} />
-          <Route
-            path="/history"
-            element={<PlaceholderPage title="History" description="Chat history will appear here." />}
-          />
+          <Route path="/history" element={<HistoryPage />} />
           <Route
             path="/pipeline"
             element={<PlaceholderPage title="Pipeline" description="Autopilot pipeline dashboard." />}
