@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from openharness.api.client import ApiMessageCompleteEvent
+from openharness.api.errors import RateLimitFailure
 from openharness.api.usage import UsageSnapshot
 from openharness.engine.messages import ConversationMessage, TextBlock
 from openharness.hooks import HookEvent, HookExecutionContext, HookExecutor
@@ -28,6 +29,16 @@ class FakeApiClient:
             usage=UsageSnapshot(input_tokens=1, output_tokens=1),
             stop_reason=None,
         )
+
+
+class FailingApiClient:
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    async def stream_message(self, request):
+        del request
+        raise self._exc
+        yield
 
 
 @pytest.mark.asyncio
@@ -119,3 +130,27 @@ async def test_command_hook_escapes_shell_metacharacters(tmp_path: Path):
     # With proper escaping, the literal $(echo INJECTED) must survive.
     # Without escaping, bash expands the subshell and the $() wrapper is gone.
     assert "$(echo INJECTED)" in output
+
+
+@pytest.mark.asyncio
+async def test_prompt_hook_api_error_returns_failed_result(tmp_path: Path):
+    registry = HookRegistry()
+    registry.register(
+        HookEvent.SUBAGENT_STOP,
+        PromptHookDefinition(prompt="Check subagent output", block_on_failure=False),
+    )
+    executor = HookExecutor(
+        registry,
+        HookExecutionContext(
+            cwd=tmp_path,
+            api_client=FailingApiClient(RateLimitFailure("Too many requests. Please retry after 5 seconds.")),
+            default_model="claude-test",
+        ),
+    )
+
+    result = await executor.execute(HookEvent.SUBAGENT_STOP, {"event": "subagent_stop"})
+
+    assert result.blocked is False
+    assert result.results[0].success is False
+    assert result.results[0].blocked is False
+    assert result.results[0].reason == "Too many requests. Please retry after 5 seconds."

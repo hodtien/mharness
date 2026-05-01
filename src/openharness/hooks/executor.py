@@ -190,11 +190,19 @@ class HookExecutor:
 
         text_chunks: list[str] = []
         final_event: ApiMessageCompleteEvent | None = None
-        async for event_item in self._context.api_client.stream_message(request):
-            if isinstance(event_item, ApiMessageCompleteEvent):
-                final_event = event_item
-            elif isinstance(event_item, ApiTextDeltaEvent):
-                text_chunks.append(event_item.text)
+        try:
+            async for event_item in self._context.api_client.stream_message(request):
+                if isinstance(event_item, ApiMessageCompleteEvent):
+                    final_event = event_item
+                elif isinstance(event_item, ApiTextDeltaEvent):
+                    text_chunks.append(event_item.text)
+        except Exception as exc:
+            return HookResult(
+                hook_type=hook.type,
+                success=False,
+                blocked=hook.block_on_failure,
+                reason=str(exc),
+            )
 
         text = "".join(text_chunks)
         if final_event is not None and final_event.message.text:

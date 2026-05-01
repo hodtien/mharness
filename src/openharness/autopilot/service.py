@@ -274,6 +274,7 @@ class RepoAutopilotStore:
         self._journal_path = get_project_repo_journal_path(self._cwd)
         self._context_path = get_project_active_repo_context_path(self._cwd)
         self._runs_dir = get_project_autopilot_runs_dir(self._cwd)
+        self._repo_full_name: str | None = None
         self._ensure_layout()
 
     @property
@@ -1441,6 +1442,8 @@ class RepoAutopilotStore:
         return _source_ref_number(card.source_ref, "pr")
 
     def _current_repo_full_name(self) -> str:
+        if self._repo_full_name:
+            return self._repo_full_name
         completed = self._run_git(["remote", "get-url", "origin"], cwd=self._cwd)
         if completed.returncode == 0:
             url = (completed.stdout or "").strip()
@@ -1450,19 +1453,23 @@ class RepoAutopilotStore:
             ):
                 m = re.match(pattern, url)
                 if m:
-                    return m.group(1)
+                    self._repo_full_name = m.group(1)
+                    return self._repo_full_name
 
         info = self._gh_json(["repo", "view", "--json", "nameWithOwner"], cwd=self._cwd) or {}
         repo = _safe_text(info.get("nameWithOwner"))
         if not repo:
             raise RuntimeError("Unable to resolve GitHub repository name from origin remote or `gh repo view`.")
-        return repo
+        self._repo_full_name = repo
+        return self._repo_full_name
 
     def _find_open_pr_for_branch(self, head_branch: str) -> dict[str, Any] | None:
         data = self._gh_json(
             [
                 "pr",
                 "list",
+                "--repo",
+                self._current_repo_full_name(),
                 "--state",
                 "open",
                 "--head",
@@ -1481,7 +1488,17 @@ class RepoAutopilotStore:
         if not normalized:
             return
         try:
-            self._run_gh(["pr", "edit", str(pr_number), *sum([["--add-label", label] for label in normalized], [])], cwd=self._cwd)
+            self._run_gh(
+                [
+                    "pr",
+                    "edit",
+                    str(pr_number),
+                    "--repo",
+                    self._current_repo_full_name(),
+                    *sum([["--add-label", label] for label in normalized], []),
+                ],
+                cwd=self._cwd,
+            )
         except Exception:
             self.append_journal(
                 kind="github_warning",
@@ -1644,7 +1661,11 @@ class RepoAutopilotStore:
 
     def _comment_on_pr(self, pr_number: int, comment: str) -> None:
         try:
-            self._run_gh(["pr", "comment", str(pr_number), "--body", comment], cwd=self._cwd, check=True)
+            self._run_gh(
+                ["pr", "comment", str(pr_number), "--repo", self._current_repo_full_name(), "--body", comment],
+                cwd=self._cwd,
+                check=True,
+            )
         except Exception as exc:
             self.append_journal(
                 kind="github_warning",
@@ -1700,6 +1721,8 @@ class RepoAutopilotStore:
                 "pr",
                 "view",
                 str(pr_number),
+                "--repo",
+                self._current_repo_full_name(),
                 "--json",
                 "number,url,isDraft,labels,headRefName,baseRefName,mergeStateStatus,reviewDecision,statusCheckRollup",
             ],
@@ -1787,7 +1810,7 @@ class RepoAutopilotStore:
 
     def _merge_pull_request(self, pr_number: int) -> None:
         self._run_gh(
-            ["pr", "merge", str(pr_number), "--squash"],
+            ["pr", "merge", str(pr_number), "--repo", self._current_repo_full_name(), "--squash"],
             cwd=self._cwd,
             check=True,
         )
@@ -2352,7 +2375,10 @@ class RepoAutopilotStore:
         max_turns = int(review_cfg.get("max_turns", 6))
         command = f"agent:code-reviewer (PR #{pr_number} diff vs {base_branch})"
 
-        diff_result = self._run_gh(["pr", "diff", str(pr_number)], cwd=self._cwd)
+        diff_result = self._run_gh(
+            ["pr", "diff", str(pr_number), "--repo", self._current_repo_full_name()],
+            cwd=self._cwd,
+        )
         if diff_result.returncode != 0:
             return RepoVerificationStep(
                 command=command,

@@ -665,6 +665,7 @@ def test_merge_pull_request_does_not_request_branch_deletion(tmp_path: Path, mon
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
+    store._repo_full_name = "hodtien/mharness"
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(
@@ -675,8 +676,121 @@ def test_merge_pull_request_does_not_request_branch_deletion(tmp_path: Path, mon
 
     store._merge_pull_request(41)
 
-    assert captured["args"] == ["pr", "merge", "41", "--squash"]
+    assert captured["args"] == ["pr", "merge", "41", "--repo", "hodtien/mharness", "--squash"]
     assert captured["check"] is True
+
+
+def test_find_open_pr_for_branch_uses_repo_qualified_head_lookup(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    store._repo_full_name = "hodtien/mharness"
+    captured: dict[str, object] = {}
+
+    def fake_gh_json(args, *, cwd=None):
+        captured.update({"args": args, "cwd": cwd})
+        return [{"number": 12, "url": "https://example/pr/12"}]
+
+    monkeypatch.setattr(store, "_gh_json", fake_gh_json)
+
+    pr = store._find_open_pr_for_branch("autopilot/ap-test")
+
+    assert pr == {"number": 12, "url": "https://example/pr/12"}
+    assert captured["cwd"] == repo
+    assert captured["args"] == [
+        "pr",
+        "list",
+        "--repo",
+        "hodtien/mharness",
+        "--state",
+        "open",
+        "--head",
+        "autopilot/ap-test",
+        "--json",
+        "number,url,isDraft,labels,headRefName,baseRefName,mergeStateStatus,reviewDecision",
+    ]
+
+
+def test_comment_on_pr_uses_repo_qualified_command(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    store._repo_full_name = "hodtien/mharness"
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        store,
+        "_run_gh",
+        lambda args, *, cwd=None, check=False: captured.update({"args": args, "cwd": cwd, "check": check}),
+    )
+
+    store._comment_on_pr(12, "hello")
+
+    assert captured == {
+        "args": ["pr", "comment", "12", "--repo", "hodtien/mharness", "--body", "hello"],
+        "cwd": repo,
+        "check": True,
+    }
+
+
+def test_pr_status_snapshot_uses_repo_qualified_view(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    store._repo_full_name = "hodtien/mharness"
+    captured: dict[str, object] = {}
+
+    def fake_gh_json(args, *, cwd=None):
+        captured.update({"args": args, "cwd": cwd})
+        return {"number": 12, "labels": [{"name": "autopilot"}]}
+
+    monkeypatch.setattr(store, "_gh_json", fake_gh_json)
+
+    snapshot = store._pr_status_snapshot(12)
+
+    assert snapshot["labels"] == ["autopilot"]
+    assert captured["cwd"] == repo
+    assert captured["args"] == [
+        "pr",
+        "view",
+        "12",
+        "--repo",
+        "hodtien/mharness",
+        "--json",
+        "number,url,isDraft,labels,headRefName,baseRefName,mergeStateStatus,reviewDecision,statusCheckRollup",
+    ]
+
+
+def test_best_effort_add_labels_uses_repo_qualified_edit(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    store._repo_full_name = "hodtien/mharness"
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        store,
+        "_run_gh",
+        lambda args, *, cwd=None, check=False: captured.update({"args": args, "cwd": cwd, "check": check}),
+    )
+
+    store._best_effort_add_labels(12, ["autopilot", "ready"])
+
+    assert captured == {
+        "args": [
+            "pr",
+            "edit",
+            "12",
+            "--repo",
+            "hodtien/mharness",
+            "--add-label",
+            "autopilot",
+            "--add-label",
+            "ready",
+        ],
+        "cwd": repo,
+        "check": False,
+    }
 
 
 def test_create_pr_succeeds_on_first_attempt(tmp_path: Path, monkeypatch) -> None:
@@ -909,6 +1023,7 @@ def test_remote_code_review_step_blocks_on_critical(tmp_path: Path, monkeypatch)
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
+    store._repo_full_name = "hodtien/mharness"
     card, _ = store.enqueue_card(source_kind="manual_idea", title="Review critical", body="review")
 
     monkeypatch.setattr(
