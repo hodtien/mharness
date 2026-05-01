@@ -70,6 +70,10 @@ class SessionManager:
             for entry in self._sessions.values()
         ]
 
+    def entries(self) -> list["SessionEntry"]:
+        """Return all session entries (used by /modes to find active session state)."""
+        return list(self._sessions.values())
+
     async def remove(self, session_id: str) -> None:
         entry = self._sessions.pop(session_id, None)
         if entry and entry.task and not entry.task.done():

@@ -19,6 +19,7 @@ from openharness.webui.server.config import WebUIConfig
 from openharness.webui.server.routes import cron as cron_routes
 from openharness.webui.server.routes import health as health_routes
 from openharness.webui.server.routes import history as history_routes
+from openharness.webui.server.routes import modes as modes_routes
 from openharness.webui.server.routes import sessions as sessions_routes
 from openharness.webui.server.routes import tasks as tasks_routes
 from openharness.webui.server.sessions import SessionManager
@@ -141,6 +142,7 @@ def create_app(
     app.include_router(tasks_routes.router)
     app.include_router(cron_routes.router)
     app.include_router(history_routes.router)
+    app.include_router(modes_routes.router)
 
     resolved_spa: Path | None
     if spa_dir is None:
