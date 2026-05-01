@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import HistoryPage from "./HistoryPage";
-import type { HistorySession } from "./HistoryPanel";
+import type { HistorySession } from "../components/HistoryPanel";
 
 function mockApiFetchWithSessions(sessions: HistorySession[]) {
   let callCount = 0;
-  const fetchMock = vi.fn((url: string) => {
+  const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
     if (url === "/api/history") {
       return Promise.resolve({
         ok: true,
@@ -79,9 +79,10 @@ describe("HistoryPage", () => {
     fireEvent.click(resumeBtn);
 
     await waitFor(() => {
-      expect(fetchMock.mock.calls.at(-1)?.[0]).toBe("/api/sessions");
-      expect(fetchMock.mock.calls.at(-1)?.[1]?.method).toBe("POST");
-      const body = JSON.parse(fetchMock.mock.calls.at(-1)?.[1]?.body ?? "{}");
+      const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
+      expect(lastCall?.[0]).toBe("/api/sessions");
+      expect(lastCall?.[1]?.method).toBe("POST");
+      const body = JSON.parse(String(lastCall?.[1]?.body ?? "{}"));
       expect(body).toEqual({ resume_id: "old-session-456" });
     });
   });
