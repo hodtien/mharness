@@ -10,6 +10,7 @@ import Sidebar from "./components/Sidebar";
 import ChatPage from "./pages/ChatPage";
 import HistoryPage from "./pages/HistoryPage";
 import ModesSettingsPage from "./pages/ModesSettingsPage";
+import ProviderSettingsPage from "./pages/ProviderSettingsPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 
 function RootRedirect() {
@@ -130,6 +131,10 @@ export default function App() {
           <Route
             path="/settings/modes"
             element={<ModesSettingsPage />}
+          />
+          <Route
+            path="/settings/provider"
+            element={<ProviderSettingsPage />}
           />
           <Route
             path="/settings/*"
