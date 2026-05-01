@@ -50,6 +50,25 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return res.json() as Promise<T>;
 }
 
+export interface ModesPayload {
+  permission_mode: string;
+  fast_mode: boolean;
+  vim_enabled: boolean;
+  effort: string;
+  passes: number;
+  output_style: string;
+  theme: string;
+}
+
+export interface ModesPatch {
+  permission_mode?: string;
+  effort?: string;
+  passes?: number;
+  fast_mode?: boolean;
+  output_style?: string;
+  theme?: string;
+}
+
 export const api = {
   health: () => apiFetch<{ status: string; version: string }>("/api/health"),
   meta: () => apiFetch<{ cwd?: string; model?: string; permission_mode?: string }>("/api/meta"),
@@ -69,6 +88,12 @@ export const api = {
     ),
   listCron: () =>
     apiFetch<{ jobs: Array<Record<string, unknown>>; error?: string }>("/api/cron/jobs"),
+  getModes: () => apiFetch<ModesPayload>("/api/modes"),
+  patchModes: (patch: ModesPatch) =>
+    apiFetch<ModesPayload>("/api/modes", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
 };
 
 // ---------------- WebSocket session ----------------
