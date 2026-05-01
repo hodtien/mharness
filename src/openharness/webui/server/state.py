@@ -89,3 +89,14 @@ def get_bridge_manager() -> "BridgeSessionManager":
     from openharness.bridge.manager import get_bridge_manager as _factory
 
     return _factory()
+
+
+def get_session_manager(request: Request):
+    """Return the per-app :class:`SessionManager` attached by ``create_app``."""
+    manager = getattr(request.app.state, "webui_session_manager", None)
+    if manager is None:  # pragma: no cover - defensive guard
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Web UI session manager not initialized",
+        )
+    return manager
