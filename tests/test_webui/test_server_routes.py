@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from openharness.services.session_storage import get_project_session_dir, save_session_snapshot
 from openharness.api.usage import UsageSnapshot
+from openharness.auth.storage import load_credential
 from openharness.config.settings import load_settings, save_settings
 from openharness.engine.messages import ConversationMessage, ToolResultBlock, ToolUseBlock
 from openharness.webui.server.app import create_app
@@ -451,3 +452,83 @@ def test_activate_provider_switches_profile_and_returns_new_model(tmp_path, monk
 
     # Auth is required.
     assert client.post("/api/providers/openai-compatible/activate").status_code == 401
+
+
+def test_set_provider_credentials_persists_api_key_and_base_url(tmp_path, monkeypatch) -> None:
+    """POST /api/providers/{name}/credentials stores api_key + base_url override."""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    # Force file-based credential backend so tests don't touch the user's keyring.
+    monkeypatch.setattr(
+        "openharness.auth.storage._keyring_available", lambda: False
+    )
+    save_settings(load_settings())
+
+    client = _client(tmp_path)
+
+    # Auth is required.
+    assert client.post(
+        "/api/providers/openai-compatible/credentials", json={"api_key": "x"}
+    ).status_code == 401
+
+    # Unknown profile → 404.
+    not_found = client.post(
+        "/api/providers/nonexistent/credentials",
+        headers={"Authorization": "Bearer test-token"},
+        json={"api_key": "sk-abcdef1234"},
+    )
+    assert not_found.status_code == 404
+
+    # Empty body → 400 (must provide api_key or base_url).
+    empty = client.post(
+        "/api/providers/openai-compatible/credentials",
+        headers={"Authorization": "Bearer test-token"},
+        json={},
+    )
+    assert empty.status_code == 400
+
+    # Set both api_key and base_url for an API-key based profile.
+    api_key_value = "sk-test-1234567890ABCD"
+    response = client.post(
+        "/api/providers/openai-compatible/credentials",
+        headers={"Authorization": "Bearer test-token"},
+        json={"api_key": api_key_value, "base_url": "https://example.test/v1"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    # Only the last 4 characters of the api_key are exposed.
+    assert body["api_key"] == "*" * (len(api_key_value) - 4) + api_key_value[-4:]
+    assert api_key_value not in body["api_key"][: -4]
+    assert body["base_url"] == "https://example.test/v1"
+
+    # Credential is persisted under the profile's auth-source provider name.
+    assert load_credential("openai", "api_key") == api_key_value
+
+    # base_url override is persisted on the profile in settings.json.
+    persisted = load_settings()
+    assert persisted.merged_profiles()["openai-compatible"].base_url == "https://example.test/v1"
+
+    # Clearing base_url with empty string falls back to the built-in default
+    # (the openai-compatible built-in has base_url=None).
+    response_clear = client.post(
+        "/api/providers/openai-compatible/credentials",
+        headers={"Authorization": "Bearer test-token"},
+        json={"base_url": ""},
+    )
+    assert response_clear.status_code == 200
+    assert response_clear.json()["base_url"] is None
+    # No api_key was sent → response must not include the api_key field.
+    assert "api_key" not in response_clear.json()
+
+    # Subscription-style profiles (no API key) reject api_key updates.
+    reject = client.post(
+        "/api/providers/codex/credentials",
+        headers={"Authorization": "Bearer test-token"},
+        json={"api_key": "should-not-store"},
+    )
+    assert reject.status_code == 400
