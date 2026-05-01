@@ -1,9 +1,10 @@
-import React, {useDeferredValue, useEffect, useMemo, useState} from 'react';
+import React, {useDeferredValue, useEffect, useMemo, useRef, useState} from 'react';
 import {Box, Text, useApp, useInput} from 'ink';
 
 import {CommandPicker} from './components/CommandPicker.js';
 import {ConversationView} from './components/ConversationView.js';
 import {ModalHost} from './components/ModalHost.js';
+import {AutoModeIndicator} from './components/WelcomeBanner.js';
 import {PromptInput} from './components/PromptInput.js';
 import {SelectModal, type SelectOption} from './components/SelectModal.js';
 import {StatusBar} from './components/StatusBar.js';
@@ -84,6 +85,35 @@ function AppInner({config}: {config: FrontendConfig}): React.JSX.Element {
 			setThemeName(nextTheme);
 		}
 	}, [session.status.theme, setThemeName]);
+
+	// Permission-mode toast: show a transient warning when entering full_auto
+	// and a confirmation when leaving full_auto for default.
+	const permissionMode = String(deferredStatus.permission_mode ?? 'default');
+	const previousPermissionModeRef = useRef<string | null>(null);
+	const [permissionToast, setPermissionToast] = useState<{kind: 'warning' | 'info'; text: string} | null>(null);
+	useEffect(() => {
+		const prev = previousPermissionModeRef.current;
+		if (prev === null) {
+			previousPermissionModeRef.current = permissionMode;
+			return;
+		}
+		if (prev === permissionMode) {
+			return;
+		}
+		previousPermissionModeRef.current = permissionMode;
+		if (permissionMode === 'full_auto') {
+			setPermissionToast({kind: 'warning', text: 'All tool calls will be auto-approved'});
+		} else if (prev === 'full_auto' && permissionMode === 'default') {
+			setPermissionToast({kind: 'info', text: 'Auto-approval disabled. Tool calls require confirmation.'});
+		}
+	}, [permissionMode]);
+	useEffect(() => {
+		if (!permissionToast) {
+			return;
+		}
+		const timer = setTimeout(() => setPermissionToast(null), 4000);
+		return () => clearTimeout(timer);
+	}, [permissionToast]);
 
 	// Current tool name for spinner
 	const currentToolName = useMemo(() => {
@@ -396,6 +426,26 @@ function AppInner({config}: {config: FrontendConfig}): React.JSX.Element {
 
 	return (
 		<Box flexDirection="column" paddingX={1} height="100%">
+			{/* Header: animated AUTO badge when in full_auto mode */}
+			{permissionMode === 'full_auto' ? (
+				<Box>
+					<AutoModeIndicator />
+				</Box>
+			) : null}
+
+			{/* Permission-mode toast */}
+			{permissionToast ? (
+				<Box marginBottom={1}>
+					<Text
+						color={permissionToast.kind === 'warning' ? theme.colors.warning : theme.colors.success}
+						bold
+					>
+						{permissionToast.kind === 'warning' ? '⚠ ' : '✓ '}
+						{permissionToast.text}
+					</Text>
+				</Box>
+			) : null}
+
 			{/* Conversation area */}
 			<Box flexDirection="column" flexGrow={1}>
 				<ConversationView

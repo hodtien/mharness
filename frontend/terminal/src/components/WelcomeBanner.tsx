@@ -1,9 +1,36 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import {Box, Text} from 'ink';
 
 import {useTheme} from '../theme/ThemeContext.js';
 
 const VERSION = '0.1.0';
+
+// AutoModeIndicator: animated orange "AUTO" badge shown when permission_mode=full_auto.
+export function AutoModeIndicator(): React.JSX.Element {
+	const [visible, setVisible] = useState(true);
+
+	useEffect(() => {
+		const id = setInterval(() => setVisible((v) => !v), 600);
+		return () => clearInterval(id);
+	}, []);
+
+	if (!visible) {
+		return (
+			<Box>
+				<Text> </Text>
+			</Box>
+		);
+	}
+
+	return (
+		<Box>
+			<Text color="yellow" bold dimColor>
+				{' '}
+				[ AUTO ]{' '}
+			</Text>
+		</Box>
+	);
+}
 
 // prettier-ignore
 const LOGO = [

@@ -11,6 +11,21 @@ const WRITE_TOOLS = new Set([
 	'Bash', 'computer', 'str_replace_editor',
 ]);
 
+function FullAutoIndicator(): React.JSX.Element {
+	const [visible, setVisible] = useState(true);
+	useEffect(() => {
+		const id = setInterval(() => setVisible((v) => !v), 600);
+		return () => clearInterval(id);
+	}, []);
+	return (
+		<Text>
+			<Text color="#ff8800" bold>
+				{visible ? ' [ AUTO ] ' : '         '}
+			</Text>
+		</Text>
+	);
+}
+
 function PlanModeIndicator({
 	mode,
 	activeToolName,
@@ -71,6 +86,7 @@ function StatusBarInner({
 	const inputTokens = Number(status.input_tokens ?? 0);
 	const outputTokens = Number(status.output_tokens ?? 0);
 	const isPlanMode = mode === 'plan' || mode === 'Plan Mode';
+	const isFullAuto = mode === 'full_auto';
 
 	return (
 		<Box flexDirection="column">
@@ -101,6 +117,7 @@ function StatusBarInner({
 						</>
 					) : null}
 				</Text>
+				{isFullAuto ? <FullAutoIndicator /> : null}
 				{isPlanMode ? (
 					<PlanModeIndicator mode={mode} activeToolName={activeToolName} />
 				) : null}

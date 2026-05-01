@@ -30,6 +30,8 @@ export function SidePanel({
 }
 
 function StatusPanel({status}: {status: Record<string, unknown>}): React.JSX.Element {
+	const permissionMode = String(status.permission_mode ?? 'default');
+	const isFullAuto = permissionMode === 'full_auto';
 	return (
 		<>
 			<Text bold>Status</Text>
@@ -37,7 +39,9 @@ function StatusPanel({status}: {status: Record<string, unknown>}): React.JSX.Ele
 				<Text>model: {String(status.model ?? 'unknown')}</Text>
 				<Text>provider: {String(status.provider ?? 'unknown')}</Text>
 				<Text>auth: {String(status.auth_status ?? 'unknown')}</Text>
-				<Text>permission: {String(status.permission_mode ?? 'unknown')}</Text>
+				<Text color={isFullAuto ? 'red' : undefined} bold={isFullAuto}>
+					permission: {permissionMode}
+				</Text>
 				<Text>cwd: {String(status.cwd ?? '.')}</Text>
 				<Text>vim: {String(Boolean(status.vim_enabled))}</Text>
 				<Text>voice: {String(Boolean(status.voice_enabled))}</Text>
