@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from openharness.services.session_storage import save_session_snapshot
+from openharness.api.usage import UsageSnapshot
+from openharness.engine.messages import ConversationMessage
 from openharness.webui.server.app import create_app
 
 
@@ -79,3 +82,35 @@ def test_query_token_is_accepted_for_bootstrap_clients(tmp_path) -> None:
     response = _client(tmp_path).get("/api/meta?token=test-token")
 
     assert response.status_code == 200
+
+
+def test_history_endpoint_requires_auth_and_lists_session_snapshots(tmp_path, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    save_session_snapshot(
+        cwd=tmp_path,
+        model="sonnet",
+        system_prompt="system",
+        messages=[ConversationMessage.from_user_text("hello history")],
+        usage=UsageSnapshot(),
+        session_id="abc123",
+    )
+    client = _client(tmp_path)
+
+    assert client.get("/api/history").status_code == 401
+
+    response = client.get("/api/history?limit=20", headers={"Authorization": "Bearer test-token"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "sessions": [
+            {
+                "session_id": "abc123",
+                "summary": "hello history",
+                "message_count": 1,
+                "model": "sonnet",
+                "created_at": response.json()["sessions"][0]["created_at"],
+            }
+        ]
+    }
