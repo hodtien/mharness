@@ -9,8 +9,9 @@ Web UI matches what the CLI and TUI display.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from openharness.config.settings import load_settings, save_settings
 from openharness.webui.server.sessions import SessionManager
 from openharness.webui.server.state import get_session_manager, require_token
 
@@ -55,17 +56,17 @@ def _build_items(manager: SessionManager) -> list[dict[str, object]]:
     statuses = AuthManager(settings).get_profile_statuses() if settings else AuthManager().get_profile_statuses()
 
     items: list[dict[str, object]] = []
-    for name, status in statuses.items():
+    for name, profile_status in statuses.items():
         items.append(
             {
                 "id": name,
-                "label": status["label"],
-                "provider": status["provider"],
-                "api_format": status["api_format"],
-                "default_model": status["model"],
-                "base_url": status.get("base_url"),
-                "has_credentials": bool(status.get("configured")),
-                "is_active": bool(status.get("active")),
+                "label": profile_status["label"],
+                "provider": profile_status["provider"],
+                "api_format": profile_status["api_format"],
+                "default_model": profile_status["model"],
+                "base_url": profile_status.get("base_url"),
+                "has_credentials": bool(profile_status.get("configured")),
+                "is_active": bool(profile_status.get("active")),
             }
         )
     return items
@@ -91,3 +92,52 @@ def list_providers_slash(
 ) -> dict[str, object]:
     """Keep behavior stable for callers that include a trailing slash."""
     return list_providers(manager)
+
+
+@router.post("/{name}/activate")
+def activate_provider(
+    name: str,
+    manager: SessionManager = Depends(get_session_manager),
+) -> dict[str, object]:
+    """Switch the active provider profile.
+
+    Persists ``active_profile`` to ``settings.json`` and updates the WebUI
+    :class:`SessionManager` config so subsequent ``POST /api/sessions`` calls
+    pick up the new model / api_format / base_url. Existing live sessions
+    keep their current ``BackendHostConfig`` until the next reconnect, per
+    the task spec.
+    """
+    settings = load_settings()
+    profiles = settings.merged_profiles()
+    if name not in profiles:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown provider profile: {name}",
+        )
+
+    # Persist the new active profile. ``save_settings`` runs
+    # ``materialize_active_profile`` which projects the profile onto the
+    # legacy flat ``model``/``api_format``/``base_url`` fields.
+    updated = settings.model_copy(update={"active_profile": name})
+    try:
+        save_settings(updated)
+    except Exception as exc:  # pragma: no cover - filesystem failure
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to persist settings: {exc}",
+        ) from exc
+
+    # Re-read so we get the materialized model the same way the CLI/TUI do.
+    materialized = load_settings()
+    profile = materialized.merged_profiles()[name]
+    new_model = materialized.model or profile.default_model
+
+    # Reload BackendHostConfig defaults for *new* sessions. Existing
+    # sessions keep their config until reconnect.
+    manager.update_provider_defaults(
+        model=new_model,
+        api_format=profile.api_format,
+        base_url=profile.base_url,
+    )
+
+    return {"ok": True, "model": new_model}
