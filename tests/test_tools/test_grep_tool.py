@@ -44,6 +44,19 @@ class _FakeProcess:
 
 
 @pytest.mark.asyncio
+async def test_grep_tool_returns_error_for_missing_root(tmp_path: Path):
+    tool = GrepTool()
+
+    result = await tool.execute(
+        GrepToolInput(pattern="foo", root="src tests"),
+        type("Ctx", (), {"cwd": tmp_path})(),
+    )
+
+    assert result.is_error is True
+    assert "path not found" in result.output
+
+
+@pytest.mark.asyncio
 async def test_grep_tool_returns_timeout_error(monkeypatch, tmp_path: Path):
     tool = GrepTool()
     monkeypatch.setattr("openharness.tools.grep_tool.shutil.which", lambda _: "/usr/bin/rg")
