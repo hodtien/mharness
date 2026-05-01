@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from openharness.autopilot.types import RepoAutopilotRegistry, RepoTaskCard
 
@@ -37,7 +37,7 @@ def test_registry_accepts_iso_updated_at():
 
 def test_coerce_timestamp_accepts_datetime_object():
     ts = 1777593600.0
-    dt = datetime.fromtimestamp(ts, tz=UTC)
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
     card = RepoTaskCard.model_validate(
         {
             "id": "ap-dt",
