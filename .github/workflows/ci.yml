@@ -53,6 +53,8 @@ jobs:
   python-quality:
     name: Python quality
     runs-on: ubuntu-latest
+    env:
+      UV_PROJECT_ENVIRONMENT: .venv-quality
     steps:
       - name: Checkout
         uses: actions/checkout@v4
