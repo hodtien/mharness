@@ -401,6 +401,14 @@ def test_autopilot_run_card_repairs_after_local_verification_failure(tmp_path: P
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return "success", "All reported remote checks passed.", {"url": "https://example/pr/23", "labels": ["autopilot:merge"], "isDraft": False}, []
 
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=0,
+            status="success",
+            stdout="Severity: NONE",
+        )
+
     merged = {"called": False}
 
     monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree)
@@ -420,6 +428,10 @@ def test_autopilot_run_card_repairs_after_local_verification_failure(tmp_path: P
     )
     monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci)
     monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._automerge_eligible", lambda self, pr_snapshot, policies: True)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
     monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._merge_pull_request", lambda self, pr_number: merged.__setitem__("called", True))
     monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._comment_on_pr", lambda self, pr_number, comment: None)
 
@@ -512,11 +524,24 @@ def test_autopilot_existing_pr_card_can_auto_merge(tmp_path: Path, monkeypatch) 
         assert pr_number == 88
         return "success", "All reported remote checks passed.", {"url": "https://example/pr/88", "labels": ["autopilot:merge"], "isDraft": False}, []
 
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=0,
+            status="success",
+            stdout="Severity: NONE",
+        )
+
     merged = {"called": False}
 
     monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci)
     monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._automerge_eligible", lambda self, pr_snapshot, policies: True)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
     monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._merge_pull_request", lambda self, pr_number: merged.__setitem__("called", True))
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._pull_base_branch", lambda self, *, base_branch: None)
     monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._comment_on_pr", lambda self, pr_number, comment: None)
 
     import asyncio
@@ -1137,7 +1162,7 @@ def test_pull_base_branch_failure_is_non_fatal(tmp_path: Path, monkeypatch) -> N
     import asyncio
 
     result = asyncio.run(store.run_card(card.id))
-    journal = (repo / ".openharness" / "autopilot" / "journal.jsonl").read_text(encoding="utf-8")
+    journal = (repo / ".openharness" / "autopilot" / "repo_journal.jsonl").read_text(encoding="utf-8")
 
     assert result.status == "merged"
     assert "merge_warning" in journal

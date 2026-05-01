@@ -1548,6 +1548,12 @@ class RepoAutopilotStore:
                 title=title,
                 body_path=body_path,
             )
+        except Exception:
+            created = self._find_open_pr_for_branch(head_branch)
+            if created is None:
+                raise
+            self._best_effort_add_labels(created.get("number"), ["autopilot"])
+            return created
         finally:
             body_path.unlink(missing_ok=True)
 
