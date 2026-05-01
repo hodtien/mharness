@@ -53,8 +53,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 export const api = {
   health: () => apiFetch<{ status: string; version: string }>("/api/health"),
   meta: () => apiFetch<{ cwd?: string; model?: string; permission_mode?: string }>("/api/meta"),
-  createSession: () =>
-    apiFetch<{ session_id: string }>("/api/sessions", { method: "POST" }),
+  createSession: (resumeId?: string) =>
+    apiFetch<{ session_id: string; resumed_from?: string | null }>("/api/sessions", {
+      method: "POST",
+      body: resumeId ? JSON.stringify({ resume_id: resumeId }) : undefined,
+      headers: resumeId ? { "Content-Type": "application/json" } : undefined,
+    }),
   listSessions: () =>
     apiFetch<{ sessions: Array<{ id: string; created_at: number; active: boolean }> }>(
       "/api/sessions",

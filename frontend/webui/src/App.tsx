@@ -40,18 +40,34 @@ function AppLayout({ onInterrupt }: LayoutProps) {
 
 export default function App() {
   const wsRef = useRef<WsHandle | null>(null);
-  const { setStatus, ingest, appendUser } = useSession();
+  const { setStatus, ingest, appendUser, setResumedFrom } = useSession();
 
-  const setupSession = useCallback(async () => {
-    try {
-      const { session_id } = await api.createSession();
-      const ws = openWebSocket(session_id, ingest, setStatus);
+  const setupSession = useCallback(
+    async (resumeId?: string) => {
+      try {
+        const result = await api.createSession(resumeId);
+        if (resumeId) {
+          setResumedFrom(resumeId);
+        }
+        const ws = openWebSocket(result.session_id, ingest, setStatus);
+        wsRef.current = ws;
+      } catch (err) {
+        console.error("setup failed", err);
+        useSession.getState().setError(String(err));
+      }
+    },
+    [ingest, setStatus, setResumedFrom],
+  );
+
+  const reconnectWithSession = useCallback(
+    (newSessionId: string, resumeId?: string) => {
+      wsRef.current?.close();
+      if (resumeId) setResumedFrom(resumeId);
+      const ws = openWebSocket(newSessionId, ingest, setStatus);
       wsRef.current = ws;
-    } catch (err) {
-      console.error("setup failed", err);
-      useSession.getState().setError(String(err));
-    }
-  }, [ingest, setStatus]);
+    },
+    [ingest, setStatus, setResumedFrom],
+  );
 
   useEffect(() => {
     setupSession();
@@ -91,7 +107,7 @@ export default function App() {
         <Route element={<AppLayout onInterrupt={sendInterrupt} />}>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/chat" element={<ChatPage onSend={sendLine} />} />
-          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/history" element={<HistoryPage onResume={reconnectWithSession} />} />
           <Route
             path="/pipeline"
             element={<PlaceholderPage title="Pipeline" description="Autopilot pipeline dashboard." />}
