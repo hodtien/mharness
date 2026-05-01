@@ -18,9 +18,10 @@ function RootRedirect() {
 
 interface LayoutProps {
   onInterrupt: () => void;
+  onResumeSession: (resumeId: string) => Promise<void>;
 }
 
-function AppLayout({ onInterrupt }: LayoutProps) {
+function AppLayout({ onInterrupt, onResumeSession }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   return (
     <div className="flex h-full w-full overflow-hidden">
@@ -29,6 +30,7 @@ function AppLayout({ onInterrupt }: LayoutProps) {
         <Header
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
           onInterrupt={onInterrupt}
+          onResumeSession={onResumeSession}
         />
         <main className="flex flex-1 flex-col min-h-0">
           <Outlet />
@@ -69,6 +71,14 @@ export default function App() {
     [ingest, setStatus, setResumedFrom],
   );
 
+  const resumeSession = useCallback(
+    async (resumeId: string) => {
+      const { session_id } = await api.createSession(resumeId);
+      reconnectWithSession(session_id, resumeId);
+    },
+    [reconnectWithSession],
+  );
+
   useEffect(() => {
     setupSession();
     return () => wsRef.current?.close();
@@ -104,7 +114,7 @@ export default function App() {
   return (
     <>
       <Routes>
-        <Route element={<AppLayout onInterrupt={sendInterrupt} />}>
+        <Route element={<AppLayout onInterrupt={sendInterrupt} onResumeSession={resumeSession} />}>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/chat" element={<ChatPage onSend={sendLine} />} />
           <Route path="/history" element={<HistoryPage onResume={reconnectWithSession} />} />
