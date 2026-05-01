@@ -69,6 +69,37 @@ export interface ModesPatch {
   theme?: string;
 }
 
+export interface ProviderProfile {
+  id: string;
+  label: string;
+  provider: string;
+  api_format: string;
+  default_model: string;
+  base_url?: string | null;
+  has_credentials: boolean;
+  is_active: boolean;
+}
+
+export interface ProviderListResponse {
+  providers: ProviderProfile[];
+}
+
+export interface ProviderCredentialsPatch {
+  api_key?: string;
+  base_url?: string;
+}
+
+export interface ProviderVerifyResponse {
+  ok: boolean;
+  error?: string;
+  models?: string[];
+}
+
+export interface ProviderActivateResponse {
+  ok: boolean;
+  model?: string;
+}
+
 export const api = {
   health: () => apiFetch<{ status: string; version: string }>("/api/health"),
   meta: () => apiFetch<{ cwd?: string; model?: string; permission_mode?: string }>("/api/meta"),
@@ -93,6 +124,23 @@ export const api = {
     apiFetch<ModesPayload>("/api/modes", {
       method: "PATCH",
       body: JSON.stringify(patch),
+    }),
+  listProviders: () => apiFetch<ProviderListResponse>("/api/providers"),
+  saveProviderCredentials: (name: string, patch: ProviderCredentialsPatch) =>
+    apiFetch<{ ok: boolean; api_key_suffix?: string; base_url?: string }>(
+      `/api/providers/${encodeURIComponent(name)}/credentials`,
+      {
+        method: "POST",
+        body: JSON.stringify(patch),
+      },
+    ),
+  verifyProvider: (name: string) =>
+    apiFetch<ProviderVerifyResponse>(`/api/providers/${encodeURIComponent(name)}/verify`, {
+      method: "POST",
+    }),
+  activateProvider: (name: string) =>
+    apiFetch<ProviderActivateResponse>(`/api/providers/${encodeURIComponent(name)}/activate`, {
+      method: "POST",
     }),
 };
 
