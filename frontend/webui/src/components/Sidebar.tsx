@@ -6,9 +6,11 @@ import { useSession } from "../store/session";
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** When true, hide the persistent desktop sidebar. Mobile drawer is unaffected. */
+  collapsed?: boolean;
 }
 
-export default function Sidebar({ open, onClose }: Props) {
+export default function Sidebar({ open, onClose, collapsed = false }: Props) {
   const tasks = useSession((s) => s.tasks);
   const appState = useSession((s) => s.appState);
   const todoMarkdown = useSession((s) => s.todoMarkdown);
@@ -150,13 +152,22 @@ export default function Sidebar({ open, onClose }: Props) {
 
   return (
     <>
-      {/* Desktop: persistent */}
-      <div className="hidden h-full sm:block">{content}</div>
+      {/* Desktop: persistent, can be collapsed via Header toggle */}
+      <div
+        data-testid="sidebar-desktop"
+        className={`${collapsed ? "hidden" : "hidden sm:block"} h-full`}
+      >
+        {content}
+      </div>
       {/* Mobile: drawer */}
       {open && (
-        <div className="fixed inset-0 z-30 flex sm:hidden">
+        <div data-testid="sidebar-mobile" className="fixed inset-0 z-30 flex sm:hidden">
           {content}
-          <div className="flex-1 bg-black/40" onClick={onClose} />
+          <div
+            data-testid="sidebar-mobile-backdrop"
+            className="flex-1 bg-black/40"
+            onClick={onClose}
+          />
         </div>
       )}
     </>
