@@ -117,3 +117,39 @@ def test_patch_modes_permission_mode_full_auto_persists(tmp_path) -> None:
     client2 = _client(tmp_path)
     body = client2.get("/api/modes", headers=AUTH).json()
     assert body["permission_mode"] == "full_auto"
+
+
+def test_patch_modes_vim_enabled_persists(tmp_path) -> None:
+    """PATCH vim_enabled=True updates the response and persists to settings."""
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/modes",
+        json={"vim_enabled": True},
+        headers=AUTH,
+    )
+    assert response.status_code == 200
+    assert response.json()["vim_enabled"] is True
+
+    settings = load_settings()
+    assert settings.vim_mode is True
+
+    get_response = client.get("/api/modes", headers=AUTH)
+    assert get_response.json()["vim_enabled"] is True
+
+
+def test_patch_modes_vim_enabled_false(tmp_path) -> None:
+    """PATCH vim_enabled=False disables vim keybindings and persists."""
+    client = _client(tmp_path)
+
+    client.patch("/api/modes", json={"vim_enabled": True}, headers=AUTH)
+    response = client.patch(
+        "/api/modes",
+        json={"vim_enabled": False},
+        headers=AUTH,
+    )
+    assert response.status_code == 200
+    assert response.json()["vim_enabled"] is False
+
+    settings = load_settings()
+    assert settings.vim_mode is False

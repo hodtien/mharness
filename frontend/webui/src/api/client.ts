@@ -65,6 +65,7 @@ export interface ModesPatch {
   effort?: string;
   passes?: number;
   fast_mode?: boolean;
+  vim_enabled?: boolean;
   output_style?: string;
   theme?: string;
 }

@@ -35,6 +35,7 @@ class ModesPatch(BaseModel):
     effort: str | None = Field(default=None, pattern="^(low|medium|high)$")
     passes: int | None = Field(default=None, ge=1, le=5)
     fast_mode: bool | None = None
+    vim_enabled: bool | None = None
     output_style: str | None = None
     theme: str | None = None
 
@@ -108,6 +109,8 @@ def _apply_to_settings(updates: dict[str, object]) -> AppState:
     for key in ("effort", "passes", "fast_mode", "output_style", "theme"):
         if key in updates:
             settings_updates[key] = updates[key]
+    if "vim_enabled" in updates:
+        settings_updates["vim_mode"] = updates["vim_enabled"]
     if settings_updates:
         settings = settings.model_copy(update=settings_updates)
         save_settings(settings)
