@@ -1230,6 +1230,16 @@ class RepoAutopilotStore:
                         task_id=card.id,
                         metadata={"pr_number": linked_pr_number},
                     )
+                else:
+                    try:
+                        self._install_editable()
+                    except Exception as exc:
+                        self.append_journal(
+                            kind="merge_warning",
+                            summary=f"post-merge install failed: {exc}",
+                            task_id=card.id,
+                            metadata={"pr_number": linked_pr_number},
+                        )
                 return RepoRunResult(
                     card_id=card.id,
                     status="merged",
@@ -1427,6 +1437,10 @@ class RepoAutopilotStore:
         target = cwd or self._cwd
         self._run_git(["fetch", "origin", base_branch], cwd=target, check=True)
         self._run_git(["pull", "--ff-only", "origin", base_branch], cwd=target, check=True)
+
+    def _install_editable(self, *, cwd: Path | None = None) -> None:
+        target = cwd or self._cwd
+        self._run_command(["uv", "pip", "install", "-e", "."], cwd=target, timeout=120, check=True)
 
     def _git_branch_has_progress(self, cwd: Path, *, base_branch: str) -> bool:
         completed = self._run_git(
@@ -1966,6 +1980,16 @@ class RepoAutopilotStore:
                     task_id=card.id,
                     metadata={"pr_number": pr_number},
                 )
+            else:
+                try:
+                    self._install_editable()
+                except Exception as exc:
+                    self.append_journal(
+                        kind="merge_warning",
+                        summary=f"post-merge install failed: {exc}",
+                        task_id=card.id,
+                        metadata={"pr_number": pr_number},
+                    )
             return RepoRunResult(
                 card_id=card.id,
                 status="merged",
