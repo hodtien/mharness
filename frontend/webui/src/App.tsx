@@ -13,6 +13,7 @@ import ModesSettingsPage from "./pages/ModesSettingsPage";
 import ProviderSettingsPage from "./pages/ProviderSettingsPage";
 import ModelsSettingsPage from "./pages/ModelsSettingsPage";
 import AgentsSettingsPage from "./pages/AgentsSettingsPage";
+import PipelinePage from "./pages/PipelinePage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 
 function RootRedirect() {
@@ -132,10 +133,7 @@ export default function App() {
           <Route path="/" element={<RootRedirect />} />
           <Route path="/chat" element={<ChatPage onSend={sendLine} />} />
           <Route path="/history" element={<HistoryPage onResume={reconnectWithSession} />} />
-          <Route
-            path="/pipeline"
-            element={<PlaceholderPage title="Pipeline" description="Autopilot pipeline dashboard." />}
-          />
+          <Route path="/pipeline" element={<PipelinePage />} />
           <Route
             path="/tasks"
             element={<PlaceholderPage title="Tasks" description="Background task dashboard." />}
