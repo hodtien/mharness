@@ -817,3 +817,200 @@ def test_pipeline_cards_post_rejects_empty_title(tmp_path) -> None:
         json={"title": ""},
     )
     assert response.status_code == 422
+
+
+# ----------------------------------------------------------------------
+# POST /api/pipeline/cards/{id}/action
+# ----------------------------------------------------------------------
+
+def test_pipeline_cards_action_requires_auth(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.post("/api/pipeline/cards/ap-abc123/action", json={"action": "accept"})
+    assert response.status_code == 401
+
+
+def test_pipeline_cards_action_returns_404_when_card_not_found(tmp_path) -> None:
+    registry = {
+        "version": 1,
+        "updated_at": 1000.0,
+        "cards": [
+            {
+                "id": "ap-existing",
+                "title": "Existing card",
+                "body": "",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "source_ref": "",
+                "fingerprint": "manual_idea:abc123",
+                "score": 10,
+                "score_reasons": [],
+                "labels": [],
+                "metadata": {},
+                "created_at": 900.0,
+                "updated_at": 950.0,
+            },
+        ],
+    }
+    (tmp_path / ".openharness" / "autopilot").mkdir(parents=True)
+    (tmp_path / ".openharness" / "autopilot" / "registry.json").write_text(
+        json.dumps(registry)
+    )
+    client = _client(tmp_path)
+    response = client.post(
+        "/api/pipeline/cards/ap-nonexistent/action",
+        headers={"Authorization": "Bearer test-token"},
+        json={"action": "accept"},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"]["error"] == "card_not_found"
+
+
+def test_pipeline_cards_action_accept_sets_status_accepted(tmp_path) -> None:
+    registry = {
+        "version": 1,
+        "updated_at": 1000.0,
+        "cards": [
+            {
+                "id": "ap-test-card",
+                "title": "Test card",
+                "body": "Body text",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "source_ref": "manual_ref",
+                "fingerprint": "manual_idea:test123",
+                "score": 20,
+                "score_reasons": ["source=manual_idea"],
+                "labels": ["ui"],
+                "metadata": {},
+                "created_at": 800.0,
+                "updated_at": 900.0,
+            },
+        ],
+    }
+    (tmp_path / ".openharness" / "autopilot").mkdir(parents=True)
+    (tmp_path / ".openharness" / "autopilot" / "registry.json").write_text(
+        json.dumps(registry)
+    )
+    client = _client(tmp_path)
+    response = client.post(
+        "/api/pipeline/cards/ap-test-card/action",
+        headers={"Authorization": "Bearer test-token"},
+        json={"action": "accept"},
+    )
+    assert response.status_code == 200
+    card = response.json()
+    assert card["id"] == "ap-test-card"
+    assert card["status"] == "accepted"
+    # Verify persisted
+    registry_path = tmp_path / ".openharness" / "autopilot" / "registry.json"
+    saved = json.loads(registry_path.read_text())
+    assert saved["cards"][0]["status"] == "accepted"
+
+
+def test_pipeline_cards_action_reject_sets_status_rejected(tmp_path) -> None:
+    registry = {
+        "version": 1,
+        "updated_at": 1000.0,
+        "cards": [
+            {
+                "id": "ap-reject-me",
+                "title": "Reject me",
+                "body": "",
+                "status": "running",
+                "source_kind": "manual_idea",
+                "source_ref": "",
+                "fingerprint": "manual_idea:xyz789",
+                "score": 15,
+                "score_reasons": [],
+                "labels": [],
+                "metadata": {},
+                "created_at": 700.0,
+                "updated_at": 800.0,
+            },
+        ],
+    }
+    (tmp_path / ".openharness" / "autopilot").mkdir(parents=True)
+    (tmp_path / ".openharness" / "autopilot" / "registry.json").write_text(
+        json.dumps(registry)
+    )
+    client = _client(tmp_path)
+    response = client.post(
+        "/api/pipeline/cards/ap-reject-me/action",
+        headers={"Authorization": "Bearer test-token"},
+        json={"action": "reject"},
+    )
+    assert response.status_code == 200
+    card = response.json()
+    assert card["status"] == "rejected"
+
+
+def test_pipeline_cards_action_retry_resets_status_to_queued(tmp_path) -> None:
+    registry = {
+        "version": 1,
+        "updated_at": 1000.0,
+        "cards": [
+            {
+                "id": "ap-retry-me",
+                "title": "Retry me",
+                "body": "",
+                "status": "failed",
+                "source_kind": "manual_idea",
+                "source_ref": "",
+                "fingerprint": "manual_idea:retry111",
+                "score": 5,
+                "score_reasons": [],
+                "labels": [],
+                "metadata": {},
+                "created_at": 600.0,
+                "updated_at": 700.0,
+            },
+        ],
+    }
+    (tmp_path / ".openharness" / "autopilot").mkdir(parents=True)
+    (tmp_path / ".openharness" / "autopilot" / "registry.json").write_text(
+        json.dumps(registry)
+    )
+    client = _client(tmp_path)
+    response = client.post(
+        "/api/pipeline/cards/ap-retry-me/action",
+        headers={"Authorization": "Bearer test-token"},
+        json={"action": "retry"},
+    )
+    assert response.status_code == 200
+    card = response.json()
+    assert card["status"] == "queued"
+
+
+def test_pipeline_cards_action_rejects_invalid_action(tmp_path) -> None:
+    registry = {
+        "version": 1,
+        "updated_at": 1000.0,
+        "cards": [
+            {
+                "id": "ap-any",
+                "title": "Any card",
+                "body": "",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "source_ref": "",
+                "fingerprint": "manual_idea:any",
+                "score": 0,
+                "score_reasons": [],
+                "labels": [],
+                "metadata": {},
+                "created_at": 500.0,
+                "updated_at": 500.0,
+            },
+        ],
+    }
+    (tmp_path / ".openharness" / "autopilot").mkdir(parents=True)
+    (tmp_path / ".openharness" / "autopilot" / "registry.json").write_text(
+        json.dumps(registry)
+    )
+    client = _client(tmp_path)
+    response = client.post(
+        "/api/pipeline/cards/ap-any/action",
+        headers={"Authorization": "Bearer test-token"},
+        json={"action": "invalid"},
+    )
+    assert response.status_code == 422

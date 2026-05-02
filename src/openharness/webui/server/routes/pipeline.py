@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, ValidationError
 
 from openharness.autopilot.service import RepoAutopilotStore
-from openharness.autopilot.types import RepoAutopilotRegistry
+from openharness.autopilot.types import RepoAutopilotRegistry, RepoTaskStatus
 from openharness.webui.server.state import WebUIState, get_state, require_token
 
 router = APIRouter(
@@ -27,6 +28,15 @@ class CreateManualCardRequest(BaseModel):
     title: str = Field(..., min_length=1)
     body: str | None = None
     labels: list[str] | None = None
+
+
+class CardActionRequest(BaseModel):
+    """Payload for POST /api/pipeline/cards/{id}/action.
+
+    ``action`` must be one of: ``accept``, ``reject``, ``retry``.
+    """
+
+    action: Literal["accept", "reject", "retry"]
 
 
 def _serialize_card(card: dict) -> dict:
@@ -95,4 +105,35 @@ def enqueue_manual_card(
                 "card_id": card.id,
             },
         )
+    return _serialize_card(card.model_dump(mode="json"))
+
+
+_ACTION_TO_STATUS: dict[str, RepoTaskStatus] = {
+    "accept": "accepted",
+    "reject": "rejected",
+    "retry": "queued",
+}
+
+
+@router.post("/cards/{card_id}/action")
+def action_pipeline_card(
+    card_id: str,
+    body: CardActionRequest,
+    state: WebUIState = Depends(get_state),
+) -> dict:
+    """Apply a manual lifecycle action to a pipeline card.
+
+    Loads the per-repo registry, finds the card by ``id``, updates its
+    ``status`` according to the action (accept→accepted, reject→rejected,
+    retry→queued), persists the registry, and returns the updated card.
+    Returns HTTP 404 if no card with the given id exists.
+    """
+    store = RepoAutopilotStore(state.cwd)
+    if store.get_card(card_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "card_not_found", "card_id": card_id},
+        )
+    new_status = _ACTION_TO_STATUS[body.action]
+    card = store.update_status(card_id, status=new_status)
     return _serialize_card(card.model_dump(mode="json"))
