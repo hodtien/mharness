@@ -315,4 +315,130 @@ describe("PipelinePage", () => {
 
     await screen.findByText(/400 Bad Request/i);
   });
+
+  it("starts polling when cards include an active status and stops when all terminal", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const activeCards = [
+      { id: "card-1", title: "Running task", status: "running", source_kind: "manual_idea", score: 80, labels: [], created_at: 1, updated_at: 1 },
+    ];
+    const terminalCards = [
+      { id: "card-2", title: "Done task", status: "completed", source_kind: "manual_idea", score: 60, labels: [], created_at: 1, updated_at: 1 },
+    ];
+
+    let cardCallCount = 0;
+    const fetchMock = vi.fn((url: string) => {
+      if (url === "/api/pipeline/cards") {
+        cardCallCount++;
+        return Promise.resolve(jsonResponse({ cards: cardCallCount < 4 ? activeCards : terminalCards, updated_at: 0 }));
+      }
+      if (url.startsWith("/api/pipeline/journal")) {
+        return Promise.resolve(jsonResponse({ entries: [] }));
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    const cardCalls = () => fetchMock.mock.calls.filter((c) => c[0] === "/api/pipeline/cards");
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    await screen.findByText("Running task");
+
+    // First auto-poll
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(cardCalls().length).toBe(2);
+
+    // Second auto-poll after another 5s
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(cardCalls().length).toBe(3);
+
+    // Third poll brings terminal card → polling should stop
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(cardCalls().length).toBe(4);
+
+    // No more fetch calls after polling stops
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(cardCalls().length).toBe(4);
+
+    vi.useRealTimers();
+  });
+
+  it("shows 'Last updated Xs ago' indicator when board is active", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const cards = [
+      { id: "card-1", title: "Running task", status: "running", source_kind: "manual_idea", score: 80, labels: [], created_at: 1, updated_at: 1 },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards, updated_at: 0 }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: [] }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    await screen.findByText("Running task");
+
+    expect(screen.getByText(/Last updated \d+s ago/)).toBeTruthy();
+
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(screen.getByText(/Last updated \d+s ago/)).toBeTruthy();
+
+    vi.useRealTimers();
+  });
+
+  it("does not poll when all cards are terminal", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const terminalCards = [
+      { id: "card-1", title: "Done task", status: "completed", source_kind: "manual_idea", score: 60, labels: [], created_at: 1, updated_at: 1 },
+      { id: "card-2", title: "Merged task", status: "merged", source_kind: "github_issue", score: 90, labels: [], created_at: 1, updated_at: 1 },
+    ];
+
+    const fetchMock = vi.fn((url: string) => {
+      if (url === "/api/pipeline/cards") {
+        return Promise.resolve(jsonResponse({ cards: terminalCards, updated_at: 0 }));
+      }
+      if (url.startsWith("/api/pipeline/journal")) {
+        return Promise.resolve(jsonResponse({ entries: [] }));
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    await screen.findByText("Done task");
+    // Indicator shows after initial load even with terminal-only cards
+    expect(screen.getByText(/Last updated/)).toBeTruthy();
+
+    await vi.advanceTimersByTimeAsync(20000);
+
+    // No extra fetch calls beyond initial load
+    expect(fetchMock.mock.calls.filter((c) => c[0] === "/api/pipeline/cards").length).toBe(1);
+
+    vi.useRealTimers();
+  });
 });
