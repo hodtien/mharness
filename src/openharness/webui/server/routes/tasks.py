@@ -80,3 +80,37 @@ async def stop_task(task_id: str) -> dict[str, object]:
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return _serialize_task(task)
+
+
+@router.post("/{task_id}/retry")
+async def retry_task(task_id: str) -> dict[str, object]:
+    """Re-create a failed task with the same parameters."""
+    manager = get_task_manager()
+    original = manager.get_task(task_id)
+    if original is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No task found with ID: {task_id}",
+        )
+    if original.status not in {"failed", "killed"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Can only retry failed/killed tasks, got: {original.status}",
+        )
+
+    if original.prompt:
+        new_task = await manager.create_agent_task(
+            prompt=original.prompt,
+            description=original.description,
+            cwd=str(original.cwd),
+            task_type=original.type,
+            model=original.metadata.get("model"),
+        )
+    else:
+        new_task = await manager.create_shell_task(
+            command=original.command,
+            description=original.description,
+            cwd=str(original.cwd),
+            task_type=original.type,
+        )
+    return _serialize_task(new_task)

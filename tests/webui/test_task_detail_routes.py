@@ -100,3 +100,52 @@ def test_stop_unknown_task_returns_404(tmp_path) -> None:
     response = client.post("/api/tasks/does-not-exist/stop", headers=AUTH)
 
     assert response.status_code == 404
+
+
+def test_retry_task_creates_new_task(tmp_path, monkeypatch) -> None:
+    original = _add_task(tmp_path, status="failed")
+    client = _client(tmp_path)
+
+    async def fake_create_shell_task(**kwargs) -> TaskRecord:
+        assert kwargs["command"] == "sleep 60"
+        assert kwargs["description"] == "Test task"
+        assert kwargs["task_type"] == "local_bash"
+        new_record = TaskRecord(
+            id="task-002",
+            type="local_bash",
+            status="running",
+            description=kwargs["description"],
+            cwd=kwargs["cwd"],
+            output_file=Path(tmp_path / "task-002.log"),
+            command=kwargs["command"],
+            created_at=200.0,
+            started_at=200.0,
+        )
+        return new_record
+
+    monkeypatch.setattr(get_task_manager(), "create_shell_task", fake_create_shell_task)
+
+    response = client.post(f"/api/tasks/{original.id}/retry", headers=AUTH)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == "task-002"
+    assert body["status"] == "running"
+    assert body["command"] == "sleep 60"
+
+
+def test_retry_unknown_task_returns_404(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.post("/api/tasks/does-not-exist/retry", headers=AUTH)
+
+    assert response.status_code == 404
+
+
+def test_retry_running_task_returns_400(tmp_path) -> None:
+    _add_task(tmp_path, status="running")
+    client = _client(tmp_path)
+
+    response = client.post("/api/tasks/task-001/retry", headers=AUTH)
+
+    assert response.status_code == 400
