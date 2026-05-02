@@ -755,3 +755,65 @@ def test_pipeline_cards_returns_serialized_cards(tmp_path) -> None:
     assert "source_ref" not in card1
     assert "metadata" not in card1
     assert "score_reasons" not in card1
+
+
+def test_pipeline_cards_post_requires_auth(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.post("/api/pipeline/cards", json={"title": "x"})
+    assert response.status_code == 401
+
+
+def test_pipeline_cards_post_enqueues_manual_idea(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/pipeline/cards",
+        headers={"Authorization": "Bearer test-token"},
+        json={"title": "Add dashboard", "body": "Show cards", "labels": ["ui"]},
+    )
+
+    assert response.status_code == 201
+    card = response.json()
+    assert card["title"] == "Add dashboard"
+    assert card["status"] == "queued"
+    assert card["source_kind"] == "manual_idea"
+    assert card["labels"] == ["ui"]
+    assert card["id"]
+
+    list_response = client.get(
+        "/api/pipeline/cards",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert list_response.status_code == 200
+    assert list_response.json()["cards"] == [card]
+
+
+def test_pipeline_cards_post_returns_409_for_duplicate_fingerprint(tmp_path) -> None:
+    client = _client(tmp_path)
+    payload = {"title": "Add dashboard", "body": "Show cards"}
+
+    first = client.post(
+        "/api/pipeline/cards",
+        headers={"Authorization": "Bearer test-token"},
+        json=payload,
+    )
+    duplicate = client.post(
+        "/api/pipeline/cards",
+        headers={"Authorization": "Bearer test-token"},
+        json=payload,
+    )
+
+    assert first.status_code == 201
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"]["error"] == "duplicate_card"
+    assert duplicate.json()["detail"]["card_id"] == first.json()["id"]
+
+
+def test_pipeline_cards_post_rejects_empty_title(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.post(
+        "/api/pipeline/cards",
+        headers={"Authorization": "Bearer test-token"},
+        json={"title": ""},
+    )
+    assert response.status_code == 422
