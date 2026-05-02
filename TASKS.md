@@ -13,6 +13,7 @@
   - [P4 — F3b/c: Models \& Agents](#p4--f3bc-models--agents)
   - [P5 — F4: Pipeline \& Tasks](#p5--f4-pipeline--tasks)
   - [P6 — F5: Auto Code-Review](#p6--f5-auto-code-review)
+  - [P7 — Gap Fixes: WebUI Integration](#p7--gap-fixes-webui-integration)
   - [Cross-cutting](#cross-cutting)
 
 ---
@@ -155,14 +156,37 @@ oh autopilot add idea "[P6.8] Test: auto_review service + review routes" --body 
 
 ---
 
-## Cross-cutting
+## P7 — Gap Fixes: WebUI Integration
 
 ```bash
-oh autopilot add idea "[X1] Docs: cập nhật WEBUI.md + tạo WEBUI-SETTINGS.md" --body "Cập nhật docs/WEBUI.md thêm section mô tả các tính năng mới: History/Resume, Mode toggles, Settings, Pipeline dashboard, Auto review. Tạo docs/WEBUI-SETTINGS.md hướng dẫn chi tiết cách cấu hình provider, models, agents qua Web UI. Tạo docs/WEBUI-PIPELINE.md hướng dẫn sử dụng Pipeline kanban + auto review."
+oh autopilot add idea "[P7.1] Frontend: History detail — xem transcript session cũ" --body "Trong /history page (HistoryPage.tsx): click vào history item mở drawer/modal. Gọi GET /api/history/{id} để lấy full snapshot. Hiển thị danh sách messages phân biệt role user/assistant bằng màu nền. Hỗ trợ scroll dài. Nút 'Resume session' trong drawer gọi POST /api/sessions {resume_id} rồi navigate /chat. Spawn agents: planner để thiết kế drawer layout → tdd-guide để viết tests trước → code-reviewer sau khi implement."
 
-oh autopilot add idea "[X2] Frontend: Error handling + loading states nhất quán" --body "Tạo shared components: LoadingSkeleton.tsx (pulse animation), ErrorBanner.tsx (retry button), EmptyState.tsx (icon + message). Áp dụng pattern: mỗi page fetch data → show skeleton → show content hoặc error. Toast notifications cho PATCH success/fail (tạo simple toast system dùng zustand, không thêm lib). Áp dụng cho tất cả pages P1-P6."
+oh autopilot add idea "[P7.2] Frontend: vim_enabled toggle trong Settings/Modes" --body "Trong ModesSettingsPage.tsx (P2.3): thêm toggle switch cho vim_enabled bên dưới Fast Mode. Label: 'Vim keybindings' với mô tả ngắn 'Enable vim key navigation in the chat input'. Đọc giá trị từ GET /api/modes, lưu qua PATCH /api/modes {vim_enabled: bool}. Debounce 0ms (toggle switch apply ngay). Cập nhật test modes routes để cover vim_enabled. Spawn agents: tdd-guide → viết test PATCH vim_enabled trước → implement toggle → code-reviewer."
+
+oh autopilot add idea "[P7.3] Frontend: Tasks drawer gọi GET /api/tasks/{id}" --body "Trong TasksPage.tsx (P5.9): khi user click mở drawer của một task, gọi GET /api/tasks/{id} để lấy full detail thay vì chỉ dùng data từ list payload. Spinner trong drawer khi đang fetch. Polling mỗi 3s khi task đang running để refresh output. Nút Retry cho tasks ở trạng thái failed. Spawn agents: tdd-guide → test drawer fetch detail API → implement → code-reviewer."
+
+oh autopilot add idea "[P7.4] Frontend: No-WebSocket live pipeline updates" --body "PipelinePage.tsx hiện chỉ fetch một lần. Thêm auto-refresh: interval polling mỗi 5s khi có card ở trạng thái active (running/preparing/verifying/repairing/pr_open/waiting_ci). Dừng polling khi tất cả cards ở trạng thái terminal. Hiển thị 'Last updated Xs ago' indicator. Không thêm thư viện mới. Spawn agents: planner → tdd-guide → code-reviewer."
+
+oh autopilot add idea "[P7.5] Frontend: edit/update custom model UI" --body "Trong ModelsSettingsPage.tsx (P4.3): các custom model (is_custom=true) hiện chỉ có nút delete. Thêm nút Edit mở form modal cho phép sửa label và context_window (model_id readonly). Submit → gọi DELETE rồi POST /api/models với data mới (vì không có PATCH endpoint). Toast success/error. Spawn agents: tdd-guide → test edit flow → implement → code-reviewer."
+
+oh autopilot add idea "[P7.6] Frontend: Agent detail page/modal" --body "Trong AgentsSettingsPage.tsx (P4.6): thêm nút 'View details' trên mỗi agent card. Click mở modal hiển thị: name, description đầy đủ, system prompt preview (truncate 500 chars với 'Show more'), source_file path, danh sách tools, model/effort/permission hiện tại với inline editor. Spawn agents: planner → tdd-guide → code-reviewer."
+
+oh autopilot add idea "[P7.7] Frontend: Pipeline card journal inline" --body "Trong pipeline card drawer (P5.7): hiện chỉ có action buttons. Thêm tab 'Activity' fetch GET /api/pipeline/journal?card_id={id}&limit=20. Hiển thị timeline: icon theo kind (merge_warning, code_review, ci_check...), summary text, relative timestamp. Auto-refresh 10s khi card active. Spawn agents: planner → tdd-guide → code-reviewer."
+
+oh autopilot add idea "[P7.8] Test: gap coverage P7.1–P7.7" --body "Tạo tests/webui/test_history_detail.py: GET /api/history/{id} trả messages list, truncation logic, 404. Cập nhật tests/webui/test_modes_routes.py: thêm test PATCH vim_enabled true/false. Cập nhật tests/webui/test_task_detail_routes.py: GET /api/tasks/{id} trả đúng fields. Spawn agents: tdd-guide (viết tests) → code-reviewer (review test quality)."
+
 ```
 
 ---
 
-**Tổng cộng**: 38 tasks (P0=3, P1=8, P2=6, P3=6, P4=7, P5=10, P6=8, Cross=2)
+## Cross-cutting
+
+```bash
+oh autopilot add idea "[X1] Docs: cập nhật WEBUI.md + tạo WEBUI-SETTINGS.md" --body "Cập nhật docs/WEBUI.md thêm section mô tả các tính năng mới: History/Resume, Mode toggles, Settings, Pipeline dashboard, Auto review. Tạo docs/WEBUI-SETTINGS.md hướng dẫn chi tiết cách cấu hình provider, models, agents qua Web UI. Tạo docs/WEBUI-PIPELINE.md hướng dẫn sử dụng Pipeline kanban + auto review. Spawn agents: doc-updater."
+
+oh autopilot add idea "[X2] Frontend: Error handling + loading states nhất quán" --body "Tạo shared components: LoadingSkeleton.tsx (pulse animation), ErrorBanner.tsx (retry button), EmptyState.tsx (icon + message). Áp dụng pattern: mỗi page fetch data → show skeleton → show content hoặc error. Toast notifications cho PATCH success/fail (tạo simple toast system dùng zustand, không thêm lib). Áp dụng cho tất cả pages P1-P7. Spawn agents: planner → tdd-guide → code-reviewer → a11y-architect."
+```
+
+---
+
+**Tổng cộng**: 58 tasks (P0=3, P1=8, P2=6, P3=6, P4=7, P5=10, P6=8, P7=8, Cross=2)
