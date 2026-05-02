@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 
 from openharness.services.session_storage import get_project_session_dir, save_session_snapshot
@@ -647,3 +649,109 @@ def test_verify_provider_reports_missing_api_key(tmp_path, monkeypatch) -> None:
     assert response.json()["ok"] is False
     assert response.json()["error"] == "No API key available."
     assert response.json()["models"] is None
+
+
+def test_pipeline_cards_requires_auth(tmp_path) -> None:
+    client = _client(tmp_path)
+    assert client.get("/api/pipeline/cards").status_code == 401
+
+
+def test_pipeline_cards_returns_empty_when_no_registry_file(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.get(
+        "/api/pipeline/cards",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"cards": [], "updated_at": 0.0}
+
+
+def test_pipeline_cards_returns_empty_for_missing_autopilot_dir(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.get(
+        "/api/pipeline/cards",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"cards": [], "updated_at": 0.0}
+
+
+def test_pipeline_cards_returns_empty_for_malformed_json(tmp_path) -> None:
+    (tmp_path / ".openharness" / "autopilot").mkdir(parents=True)
+    (tmp_path / ".openharness" / "autopilot" / "registry.json").write_text("{bad")
+    client = _client(tmp_path)
+    response = client.get(
+        "/api/pipeline/cards",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"cards": [], "updated_at": 0.0}
+
+
+def test_pipeline_cards_returns_serialized_cards(tmp_path) -> None:
+    registry = {
+        "version": 1,
+        "updated_at": 1000.5,
+        "cards": [
+            {
+                "id": "card-1",
+                "title": "Fix bug",
+                "body": "Fix the bug",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "source_ref": "ap-1",
+                "fingerprint": "manual_idea:abc123",
+                "score": 42,
+                "score_reasons": [],
+                "labels": ["bug", "urgent"],
+                "metadata": {},
+                "created_at": 900.0,
+                "updated_at": 950.0,
+            },
+            {
+                "id": "card-2",
+                "title": "Add feature",
+                "body": "",
+                "status": "running",
+                "source_kind": "github_issue",
+                "source_ref": "#123",
+                "fingerprint": "github_issue:def456",
+                "score": 10,
+                "score_reasons": [],
+                "labels": [],
+                "metadata": {},
+                "created_at": 800.0,
+                "updated_at": 800.0,
+            },
+        ],
+    }
+    (tmp_path / ".openharness" / "autopilot").mkdir(parents=True)
+    (tmp_path / ".openharness" / "autopilot" / "registry.json").write_text(
+        json.dumps(registry)
+    )
+    client = _client(tmp_path)
+    response = client.get(
+        "/api/pipeline/cards",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["updated_at"] == 1000.5
+    assert len(data["cards"]) == 2
+
+    card1 = data["cards"][0]
+    assert card1["id"] == "card-1"
+    assert card1["title"] == "Fix bug"
+    assert card1["status"] == "queued"
+    assert card1["source_kind"] == "manual_idea"
+    assert card1["score"] == 42
+    assert card1["labels"] == ["bug", "urgent"]
+    assert card1["created_at"] == 900.0
+    assert card1["updated_at"] == 950.0
+    # Extra fields (body, fingerprint, source_ref, metadata, score_reasons)
+    # must NOT appear in the response.
+    assert "body" not in card1
+    assert "fingerprint" not in card1
+    assert "source_ref" not in card1
+    assert "metadata" not in card1
+    assert "score_reasons" not in card1

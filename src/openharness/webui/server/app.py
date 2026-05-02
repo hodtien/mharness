@@ -22,6 +22,7 @@ from openharness.webui.server.routes import health as health_routes
 from openharness.webui.server.routes import history as history_routes
 from openharness.webui.server.routes import modes as modes_routes
 from openharness.webui.server.routes import models as models_routes
+from openharness.webui.server.routes import pipeline as pipeline_routes
 from openharness.webui.server.routes import providers as providers_routes
 from openharness.webui.server.routes import sessions as sessions_routes
 from openharness.webui.server.routes import tasks as tasks_routes
@@ -149,6 +150,7 @@ def create_app(
     app.include_router(history_routes.router)
     app.include_router(modes_routes.router)
     app.include_router(models_routes.router)
+    app.include_router(pipeline_routes.router)
     app.include_router(providers_routes.router)
     app.include_router(ws_routes.router)
 
