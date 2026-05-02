@@ -202,6 +202,14 @@ class BackgroundTaskManager:
             return content[-max_bytes:]
         return content
 
+    def read_task_output_lines(self, task_id: str, *, tail: int = 200) -> list[str]:
+        """Return the last ``tail`` lines of a task's output file."""
+        task = self._require_task(task_id)
+        lines = task.output_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        if tail:
+            return lines[-tail:]
+        return lines
+
     def register_completion_listener(self, listener: CompletionListener) -> Callable[[], None]:
         """Register a callback fired whenever a task reaches a terminal state."""
         listener_id = uuid4().hex
