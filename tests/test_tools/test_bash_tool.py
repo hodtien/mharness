@@ -213,3 +213,43 @@ async def test_bash_tool_timeout_does_not_hang_when_stdout_stays_open(monkeypatc
 
     assert result.is_error is True
     assert result.metadata["timed_out"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sentinel", ["null", "Null", "NULL", "undefined", "none", "None", "."])
+async def test_bash_cwd_sentinel_falls_back_to_context_cwd(monkeypatch, tmp_path: Path, sentinel: str):
+    seen_kwargs: dict[str, object] = {}
+    process = _FakeProcess(stdout=_FakeStdout([b"ok\n"]), returncode=0)
+
+    async def fake_create_shell_subprocess(*args, **kwargs):
+        seen_kwargs.update(kwargs)
+        return process
+
+    monkeypatch.setitem(BashTool.execute.__globals__, "create_shell_subprocess", fake_create_shell_subprocess)
+
+    await BashTool().execute(
+        BashToolInput(command="echo ok", cwd=sentinel),
+        ToolExecutionContext(cwd=tmp_path),
+    )
+
+    assert seen_kwargs["cwd"] == tmp_path
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("empty_cwd", ["", "   ", "\t"])
+async def test_bash_cwd_empty_or_whitespace_falls_back_to_context_cwd(monkeypatch, tmp_path: Path, empty_cwd: str):
+    seen_kwargs: dict[str, object] = {}
+    process = _FakeProcess(stdout=_FakeStdout([b"ok\n"]), returncode=0)
+
+    async def fake_create_shell_subprocess(*args, **kwargs):
+        seen_kwargs.update(kwargs)
+        return process
+
+    monkeypatch.setitem(BashTool.execute.__globals__, "create_shell_subprocess", fake_create_shell_subprocess)
+
+    await BashTool().execute(
+        BashToolInput(command="echo ok", cwd=empty_cwd if empty_cwd else None),
+        ToolExecutionContext(cwd=tmp_path),
+    )
+
+    assert seen_kwargs["cwd"] == tmp_path

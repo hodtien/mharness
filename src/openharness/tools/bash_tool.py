@@ -24,6 +24,9 @@ class BashToolInput(BaseModel):
     timeout_seconds: int = Field(default=600, ge=1, le=600)
 
 
+_CWD_SENTINELS: frozenset[str] = frozenset({"null", "undefined", "none", "."})
+
+
 class BashTool(BaseTool):
     """Execute a shell command with stdout/stderr capture."""
 
@@ -32,7 +35,12 @@ class BashTool(BaseTool):
     input_model = BashToolInput
 
     async def execute(self, arguments: BashToolInput, context: ToolExecutionContext) -> ToolResult:
-        cwd = Path(arguments.cwd).expanduser() if arguments.cwd else context.cwd
+        raw_cwd = arguments.cwd
+        stripped = raw_cwd.strip() if raw_cwd else ""
+        if stripped and stripped.lower() not in _CWD_SENTINELS:
+            cwd = Path(stripped).expanduser()
+        else:
+            cwd = context.cwd
         preflight_error = _preflight_interactive_command(arguments.command)
         if preflight_error is not None:
             return ToolResult(
