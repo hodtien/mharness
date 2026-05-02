@@ -1297,6 +1297,22 @@ def test_pull_base_branch_failure_is_non_fatal(tmp_path: Path, monkeypatch) -> N
     assert "post-merge pull failed" in journal
 
 
+def test_list_cards_queued_before_merged(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    card_merged, _ = store.enqueue_card(source_kind="manual_idea", title="old merged task", body="")
+    store.update_status(card_merged.id, status="merged")
+
+    store.enqueue_card(source_kind="manual_idea", title="new queued task", body="")
+
+    cards = store.list_cards()
+    statuses = [c.status for c in cards]
+
+    assert statuses.index("queued") < statuses.index("merged")
+
+
 def test_pull_base_branch_fetch_and_ff_only(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

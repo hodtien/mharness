@@ -54,6 +54,22 @@ _SOURCE_BASE_SCORES: dict[RepoTaskSource, int] = {
 _BUG_HINTS = ("bug", "fix", "failure", "broken", "regression", "crash", "error", "issue")
 _URGENT_HINTS = ("urgent", "p0", "p1", "high", "critical", "blocker")
 
+_LIST_STATUS_PRIORITY = {
+    "queued": 0,
+    "accepted": 1,
+    "preparing": 2,
+    "running": 3,
+    "verifying": 4,
+    "pr_open": 5,
+    "waiting_ci": 6,
+    "repairing": 7,
+    "completed": 8,
+    "merged": 9,
+    "failed": 10,
+    "rejected": 11,
+    "superseded": 12,
+}
+
 _DEFAULT_AUTOPILOT_POLICY = {
     "intake": {
         "mode": "unified_queue",
@@ -297,7 +313,15 @@ class RepoAutopilotStore:
         cards = self._load_registry().cards
         if status is not None:
             cards = [card for card in cards if card.status == status]
-        return sorted(cards, key=lambda card: (-card.score, card.created_at, card.title.lower()))
+        return sorted(
+            cards,
+            key=lambda card: (
+                _LIST_STATUS_PRIORITY.get(card.status, 8),
+                -card.score,
+                card.created_at,
+                card.title.lower(),
+            ),
+        )
 
     def get_card(self, card_id: str) -> RepoTaskCard | None:
         for card in self._load_registry().cards:

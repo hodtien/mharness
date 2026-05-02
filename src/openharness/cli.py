@@ -1217,6 +1217,7 @@ def autopilot_status_cmd(
 def autopilot_list_cmd(
     status: str | None = typer.Argument(None, help="Optional status filter"),
     cwd: str = typer.Option(str(Path.cwd()), "--cwd", help="Repository root"),
+    limit: int = typer.Option(50, "--limit", help="Max cards to show (0 = all)"),
 ) -> None:
     """List repo autopilot cards."""
     from openharness.autopilot import RepoAutopilotStore
@@ -1226,11 +1227,14 @@ def autopilot_list_cmd(
     if not cards:
         print("No autopilot cards.")
         return
-    for card in cards[:20]:
+    shown = cards if limit == 0 else cards[:limit]
+    for card in shown:
         print(f"{card.id} [{card.status}] score={card.score} {card.title}")
         print(f"  source={card.source_kind} ref={card.source_ref or '-'}")
         if card.body:
             print(f"  {_safe_short(card.body)}")
+    if limit and len(cards) > limit:
+        print(f"  ... {len(cards) - limit} more (use --limit 0 to show all)")
 
 
 @autopilot_app.command("add")
