@@ -13,6 +13,27 @@ function mockApiFetchWithSessions(sessions: HistorySession[]) {
         json: async () => ({ sessions }),
       });
     }
+    const detailSession = sessions.find(
+      (session) => url === `/api/history/${session.session_id}`,
+    );
+    if (detailSession) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          ...detailSession,
+          messages: [
+            {
+              role: "user",
+              content: [{ type: "text", text: "previous user message" }],
+            },
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "previous assistant reply" }],
+            },
+          ],
+        }),
+      });
+    }
     if (url === "/api/sessions" && callCount === 0) {
       callCount++;
       return Promise.resolve({
@@ -107,6 +128,65 @@ describe("HistoryPage", () => {
     );
 
     const resumeBtn = await screen.findByRole("button", { name: /^Resume$/i });
+    fireEvent.click(resumeBtn);
+
+    await waitFor(() => {
+      expect(onResume).toHaveBeenCalledWith("new-session-123", "old-session-456");
+      expect(window.location.pathname).toBe("/chat");
+    });
+  });
+
+  it("shows 'View' button on session items", async () => {
+    mockLocalStorage();
+    mockApiFetchWithSessions([
+      {
+        session_id: "old-session-456",
+        summary: "Fix bug in auth",
+        model: "claude-sonnet",
+        message_count: 12,
+        created_at: Date.now() / 1000,
+      },
+    ]);
+
+    render(
+      <BrowserRouter>
+        <HistoryPage onResume={vi.fn()} />
+      </BrowserRouter>,
+    );
+
+    const viewBtn = await screen.findByRole("button", { name: /^View$/i });
+    expect(viewBtn).toBeTruthy();
+  });
+
+  it("calls onResumeFromDrawer callback and navigates to /chat when drawer Resume is clicked", async () => {
+    mockLocalStorage();
+    mockApiFetchWithSessions([
+      {
+        session_id: "old-session-456",
+        summary: "Fix bug in auth",
+        model: "claude-sonnet",
+        message_count: 12,
+        created_at: Date.now() / 1000,
+      },
+    ]);
+
+    const onResume = vi.fn();
+    render(
+      <BrowserRouter>
+        <HistoryPage onResume={onResume} />
+      </BrowserRouter>,
+    );
+
+    const viewBtn = await screen.findByRole("button", { name: /^View$/i });
+    fireEvent.click(viewBtn);
+
+    // Wait for drawer content to load.
+    await waitFor(() => {
+      expect(screen.getByText("previous user message")).toBeTruthy();
+    });
+
+    // Click "Resume session" in the drawer.
+    const resumeBtn = screen.getByRole("button", { name: /resume session/i });
     fireEvent.click(resumeBtn);
 
     await waitFor(() => {
