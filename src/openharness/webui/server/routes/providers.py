@@ -9,11 +9,15 @@ Web UI matches what the CLI and TUI display.
 
 from __future__ import annotations
 
+from urllib.parse import urljoin
+
+import httpx
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from openharness.auth.storage import store_credential
+from openharness.auth.storage import load_credential, store_credential
 from openharness.config.settings import (
+    ProviderProfile,
     auth_source_uses_api_key,
     credential_storage_provider_name,
     load_settings,
@@ -263,3 +267,231 @@ def set_provider_credentials(
     if api_key is not None:
         response["api_key"] = _mask_api_key(api_key)
     return response
+
+
+# ---------------------------------------------------------------------------
+# Provider verify
+# ---------------------------------------------------------------------------
+
+_VERIFY_TIMEOUT_S = 10.0
+
+
+class VerifyResult(BaseModel):
+    """Response schema for ``POST /api/providers/{name}/verify``."""
+
+    ok: bool
+    error: str | None = None
+    models: list[str] | None = None
+
+
+async def _fetch_models_via_openai_client(
+    base_url: str,
+    api_key: str,
+) -> tuple[bool, str | None, list[str]]:
+    """Call GET {base_url}/models using the OpenAI client.
+
+    Returns (ok, error, models).
+    """
+    try:
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=_VERIFY_TIMEOUT_S)
+        try:
+            models_data = await client.models.with_options(timeout=_VERIFY_TIMEOUT_S).list()
+        finally:
+            await client.close()
+        model_ids = sorted(m.id for m in models_data.data)
+        return (True, None, model_ids)
+    except Exception as exc:  # pragma: no cover — network errors in tests are covered elsewhere
+        return (False, str(exc), [])
+
+
+async def _fetch_models_via_httpx(
+    base_url: str,
+    api_key: str,
+) -> tuple[bool, str | None, list[str]]:
+    """Call GET {base_url}/models using httpx as a fallback.
+
+    Used when the provider does not speak OpenAI client format.
+    Returns (ok, error, models).
+    """
+    url = urljoin(base_url.rstrip("/") + "/", "models")
+    try:
+        async with httpx.AsyncClient(timeout=_VERIFY_TIMEOUT_S) as client:
+            response = await client.get(
+                url,
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            if not response.is_success:
+                return (False, f"HTTP {response.status_code}: {response.text[:200]}", [])
+            data = response.json()
+            # OpenAI-compatible: { "object": "list", "data": [{ "id": "...", ... }, ...] }
+            model_ids = sorted(item["id"] for item in data.get("data", []) if isinstance(item, dict))
+            return (True, None, model_ids)
+    except Exception as exc:
+        return (False, str(exc), [])
+
+
+async def _completion_probe(
+    base_url: str,
+    api_key: str,
+    model: str,
+) -> str | None:
+    """Send a minimal completion probe (~10 tokens) and return the error message on failure."""
+    try:
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=_VERIFY_TIMEOUT_S)
+        try:
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "x"}],
+                max_tokens=10,
+                stream=True,
+            )
+            # Drain the stream to trigger the actual request.
+            async for _ in stream:
+                pass
+            return None
+        finally:
+            await client.close()
+    except Exception as exc:
+        return str(exc)
+
+
+def _default_base_url_for_profile(profile: ProviderProfile) -> str | None:
+    """Return the default base_url for a profile's api_format / provider."""
+    # Anthropic (claude-api / claude-subscription) uses a non-standard API.
+    # We fall back to the completion probe for those.
+    if profile.api_format == "anthropic":
+        return None
+    if profile.api_format == "copilot":
+        return None
+    # All other api_format="openai" profiles use an OpenAI-compatible base_url.
+    if profile.base_url:
+        return profile.base_url
+    if profile.provider == "openai":
+        return "https://api.openai.com/v1"
+    # Use the profile's provider name to look up built-in defaults.
+    from openharness.api.registry import find_by_name
+
+    spec = find_by_name(profile.provider)
+    if spec is not None and spec.default_base_url:
+        return spec.default_base_url
+    return None
+
+
+async def _resolve_api_key(profile: ProviderProfile) -> str | None:
+    """Resolve the API key for a profile, checking env / file store."""
+    import os
+
+    storage_provider = credential_storage_provider_name("", profile)
+    auth_source = profile.auth_source
+
+    # Env variable fallbacks
+    env_map = {
+        "anthropic_api_key": "ANTHROPIC_API_KEY",
+        "openai_api_key": "OPENAI_API_KEY",
+        "dashscope_api_key": "DASHSCOPE_API_KEY",
+        "moonshot_api_key": "MOONSHOT_API_KEY",
+        "gemini_api_key": "GEMINI_API_KEY",
+        "minimax_api_key": "MINIMAX_API_KEY",
+    }
+    env_var = env_map.get(auth_source)
+    if env_var and os.environ.get(env_var):
+        return os.environ[env_var]
+    if os.environ.get("OPENAI_API_KEY") and profile.api_format == "openai":
+        return os.environ["OPENAI_API_KEY"]
+    if os.environ.get("ANTHROPIC_API_KEY") and profile.api_format == "anthropic":
+        return os.environ["ANTHROPIC_API_KEY"]
+
+    # File store
+    key = load_credential(storage_provider, "api_key")
+    if key:
+        return key
+
+    # Session-level key (in-memory settings, not persisted)
+    try:
+        settings = load_settings()
+        if getattr(settings, "api_key", None):
+            return settings.api_key
+    except Exception:
+        pass
+
+    return None
+
+
+@router.post("/{name}/verify", response_model=VerifyResult)
+async def verify_provider(name: str) -> VerifyResult:
+    """Test connectivity to a provider profile.
+
+    Strategy:
+    1. If the profile uses an OpenAI-compatible API format, try ``GET /v1/models``
+       (free, returns model list) via the OpenAI client first, then httpx fallback.
+    2. If /v1/models is unavailable (404/405) or returns no models, fall back to a
+       minimal completion probe (~10 tokens).
+    3. Profiles without a known base_url (anthropic-format, copilot-format) skip
+       /v1/models and go straight to the completion probe.
+
+    Response:
+      - ``ok``: True if the provider was reachable.
+      - ``error``: Human-readable error message when ``ok`` is False.
+      - ``models``: List of model IDs when /v1/models succeeded; absent otherwise.
+
+    Timeout: 10 seconds total.
+    """
+    settings = load_settings()
+    profiles = settings.merged_profiles()
+    if name not in profiles:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown provider profile: {name}",
+        )
+
+    profile = profiles[name]
+    base_url = _default_base_url_for_profile(profile)
+    api_key = await _resolve_api_key(profile)
+
+    if profile.api_format == "anthropic":
+        # No base_url for Anthropic API — skip /v1/models, go straight to probe.
+        error = await _completion_probe(
+            "https://api.anthropic.com/v1",
+            api_key or "",
+            profile.resolved_model,
+        )
+        if error:
+            return VerifyResult(ok=False, error=error)
+        return VerifyResult(ok=True)
+
+    if profile.api_format == "copilot":
+        # Copilot uses OAuth — we can't meaningfully probe it without OAuth tokens.
+        return VerifyResult(ok=False, error="Copilot uses OAuth; connection probing is not supported.")
+
+    if not base_url:
+        # No base_url means we can't reach the provider at all.
+        return VerifyResult(ok=False, error="No base_url configured for this provider.")
+
+    if not api_key:
+        return VerifyResult(ok=False, error="No API key available.")
+
+    # Priority: OpenAI client → httpx fallback → completion probe
+    models_found: list[str] = []
+    models_error: str | None = None
+
+    # Try OpenAI client first
+    ok, models_error, models_found = await _fetch_models_via_openai_client(base_url, api_key)
+
+    # Fall back to httpx if the OpenAI client got a non-successful response
+    if not ok and models_error and ("404" in models_error or "405" in models_error):
+        ok, models_error, models_found = await _fetch_models_via_httpx(base_url, api_key)
+
+    if ok and models_found:
+        return VerifyResult(ok=True, models=models_found)
+
+    # If models fetch failed or returned no models, try a completion probe.
+    completion_error = await _completion_probe(base_url, api_key, profile.resolved_model)
+
+    if completion_error:
+        combined = "; ".join(filter(None, [models_error, completion_error]))
+        return VerifyResult(ok=False, error=combined or "Connection failed.")
+    return VerifyResult(ok=True)
