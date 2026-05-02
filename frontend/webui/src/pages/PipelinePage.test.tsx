@@ -178,4 +178,141 @@ describe("PipelinePage", () => {
       expect(body).toEqual({ action: "accept" });
     });
   });
+
+  it("opens the New idea modal and submits POST /api/pipeline/cards", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/pipeline/cards" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve(jsonResponse({ cards: sampleCards, updated_at: 0 }));
+      }
+      if (url.startsWith("/api/pipeline/journal")) {
+        return Promise.resolve(jsonResponse({ entries: [] }));
+      }
+      if (url === "/api/pipeline/cards" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          id: "card-new-1",
+          title: "New thing",
+          status: "queued",
+          source_kind: "manual_idea",
+          score: 0,
+          labels: ["a", "b"],
+          created_at: Date.now() / 1000,
+          updated_at: Date.now() / 1000,
+        }));
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    await screen.findByText("Add login form");
+
+    fireEvent.click(screen.getByRole("button", { name: /\+ New idea/i }));
+
+    expect(await screen.findByRole("dialog", { name: /new idea/i })).toBeTruthy();
+
+    const titleInput = screen.getByPlaceholderText(/what needs to be done/i);
+    fireEvent.change(titleInput, { target: { value: "New thing" } });
+
+    const bodyInput = screen.getByPlaceholderText(/optional details/i);
+    fireEvent.change(bodyInput, { target: { value: "details" } });
+
+    const labelsInput = screen.getByPlaceholderText(/frontend, bug/i);
+    fireEvent.change(labelsInput, { target: { value: "a, b , " } });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Submit$/i }));
+
+    await waitFor(() => {
+      const postCalls = fetchMock.mock.calls.filter(
+        (c) => c[0] === "/api/pipeline/cards" && (c[1] as RequestInit | undefined)?.method === "POST",
+      );
+      expect(postCalls.length).toBe(1);
+      const body = JSON.parse(String((postCalls[0][1] as RequestInit).body ?? "{}"));
+      expect(body).toEqual({ title: "New thing", body: "details", labels: ["a", "b"] });
+    });
+  });
+
+  it("loads policy YAML and saves via PATCH /api/pipeline/policy", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/pipeline/cards" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve(jsonResponse({ cards: [], updated_at: 0 }));
+      }
+      if (url.startsWith("/api/pipeline/journal")) {
+        return Promise.resolve(jsonResponse({ entries: [] }));
+      }
+      if (url === "/api/pipeline/policy" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve(jsonResponse({ yaml_content: "intake: {}\n", parsed: {} }));
+      }
+      if (url === "/api/pipeline/policy" && init?.method === "PATCH") {
+        return Promise.resolve(jsonResponse({ yaml_content: "intake: {}\nfoo: bar\n", parsed: {} }));
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /^Policy$/i }));
+
+    const textarea = await screen.findByDisplayValue(/intake: {}/);
+    fireEvent.change(textarea, { target: { value: "intake: {}\nfoo: bar\n" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await waitFor(() => {
+      const patchCalls = fetchMock.mock.calls.filter(
+        (c) => c[0] === "/api/pipeline/policy" && (c[1] as RequestInit | undefined)?.method === "PATCH",
+      );
+      expect(patchCalls.length).toBe(1);
+      const body = JSON.parse(String((patchCalls[0][1] as RequestInit).body ?? "{}"));
+      expect(body.yaml_content).toBe("intake: {}\nfoo: bar\n");
+    });
+  });
+
+  it("shows validation error when policy PATCH returns 400", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/pipeline/cards" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve(jsonResponse({ cards: [], updated_at: 0 }));
+      }
+      if (url.startsWith("/api/pipeline/journal")) {
+        return Promise.resolve(jsonResponse({ entries: [] }));
+      }
+      if (url === "/api/pipeline/policy" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve(jsonResponse({ yaml_content: "bad: [", parsed: null }));
+      }
+      if (url === "/api/pipeline/policy" && init?.method === "PATCH") {
+        return Promise.resolve({
+          ok: false,
+          status: 400,
+          statusText: "Bad Request",
+          headers: { get: () => null },
+          json: async () => ({ detail: { error: "invalid_yaml", message: "bad yaml syntax" } }),
+          text: async () => "{}",
+        });
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /^Policy$/i }));
+    await screen.findByDisplayValue(/bad:/);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await screen.findByText(/400 Bad Request/i);
+  });
 });

@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
-import { apiFetch } from "../api/client";
+import { useEffect, useState, useCallback, useRef, type FormEvent } from "react";
+import { apiFetch, getToken } from "../api/client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +41,241 @@ export interface JournalEntry {
   summary: string;
   task_id: string | null;
   metadata: Record<string, unknown>;
+}
+
+// ─── New Idea Modal ────────────────────────────────────────────────────────────
+
+interface NewIdeaModalProps {
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function NewIdeaModal({ onClose, onSuccess }: NewIdeaModalProps) {
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [labelsRaw, setLabelsRaw] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    titleRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const labels = labelsRaw
+        ? labelsRaw.split(",").map((l) => l.trim()).filter(Boolean)
+        : undefined;
+      await apiFetch<PipelineCard>("/api/pipeline/cards", {
+        method: "POST",
+        body: JSON.stringify({ title: title.trim(), body: body.trim() || undefined, labels }),
+        headers: { "Content-Type": "application/json" },
+      });
+      onSuccess();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} aria-hidden="true" />
+      <div
+        className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label="New idea"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-[var(--text)]">New idea</h2>
+          <button
+            onClick={onClose}
+            className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] p-1.5 text-sm text-[var(--text-dim)] transition hover:border-[var(--accent)]/40 hover:text-[var(--text)]"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[var(--text-dim)]">
+              Title <span className="text-red-400">*</span>
+            </label>
+            <input
+              ref={titleRef}
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="What needs to be done?"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] placeholder-[var(--text-dim)]/50 focus:border-[var(--accent)]/60 focus:outline-none"
+              required
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[var(--text-dim)]">
+              Body
+            </label>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Optional details…"
+              rows={4}
+              className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] placeholder-[var(--text-dim)]/50 focus:border-[var(--accent)]/60 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[var(--text-dim)]">
+              Labels <span className="text-[var(--text-dim)]/60">(comma-separated)</span>
+            </label>
+            <input
+              type="text"
+              value={labelsRaw}
+              onChange={(e) => setLabelsRaw(e.target.value)}
+              placeholder="frontend, bug, enhancement"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] placeholder-[var(--text-dim)]/50 focus:border-[var(--accent)]/60 focus:outline-none"
+            />
+          </div>
+          {error && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+              {error}
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text)] transition hover:border-[var(--accent)]/40"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!title.trim() || submitting}
+              className="rounded-lg border border-emerald-500/40 bg-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/30 disabled:opacity-40"
+            >
+              {submitting ? "Submitting…" : "Submit"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </>
+  );
+}
+
+// ─── Policy Tab ────────────────────────────────────────────────────────────────
+
+interface PolicyTabProps {
+  onSaved: () => void;
+}
+
+function PolicyTab({ onSaved }: PolicyTabProps) {
+  const [yamlContent, setYamlContent] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    apiFetch<{ yaml_content: string; parsed: unknown }>("/api/pipeline/policy")
+      .then((data) => {
+        setYamlContent(data.yaml_content);
+      })
+      .catch((err) => setLoadError(String(err)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaveError(null);
+    setSaving(true);
+    setSaved(false);
+    try {
+      const res = await fetch("/api/pipeline/policy", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ yaml_content: yamlContent }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        let msg = `${res.status} ${res.statusText}`;
+        if (body.message) msg = body.message;
+        if (body.missing) msg = `Missing required keys: ${body.missing.join(", ")}`;
+        throw new Error(msg);
+      }
+      setSaved(true);
+      onSaved();
+    } catch (err) {
+      setSaveError(String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <span className="text-sm text-[var(--text-dim)]">Loading policy…</span>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+          {loadError}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 flex-col p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs text-[var(--text-dim)]">
+          Edit <code className="rounded bg-[var(--panel-2)] px-1 py-0.5">.openharness/autopilot/autopilot_policy.yaml</code>
+        </p>
+        <div className="flex items-center gap-3">
+          {saved && (
+            <span className="text-xs text-emerald-400">Saved ✓</span>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-lg border border-[var(--accent)]/40 bg-[var(--accent)]/20 px-4 py-1.5 text-sm font-medium text-[var(--accent)] transition hover:bg-[var(--accent)]/30 disabled:opacity-40"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+      <textarea
+        value={yamlContent}
+        onChange={(e) => { setYamlContent(e.target.value); setSaved(false); }}
+        className="flex-1 resize-none rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-4 font-mono text-sm text-[var(--text)] focus:border-[var(--accent)]/60 focus:outline-none"
+        spellCheck={false}
+      />
+      {saveError && (
+        <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+          {saveError}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Kanban columns ────────────────────────────────────────────────────────────
@@ -269,6 +504,8 @@ function Drawer({ card, journal, onClose, onAction, loadingAction }: DrawerProps
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+type ActiveTab = "board" | "policy";
+
 export default function PipelinePage() {
   const [cards, setCards] = useState<PipelineCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -276,6 +513,14 @@ export default function PipelinePage() {
   const [selectedCard, setSelectedCard] = useState<PipelineCard | null>(null);
   const [journal, setJournal] = useState<JournalEntry[]>([]);
   const [loadingAction, setLoadingAction] = useState(false);
+  const [showNewIdea, setShowNewIdea] = useState(false);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("board");
+
+  const refreshCards = useCallback(() => {
+    apiFetch<{ cards: PipelineCard[]; updated_at: number }>("/api/pipeline/cards")
+      .then((data) => setCards(data.cards))
+      .catch((err) => console.error("refresh cards failed:", err));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -309,16 +554,14 @@ export default function PipelinePage() {
           headers: { "Content-Type": "application/json" },
         });
         setSelectedCard(null);
-        // Refresh cards
-        const data = await apiFetch<{ cards: PipelineCard[]; updated_at: number }>("/api/pipeline/cards");
-        setCards(data.cards);
+        refreshCards();
       } catch (err) {
         console.error("action failed:", err);
       } finally {
         setLoadingAction(false);
       }
     },
-    [],
+    [refreshCards],
   );
 
   if (loading) {
@@ -341,44 +584,93 @@ export default function PipelinePage() {
 
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">
-      <div className="flex flex-1 overflow-x-auto overflow-y-hidden p-4 gap-4">
-        {COLUMNS.map((col) => {
-          const colCards = cards.filter((c) => col.statuses.includes(c.status));
-          return (
-            <div
-              key={col.id}
-              className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]"
-            >
-              {/* Column header */}
-              <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">
-                  {col.label}
-                </span>
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--panel-2)] px-1.5 text-[10px] font-medium text-[var(--text-dim)]">
-                  {colCards.length}
-                </span>
-              </div>
-
-              {/* Cards */}
-              <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                {colCards.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--text-dim)]">
-                    No cards
-                  </div>
-                ) : (
-                  colCards.map((card) => (
-                    <Card
-                      key={card.id}
-                      card={card}
-                      onClick={() => setSelectedCard(card)}
-                    />
-                  ))
-                )}
-              </div>
-            </div>
-          );
-        })}
+      {/* Tab bar */}
+      <div className="flex items-center justify-between border-b border-[var(--border)] px-4 pt-3">
+        <div className="flex gap-1">
+          <button
+            onClick={() => setActiveTab("board")}
+            className={`rounded-t-lg border px-4 py-2 text-sm font-medium transition ${
+              activeTab === "board"
+                ? "border-b-0 border-[var(--border)] bg-[var(--panel)] text-[var(--text)]"
+                : "border-b border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)] hover:text-[var(--text)]"
+            }`}
+          >
+            Board
+          </button>
+          <button
+            onClick={() => setActiveTab("policy")}
+            className={`rounded-t-lg border px-4 py-2 text-sm font-medium transition ${
+              activeTab === "policy"
+                ? "border-b-0 border-[var(--border)] bg-[var(--panel)] text-[var(--text)]"
+                : "border-b border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)] hover:text-[var(--text)]"
+            }`}
+          >
+            Policy
+          </button>
+        </div>
+        {activeTab === "board" && (
+          <button
+            onClick={() => setShowNewIdea(true)}
+            className="mb-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+          >
+            + New idea
+          </button>
+        )}
       </div>
+
+      {/* Content */}
+      {activeTab === "policy" ? (
+        <PolicyTab onSaved={() => {}} />
+      ) : (
+        <div className="flex flex-1 overflow-x-auto overflow-y-hidden p-4 gap-4">
+          {COLUMNS.map((col) => {
+            const colCards = cards.filter((c) => col.statuses.includes(c.status));
+            return (
+              <div
+                key={col.id}
+                className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]"
+              >
+                {/* Column header */}
+                <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">
+                    {col.label}
+                  </span>
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--panel-2)] px-1.5 text-[10px] font-medium text-[var(--text-dim)]">
+                    {colCards.length}
+                  </span>
+                </div>
+
+                {/* Cards */}
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  {colCards.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--text-dim)]">
+                      No cards
+                    </div>
+                  ) : (
+                    colCards.map((card) => (
+                      <Card
+                        key={card.id}
+                        card={card}
+                        onClick={() => setSelectedCard(card)}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {showNewIdea && (
+        <NewIdeaModal
+          onClose={() => setShowNewIdea(false)}
+          onSuccess={() => {
+            setShowNewIdea(false);
+            refreshCards();
+          }}
+        />
+      )}
 
       <Drawer
         card={selectedCard}
