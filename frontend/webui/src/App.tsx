@@ -24,14 +24,24 @@ interface LayoutProps {
   onResumeSession: (resumeId: string) => Promise<void>;
 }
 
-function AppLayout({ onInterrupt, onResumeSession }: LayoutProps) {
+export function AppLayout({ onInterrupt, onResumeSession }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const toggleSidebar = useCallback(() => {
+    if (window.matchMedia("(min-width: 640px)").matches) {
+      setSidebarCollapsed((v) => !v);
+      return;
+    }
+    setSidebarOpen((v) => !v);
+  }, []);
+
   return (
     <div className="flex h-full w-full overflow-hidden">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar open={sidebarOpen} collapsed={sidebarCollapsed} onClose={() => setSidebarOpen(false)} />
       <div className="flex flex-1 flex-col min-w-0">
         <Header
-          onToggleSidebar={() => setSidebarOpen((v) => !v)}
+          onToggleSidebar={toggleSidebar}
           onInterrupt={onInterrupt}
           onResumeSession={onResumeSession}
         />
