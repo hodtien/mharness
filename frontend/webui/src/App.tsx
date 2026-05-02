@@ -11,6 +11,7 @@ import ChatPage from "./pages/ChatPage";
 import HistoryPage from "./pages/HistoryPage";
 import ModesSettingsPage from "./pages/ModesSettingsPage";
 import ProviderSettingsPage from "./pages/ProviderSettingsPage";
+import ModelsSettingsPage from "./pages/ModelsSettingsPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 
 function RootRedirect() {
@@ -135,6 +136,10 @@ export default function App() {
           <Route
             path="/settings/provider"
             element={<ProviderSettingsPage />}
+          />
+          <Route
+            path="/settings/models"
+            element={<ModelsSettingsPage />}
           />
           <Route
             path="/settings/*"

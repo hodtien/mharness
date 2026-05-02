@@ -100,6 +100,23 @@ export interface ProviderActivateResponse {
   model?: string;
 }
 
+export interface ModelProfile {
+  id: string;
+  label: string;
+  context_window?: number | null;
+  is_default: boolean;
+  is_custom: boolean;
+}
+
+export type ModelsResponse = Record<string, ModelProfile[]>;
+
+export interface CustomModelBody {
+  provider: string;
+  model_id: string;
+  label?: string;
+  context_window?: number;
+}
+
 export const api = {
   health: () => apiFetch<{ status: string; version: string }>("/api/health"),
   meta: () => apiFetch<{ cwd?: string; model?: string; permission_mode?: string }>("/api/meta"),
@@ -142,6 +159,17 @@ export const api = {
     apiFetch<ProviderActivateResponse>(`/api/providers/${encodeURIComponent(name)}/activate`, {
       method: "POST",
     }),
+  listModels: () => apiFetch<ModelsResponse>("/api/models"),
+  addCustomModel: (body: CustomModelBody) =>
+    apiFetch<{ ok: boolean; provider: string; model_id: string }>("/api/models", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteCustomModel: (provider: string, modelId: string) =>
+    apiFetch<{ ok: boolean; provider: string; model_id: string }>(
+      `/api/models/${encodeURIComponent(provider)}/${encodeURIComponent(modelId)}`,
+      { method: "DELETE" },
+    ),
 };
 
 // ---------------- WebSocket session ----------------
