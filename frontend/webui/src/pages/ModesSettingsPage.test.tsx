@@ -59,6 +59,7 @@ describe("ModesSettingsPage", () => {
     expect(screen.getByText("Effort")).toBeTruthy();
     expect(screen.getByLabelText(/passes/i)).toBeTruthy();
     expect(screen.getByText("Fast Mode")).toBeTruthy();
+    expect(screen.getByText("Vim keybindings")).toBeTruthy();
     expect(screen.getByText("Output Style")).toBeTruthy();
     expect(screen.getByText("Theme")).toBeTruthy();
   });
@@ -75,11 +76,51 @@ describe("ModesSettingsPage", () => {
 
     await waitFor(() => expect(screen.getByText("Fast Mode")).toBeTruthy());
 
-    const toggle = screen.getByRole("checkbox");
-    fireEvent.click(toggle);
+    const fastModeToggle = screen.getByRole("checkbox", { name: /fast mode/i });
+    fireEvent.click(fastModeToggle);
 
     await waitFor(() => {
       expect(patchMock).toHaveBeenCalledWith("/api/modes", expect.objectContaining({ method: "PATCH" }));
+    });
+  });
+
+  it("renders vim keybindings toggle with correct initial state", async () => {
+    mockLocalStorage();
+    mockGetModes({ permission_mode: "default", fast_mode: false, vim_enabled: true, effort: "medium", passes: 1, output_style: "default", theme: "default" });
+
+    render(<BrowserRouter><ModesSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("Vim keybindings")).toBeTruthy());
+
+    const vimToggle = screen.getByRole("checkbox", { name: /vim keybindings/i });
+    expect((vimToggle as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("calls PATCH with vim_enabled when vim toggle changes", async () => {
+    mockLocalStorage();
+    const patchMock = vi.fn((_url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: true, effort: "low", passes: 1, output_style: "default", theme: "default" }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: false, effort: "low", passes: 1, output_style: "default", theme: "default" }) });
+    });
+    vi.stubGlobal("fetch", patchMock);
+
+    render(<BrowserRouter><ModesSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("Vim keybindings")).toBeTruthy());
+
+    const vimToggle = screen.getByRole("checkbox", { name: /vim keybindings/i });
+    fireEvent.click(vimToggle);
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith(
+        "/api/modes",
+        expect.objectContaining({
+          method: "PATCH",
+          body: expect.stringContaining("vim_enabled"),
+        }),
+      );
     });
   });
 });

@@ -161,12 +161,31 @@ export default function ModesSettingsPage() {
         <Section title="Fast Mode">
           <label className="inline-flex cursor-pointer items-center gap-3">
             <input
+              aria-label="Fast Mode"
               type="checkbox"
               className="h-5 w-5 accent-cyan-400"
               checked={modes.fast_mode}
               onChange={(event) => updateMode({ fast_mode: event.target.checked })}
             />
             <span className="text-sm text-[var(--text-dim)]">Use faster responses when available.</span>
+          </label>
+        </Section>
+
+        <Section
+          title="Vim keybindings"
+          description="Enable vim key navigation in the chat input"
+        >
+          <label className="inline-flex cursor-pointer items-center gap-3">
+            <input
+              aria-label="Vim keybindings"
+              type="checkbox"
+              className="h-5 w-5 accent-cyan-400"
+              checked={modes.vim_enabled}
+              onChange={(event) => updateMode({ vim_enabled: event.target.checked })}
+            />
+            <span className="text-sm text-[var(--text-dim)]">
+              {modes.vim_enabled ? "Enabled" : "Disabled"}
+            </span>
           </label>
         </Section>
 

@@ -155,3 +155,51 @@ def test_patch_modes_permission_mode_values(tmp_path) -> None:
             headers={"Authorization": "Bearer test-token"},
         )
         assert response.status_code == 200, f"mode={mode} should be accepted"
+
+
+def test_patch_modes_vim_enabled_persists(tmp_path) -> None:
+    """PATCH vim_enabled=True updates the response and persists to settings."""
+    from openharness.config.settings import load_settings
+
+    client = _client(tmp_path)
+
+    # Enable vim keybindings
+    response = client.patch(
+        "/api/modes",
+        json={"vim_enabled": True},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    assert response.json()["vim_enabled"] is True
+
+    # Persisted to settings.vim_mode
+    settings = load_settings()
+    assert settings.vim_mode is True
+
+    # A subsequent GET reflects the persisted value
+    get_response = client.get("/api/modes", headers={"Authorization": "Bearer test-token"})
+    assert get_response.json()["vim_enabled"] is True
+
+
+def test_patch_modes_vim_enabled_false(tmp_path) -> None:
+    """PATCH vim_enabled=False disables vim keybindings and persists."""
+    from openharness.config.settings import load_settings
+
+    client = _client(tmp_path)
+
+    # First enable, then disable
+    client.patch(
+        "/api/modes",
+        json={"vim_enabled": True},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    response = client.patch(
+        "/api/modes",
+        json={"vim_enabled": False},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    assert response.json()["vim_enabled"] is False
+
+    settings = load_settings()
+    assert settings.vim_mode is False
