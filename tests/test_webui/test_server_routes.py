@@ -532,3 +532,118 @@ def test_set_provider_credentials_persists_api_key_and_base_url(tmp_path, monkey
         json={"api_key": "should-not-store"},
     )
     assert reject.status_code == 400
+
+
+def test_verify_provider_returns_models_from_openai_models_endpoint(tmp_path, monkeypatch) -> None:
+    """POST /api/providers/{name}/verify prefers the free /v1/models endpoint."""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    save_settings(load_settings())
+
+    async def fake_fetch_models(base_url: str, api_key: str):
+        assert base_url == "https://api.openai.com/v1"
+        assert api_key == "sk-test"
+        return True, None, ["gpt-test-a", "gpt-test-b"]
+
+    async def fail_completion_probe(*_args, **_kwargs):  # pragma: no cover - should not be called
+        raise AssertionError("completion probe should not run when models endpoint succeeds")
+
+    monkeypatch.setattr(
+        "openharness.webui.server.routes.providers._fetch_models_via_openai_client",
+        fake_fetch_models,
+    )
+    monkeypatch.setattr(
+        "openharness.webui.server.routes.providers._completion_probe",
+        fail_completion_probe,
+    )
+
+    client = _client(tmp_path)
+
+    assert client.post("/api/providers/openai-compatible/verify").status_code == 401
+
+    response = client.post(
+        "/api/providers/openai-compatible/verify",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "error": None, "models": ["gpt-test-a", "gpt-test-b"]}
+
+
+def test_verify_provider_falls_back_to_completion_probe(tmp_path, monkeypatch) -> None:
+    """If /v1/models is unavailable, verify sends one tiny completion probe."""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    save_settings(load_settings())
+
+    async def fake_fetch_models(*_args, **_kwargs):
+        return False, "HTTP 404: not found", []
+
+    async def fake_httpx_models(*_args, **_kwargs):
+        return False, "HTTP 404: not found", []
+
+    async def fake_completion_probe(base_url: str, api_key: str, model: str):
+        assert base_url == "https://api.openai.com/v1"
+        assert api_key == "sk-test"
+        assert model
+        return None
+
+    monkeypatch.setattr(
+        "openharness.webui.server.routes.providers._fetch_models_via_openai_client",
+        fake_fetch_models,
+    )
+    monkeypatch.setattr(
+        "openharness.webui.server.routes.providers._fetch_models_via_httpx",
+        fake_httpx_models,
+    )
+    monkeypatch.setattr(
+        "openharness.webui.server.routes.providers._completion_probe",
+        fake_completion_probe,
+    )
+
+    response = _client(tmp_path).post(
+        "/api/providers/openai-compatible/verify",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "error": None, "models": None}
+
+
+def test_verify_provider_reports_missing_api_key(tmp_path, monkeypatch) -> None:
+    """Verification fails cleanly when no credential can be resolved."""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    save_settings(load_settings())
+
+    client = _client(tmp_path)
+
+    not_found = client.post(
+        "/api/providers/nonexistent/verify",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert not_found.status_code == 404
+
+    response = client.post(
+        "/api/providers/openai-compatible/verify",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is False
+    assert response.json()["error"] == "No API key available."
+    assert response.json()["models"] is None
