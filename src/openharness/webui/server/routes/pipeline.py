@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, ValidationError
 
 from openharness.autopilot.service import RepoAutopilotStore
-from openharness.autopilot.types import RepoAutopilotRegistry, RepoTaskStatus
+from openharness.autopilot.types import RepoAutopilotRegistry, RepoJournalEntry, RepoTaskStatus
 from openharness.webui.server.state import WebUIState, get_state, require_token
 
 router = APIRouter(
@@ -51,6 +51,19 @@ def _serialize_card(card: dict) -> dict:
         "created_at": card["created_at"],
         "updated_at": card["updated_at"],
     }
+
+
+def _serialize_journal_entry(entry: RepoJournalEntry) -> dict:
+    """Return the JSON representation for one repo journal entry."""
+    return entry.model_dump(mode="json")
+
+
+@router.get("/journal")
+def list_pipeline_journal(limit: int = 50, state: WebUIState = Depends(get_state)) -> dict:
+    """Return the most recent repo journal entries, newest first."""
+    store = RepoAutopilotStore(state.cwd)
+    entries = list(reversed(store.load_journal(limit=limit)))
+    return {"entries": [_serialize_journal_entry(entry) for entry in entries]}
 
 
 @router.get("/cards")

@@ -1014,3 +1014,132 @@ def test_pipeline_cards_action_rejects_invalid_action(tmp_path) -> None:
         json={"action": "invalid"},
     )
     assert response.status_code == 422
+
+
+# ----------------------------------------------------------------------
+# GET /api/pipeline/journal
+# ----------------------------------------------------------------------
+
+
+def _write_journal(tmp_path, lines: list[str]) -> None:
+    journal_dir = tmp_path / ".openharness" / "autopilot"
+    journal_dir.mkdir(parents=True, exist_ok=True)
+    (journal_dir / "repo_journal.jsonl").write_text("\n".join(lines) + "\n")
+
+
+def test_pipeline_journal_requires_auth(tmp_path) -> None:
+    client = _client(tmp_path)
+    assert client.get("/api/pipeline/journal").status_code == 401
+
+
+def test_pipeline_journal_returns_empty_when_no_file(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.get(
+        "/api/pipeline/journal",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"entries": []}
+
+
+def test_pipeline_journal_returns_entries_newest_first(tmp_path) -> None:
+    entries = [
+        json.dumps(
+            {
+                "timestamp": 100.0,
+                "kind": "intake_added",
+                "summary": "first",
+                "task_id": "ap-1",
+                "metadata": {},
+            }
+        ),
+        json.dumps(
+            {
+                "timestamp": 200.0,
+                "kind": "status_running",
+                "summary": "second",
+                "task_id": "ap-1",
+                "metadata": {},
+            }
+        ),
+        json.dumps(
+            {
+                "timestamp": 300.0,
+                "kind": "status_completed",
+                "summary": "third",
+                "task_id": "ap-1",
+                "metadata": {"k": "v"},
+            }
+        ),
+    ]
+    _write_journal(tmp_path, entries)
+
+    client = _client(tmp_path)
+    response = client.get(
+        "/api/pipeline/journal",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    summaries = [entry["summary"] for entry in body["entries"]]
+    assert summaries == ["third", "second", "first"]
+    # Each serialized entry should preserve the journal schema fields.
+    first_entry = body["entries"][0]
+    assert first_entry["timestamp"] == 300.0
+    assert first_entry["kind"] == "status_completed"
+    assert first_entry["task_id"] == "ap-1"
+    assert first_entry["metadata"] == {"k": "v"}
+
+
+def test_pipeline_journal_respects_limit(tmp_path) -> None:
+    entries = [
+        json.dumps(
+            {
+                "timestamp": float(i),
+                "kind": "tick",
+                "summary": f"entry-{i}",
+                "task_id": None,
+                "metadata": {},
+            }
+        )
+        for i in range(10)
+    ]
+    _write_journal(tmp_path, entries)
+
+    client = _client(tmp_path)
+    response = client.get(
+        "/api/pipeline/journal?limit=3",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    summaries = [entry["summary"] for entry in response.json()["entries"]]
+    # Newest 3 entries, newest first.
+    assert summaries == ["entry-9", "entry-8", "entry-7"]
+
+
+def test_pipeline_journal_skips_malformed_lines(tmp_path) -> None:
+    entries = [
+        "not json",
+        json.dumps(
+            {
+                "timestamp": 1.0,
+                "kind": "intake_added",
+                "summary": "good",
+                "task_id": None,
+                "metadata": {},
+            }
+        ),
+        "",
+        "{not even json",
+    ]
+    _write_journal(tmp_path, entries)
+
+    client = _client(tmp_path)
+    response = client.get(
+        "/api/pipeline/journal",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["entries"]) == 1
+    assert body["entries"][0]["summary"] == "good"
