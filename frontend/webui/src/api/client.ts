@@ -117,6 +117,23 @@ export interface CustomModelBody {
   context_window?: number;
 }
 
+export interface AgentProfile {
+  name: string;
+  description: string;
+  model?: string | null;
+  effort?: string | null;
+  permission_mode?: string | null;
+  tools_count?: number | null;
+  has_system_prompt: boolean;
+  source_file?: string | null;
+}
+
+export interface AgentPatch {
+  model?: string;
+  effort?: string;
+  permission_mode?: string;
+}
+
 export const api = {
   health: () => apiFetch<{ status: string; version: string }>("/api/health"),
   meta: () => apiFetch<{ cwd?: string; model?: string; permission_mode?: string }>("/api/meta"),
@@ -170,6 +187,12 @@ export const api = {
       `/api/models/${encodeURIComponent(provider)}/${encodeURIComponent(modelId)}`,
       { method: "DELETE" },
     ),
+  listAgents: () => apiFetch<AgentProfile[]>("/api/agents"),
+  patchAgent: (name: string, patch: AgentPatch) =>
+    apiFetch<AgentProfile>(`/api/agents/${encodeURIComponent(name)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
 };
 
 // ---------------- WebSocket session ----------------
