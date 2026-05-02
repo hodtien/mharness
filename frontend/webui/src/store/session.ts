@@ -86,15 +86,22 @@ export const useSession = create<SessionStore>((set, get) => ({
   resumedFrom: null,
 
   setStatus: (s, detail) =>
-    set((state) => ({
-      connectionStatus: s,
-      errorBanner:
-        s === "closed" && detail
-          ? `Connection closed (${detail})`
-          : s === "open"
-            ? null
-            : state.errorBanner,
-    })),
+    set(() => {
+      // Clear stale banner whenever the connection is healthy or in transit.
+      if (s === "open" || s === "connecting") {
+        return { connectionStatus: s, errorBanner: null };
+      }
+      // s === "closed"
+      // Manual / expected close (no detail) shouldn't surface a red banner.
+      if (!detail) {
+        return { connectionStatus: s, errorBanner: null };
+      }
+      // Otherwise show a banner describing the problem.
+      const message = detail.startsWith("code=")
+        ? `Connection closed (${detail})`
+        : detail;
+      return { connectionStatus: s, errorBanner: message };
+    }),
 
   appendUser: (text) =>
     set((state) => ({

@@ -29,7 +29,16 @@ class WebSocketBackendHost(ReactBackendHost):
         self._closed = False
 
     def attach_websocket(self, ws: "WebSocket") -> None:
+        # A browser may reconnect to the same session after an abnormal close.
+        # Reset the transport state so stale disconnect sentinels from the
+        # previous socket do not immediately shut down the new run loop.
         self._websocket = ws
+        self._closed = False
+        while True:
+            try:
+                self._inbound.get_nowait()
+            except asyncio.QueueEmpty:
+                break
 
     async def push_inbound(self, payload: bytes) -> None:
         """Called by the WS reader task with one raw line per request."""

@@ -180,6 +180,12 @@ export interface WsHandle {
   readonly state: () => "connecting" | "open" | "closed";
 }
 
+// WebSocket close codes that should not trigger reconnect attempts:
+//   1000 — client-side manual close (we already handle this via manuallyClosed)
+//   1008 — policy violation (auth failure / unknown session)
+//   1011 — server told us it had an unrecoverable error
+const NON_RETRYABLE_CLOSE_CODES = new Set([1008, 1011]);
+
 export function openWebSocket(
   sessionId: string,
   onEvent: (evt: BackendEvent) => void,
@@ -191,10 +197,13 @@ export function openWebSocket(
   let ws: WebSocket = new WebSocket(url);
   let currentState: "connecting" | "open" | "closed" = "connecting";
   let manuallyClosed = false;
+  let reconnectAttempts = 0;
+  const MAX_RETRIES = 2;
 
   const attach = (socket: WebSocket) => {
     socket.onopen = () => {
       currentState = "open";
+      reconnectAttempts = 0;
       onStatus("open");
     };
     socket.onmessage = (msg) => {
@@ -207,16 +216,35 @@ export function openWebSocket(
     };
     socket.onclose = (ev) => {
       currentState = "closed";
-      onStatus("closed", `code=${ev.code}`);
-      if (!manuallyClosed && ev.code !== 1008) {
-        // brief retry once
-        setTimeout(() => {
-          if (manuallyClosed) return;
-          currentState = "connecting";
-          onStatus("connecting", "reconnecting");
-          ws = new WebSocket(url);
-          attach(ws);
-        }, 1500);
+      // Distinguish expected closes (clean 1000, explicit client close) from
+      // abnormal/aborted closes (1006, 1005) that warrant retry or a banner.
+      if (ev.code === 1001) {
+        // 1001 = "going away" — server is shutting down; treat as non-fatal.
+        onStatus("closed", "Server restarting");
+      } else if (ev.code === 1008) {
+        // 1008 = policy violation (auth failure)
+        onStatus("closed", "Authentication failed (code=1008)");
+      } else if (ev.code === 1011) {
+        // 1011 = unexpected server error
+        onStatus("closed", "Server error (code=1011)");
+      } else if (ev.code !== 1000 && !manuallyClosed) {
+        onStatus("closed", `code=${ev.code}`);
+      } else if (manuallyClosed) {
+        onStatus("closed");
+      } else {
+        onStatus("closed", `code=${ev.code}`);
+      }
+      if (!manuallyClosed && ev.code !== 1000 && !NON_RETRYABLE_CLOSE_CODES.has(ev.code)) {
+        reconnectAttempts++;
+        if (reconnectAttempts <= MAX_RETRIES) {
+          setTimeout(() => {
+            if (manuallyClosed) return;
+            currentState = "connecting";
+            onStatus("connecting", "reconnecting");
+            ws = new WebSocket(url);
+            attach(ws);
+          }, 1500);
+        }
       }
     };
     socket.onerror = () => {
@@ -233,7 +261,7 @@ export function openWebSocket(
     },
     close() {
       manuallyClosed = true;
-      ws.close();
+      ws.close(1000, "client closing");
     },
     state: () => currentState,
   };
