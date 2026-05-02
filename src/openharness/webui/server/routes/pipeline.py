@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 from typing import Literal
 
+import yaml
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, ValidationError
 
 from openharness.autopilot.service import RepoAutopilotStore
+from openharness.config.paths import get_project_autopilot_policy_path
 from openharness.autopilot.types import RepoAutopilotRegistry, RepoJournalEntry, RepoTaskStatus
 from openharness.webui.server.state import WebUIState, get_state, require_token
 
@@ -150,3 +152,79 @@ def action_pipeline_card(
     new_status = _ACTION_TO_STATUS[body.action]
     card = store.update_status(card_id, status=new_status)
     return _serialize_card(card.model_dump(mode="json"))
+
+
+# ---------------------------------------------------------------------------
+# Autopilot policy CRUD
+# ---------------------------------------------------------------------------
+
+_POLICY_REQUIRED_KEYS = ("intake", "decision", "execution", "github", "repair")
+
+
+class UpdatePolicyRequest(BaseModel):
+    """Payload for PATCH /api/pipeline/policy."""
+
+    yaml_content: str
+
+
+@router.get("/policy")
+def get_pipeline_policy(state: WebUIState = Depends(get_state)) -> dict:
+    """Return the autopilot policy as both raw YAML and parsed JSON.
+
+    Reads ``.openharness/autopilot/autopilot_policy.yaml``. Returns empty
+    string and ``None`` for ``parsed`` when the file does not exist, so the
+    Web UI can offer the user an empty editor instead of a 404.
+    """
+    policy_path = get_project_autopilot_policy_path(state.cwd)
+    if not policy_path.is_file():
+        return {"yaml_content": "", "parsed": None}
+    yaml_content = policy_path.read_text(encoding="utf-8")
+    try:
+        parsed = yaml.safe_load(yaml_content)
+    except yaml.YAMLError:
+        parsed = None
+    return {"yaml_content": yaml_content, "parsed": parsed}
+
+
+@router.patch("/policy")
+def update_pipeline_policy(
+    body: UpdatePolicyRequest,
+    state: WebUIState = Depends(get_state),
+) -> dict:
+    """Validate and persist a new autopilot policy YAML.
+
+    Validation steps (all must pass before the file is written):
+    1. ``yaml_content`` must be syntactically valid YAML.
+    2. The parsed document must be a mapping.
+    3. The mapping must contain every required top-level key:
+       ``intake``, ``decision``, ``execution``, ``github``, ``repair``.
+    """
+    try:
+        parsed = yaml.safe_load(body.yaml_content)
+    except yaml.YAMLError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_yaml", "message": str(exc)},
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "invalid_policy",
+                "message": "Autopilot policy must be a YAML mapping at the top level.",
+            },
+        )
+    missing = [key for key in _POLICY_REQUIRED_KEYS if key not in parsed]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "missing_required_keys",
+                "missing": missing,
+                "required": list(_POLICY_REQUIRED_KEYS),
+            },
+        )
+    policy_path = get_project_autopilot_policy_path(state.cwd)
+    policy_path.parent.mkdir(parents=True, exist_ok=True)
+    policy_path.write_text(body.yaml_content, encoding="utf-8")
+    return {"yaml_content": body.yaml_content, "parsed": parsed}
