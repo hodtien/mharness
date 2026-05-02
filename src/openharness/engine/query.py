@@ -714,6 +714,11 @@ async def _execute_tool_call(
     tool_use_id: str,
     tool_input: dict[str, object],
 ) -> ToolResultBlock:
+    # IDE extension tool names carry an _ide suffix (e.g. read_file_ide).
+    # Normalize before hooks so policy checks see the canonical name.
+    if tool_name.endswith("_ide"):
+        tool_name = tool_name[: -len("_ide")]
+
     if context.hook_executor is not None:
         pre_hooks = await context.hook_executor.execute(
             HookEvent.PRE_TOOL_USE,
