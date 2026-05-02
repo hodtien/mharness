@@ -103,7 +103,7 @@ _DEFAULT_AUTOPILOT_POLICY = {
         "remote_code_review": {
             "enabled": True,
             "block_on": ["critical"],
-            "max_turns": 6,
+            "max_turns": 0,
             "max_diff_chars": 80000,
         },
     },
@@ -2396,7 +2396,8 @@ class RepoAutopilotStore:
 
         max_chars = int(review_cfg.get("max_diff_chars", 80000))
         block_on = {str(s).lower() for s in review_cfg.get("block_on", ["critical"])}
-        max_turns = int(review_cfg.get("max_turns", 6))
+        _raw_turns = review_cfg.get("max_turns", 0)
+        max_turns: int | None = None if _raw_turns in (None, "", 0) else int(_raw_turns)
         command = f"agent:code-reviewer (PR #{pr_number} diff vs {base_branch})"
 
         diff_result = self._run_gh(
