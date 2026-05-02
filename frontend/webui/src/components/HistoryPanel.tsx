@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../api/client";
+import HistoryDetailDrawer from "./HistoryDetailDrawer";
 
 /**
  * Session metadata returned by `GET /api/history`.
@@ -21,8 +22,16 @@ interface HistoryPanelProps {
   endpoint?: string;
   /** Called when the user clicks "Resume" on a session. */
   onResume?: (session: HistorySession) => void;
+  /**
+   * Called after the detail-drawer's "Resume session" button has successfully
+   * created a new session via `POST /api/sessions`. Receives the freshly
+   * created session id and the original resumed-from id.
+   */
+  onResumeFromDrawer?: (newSessionId: string, resumeId: string) => void;
   /** Called after a session has been deleted server-side. */
   onDeleted?: (sessionId: string) => void;
+  /** Called when the user clicks to view session transcript. */
+  onDetailSelect?: (session: HistorySession) => void;
 }
 
 type LoadState = "loading" | "ready" | "error";
@@ -50,12 +59,15 @@ export function formatRelativeTime(createdAt: number): string {
 export default function HistoryPanel({
   endpoint = HISTORY_ENDPOINT,
   onResume,
+  onResumeFromDrawer,
   onDeleted,
+  onDetailSelect,
 }: HistoryPanelProps) {
   const [sessions, setSessions] = useState<HistorySession[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedSession, setSelectedSession] = useState<HistorySession | null>(null);
 
   const loadSessions = useCallback(
     async (signal?: AbortSignal) => {
@@ -92,6 +104,16 @@ export default function HistoryPanel({
     [onResume],
   );
 
+  const handleDetailSelect = useCallback(
+    (session: HistorySession) => {
+      if (onDetailSelect) {
+        onDetailSelect(session);
+      }
+      setSelectedSession(session);
+    },
+    [onDetailSelect],
+  );
+
   const handleDelete = useCallback(
     async (session: HistorySession) => {
       if (busyId) return;
@@ -120,7 +142,19 @@ export default function HistoryPanel({
     [busyId, endpoint, onDeleted],
   );
 
+  const closeDrawer = useCallback(() => {
+    setSelectedSession(null);
+  }, []);
+
+  const handleDrawerResume = useCallback(
+    (newSessionId: string, resumeId: string) => {
+      onResumeFromDrawer?.(newSessionId, resumeId);
+    },
+    [onResumeFromDrawer],
+  );
+
   return (
+    <>
     <section
       className="flex h-full w-full flex-col gap-3 p-4"
       aria-label="Session history"
@@ -212,6 +246,14 @@ export default function HistoryPanel({
                   <div className="flex shrink-0 gap-2">
                     <button
                       type="button"
+                      onClick={() => handleDetailSelect(session)}
+                      disabled={isBusy}
+                      className="rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs hover:bg-[var(--accent-strong)]/20 disabled:opacity-50"
+                    >
+                      View
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => handleResume(session)}
                       disabled={isBusy}
                       className="rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs hover:bg-[var(--accent-strong)]/20 disabled:opacity-50"
@@ -234,5 +276,11 @@ export default function HistoryPanel({
         </ul>
       ) : null}
     </section>
+    <HistoryDetailDrawer
+      session={selectedSession}
+      onClose={closeDrawer}
+      onResume={handleDrawerResume}
+    />
+    </>
   );
 }

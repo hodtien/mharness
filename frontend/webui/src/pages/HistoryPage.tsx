@@ -15,5 +15,17 @@ export default function HistoryPage({ onResume }: Props) {
     navigate("/chat");
   };
 
-  return <HistoryPanel onResume={handleResume} />;
+  // The detail drawer already creates the new session via api.createSession
+  // before invoking this callback, so we just propagate the ids and navigate.
+  const handleResumeFromDrawer = (newSessionId: string, resumeId: string) => {
+    onResume(newSessionId, resumeId);
+    navigate("/chat");
+  };
+
+  return (
+    <HistoryPanel
+      onResume={handleResume}
+      onResumeFromDrawer={handleResumeFromDrawer}
+    />
+  );
 }
