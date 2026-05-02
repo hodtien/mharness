@@ -1143,3 +1143,111 @@ def test_pipeline_journal_skips_malformed_lines(tmp_path) -> None:
     body = response.json()
     assert len(body["entries"]) == 1
     assert body["entries"][0]["summary"] == "good"
+
+
+# GET/PATCH /api/pipeline/policy
+
+
+def _policy_yaml(*, include_repair: bool = True) -> str:
+    content = """intake:
+  mode: unified_queue
+decision:
+  default_human_gate: true
+execution:
+  default_model: oc-medium
+github:
+  issue_comment_style: bilingual
+"""
+    if include_repair:
+        content += """repair:
+  max_rounds: 2
+"""
+    return content
+
+
+def test_pipeline_policy_requires_auth(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    assert client.get("/api/pipeline/policy").status_code == 401
+    assert client.patch(
+        "/api/pipeline/policy",
+        json={"yaml_content": _policy_yaml()},
+    ).status_code == 401
+
+
+def test_pipeline_policy_get_returns_yaml_content_and_parsed_json(tmp_path) -> None:
+    policy_path = tmp_path / ".openharness" / "autopilot" / "autopilot_policy.yaml"
+    policy_path.parent.mkdir(parents=True)
+    policy_path.write_text(_policy_yaml(), encoding="utf-8")
+
+    client = _client(tmp_path)
+    response = client.get(
+        "/api/pipeline/policy",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "yaml_content": _policy_yaml(),
+        "parsed": {
+            "intake": {"mode": "unified_queue"},
+            "decision": {"default_human_gate": True},
+            "execution": {"default_model": "oc-medium"},
+            "github": {"issue_comment_style": "bilingual"},
+            "repair": {"max_rounds": 2},
+        },
+    }
+
+
+def test_pipeline_policy_get_returns_empty_when_file_missing(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.get(
+        "/api/pipeline/policy",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"yaml_content": "", "parsed": None}
+
+
+def test_pipeline_policy_patch_validates_and_writes_policy(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/pipeline/policy",
+        headers={"Authorization": "Bearer test-token"},
+        json={"yaml_content": _policy_yaml()},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["parsed"]["execution"] == {"default_model": "oc-medium"}
+    assert (
+        tmp_path / ".openharness" / "autopilot" / "autopilot_policy.yaml"
+    ).read_text(encoding="utf-8") == _policy_yaml()
+
+
+def test_pipeline_policy_patch_rejects_invalid_yaml(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/pipeline/policy",
+        headers={"Authorization": "Bearer test-token"},
+        json={"yaml_content": "intake: ["},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["error"] == "invalid_yaml"
+
+
+def test_pipeline_policy_patch_requires_top_level_keys(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/pipeline/policy",
+        headers={"Authorization": "Bearer test-token"},
+        json={"yaml_content": _policy_yaml(include_repair=False)},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == {
+        "error": "missing_required_keys",
+        "missing": ["repair"],
+        "required": ["intake", "decision", "execution", "github", "repair"],
+    }
