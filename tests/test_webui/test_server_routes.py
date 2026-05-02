@@ -57,6 +57,33 @@ def test_tasks_endpoint_requires_auth_and_returns_list(tmp_path) -> None:
     assert response.json() == {"tasks": []}
 
 
+def test_tasks_detail_returns_404_for_unknown_id(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.get(
+        "/api/tasks/nonexistent", headers={"Authorization": "Bearer test-token"}
+    )
+    assert response.status_code == 404
+
+
+def test_tasks_output_returns_404_for_unknown_id(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.get(
+        "/api/tasks/nonexistent/output", headers={"Authorization": "Bearer test-token"}
+    )
+    assert response.status_code == 404
+
+
+def test_tasks_stop_returns_404_for_unknown_id(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/tasks/nonexistent/stop", headers={"Authorization": "Bearer test-token"}
+    )
+    assert response.status_code == 404
+
+
 def test_cron_jobs_endpoint_requires_auth_and_returns_list(tmp_path, monkeypatch) -> None:
     data_dir = tmp_path / "data"
     data_dir.mkdir()
