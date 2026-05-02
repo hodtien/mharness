@@ -9,9 +9,16 @@ Web UI matches what the CLI and TUI display.
 
 from __future__ import annotations
 
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from openharness.config.settings import load_settings, save_settings
+from openharness.auth.storage import store_credential
+from openharness.config.settings import (
+    auth_source_uses_api_key,
+    credential_storage_provider_name,
+    load_settings,
+    save_settings,
+)
 from openharness.webui.server.sessions import SessionManager
 from openharness.webui.server.state import get_session_manager, require_token
 
@@ -141,3 +148,118 @@ def activate_provider(
     )
 
     return {"ok": True, "model": new_model}
+
+
+class _CredentialsBody(BaseModel):
+    """Request body for ``POST /api/providers/{name}/credentials``."""
+
+    api_key: str | None = None
+    base_url: str | None = None
+
+
+def _mask_api_key(api_key: str) -> str:
+    """Return a masked representation of *api_key* exposing only the last 4 chars."""
+    if not api_key:
+        return ""
+    if len(api_key) <= 4:
+        return "*" * len(api_key)
+    return "*" * (len(api_key) - 4) + api_key[-4:]
+
+
+@router.post("/{name}/credentials")
+def set_provider_credentials(
+    name: str,
+    body: _CredentialsBody,
+    manager: SessionManager = Depends(get_session_manager),
+) -> dict[str, object]:
+    """Save credentials and/or base_url override for a provider profile.
+
+    - ``api_key`` is persisted via :func:`openharness.auth.storage.store_credential`
+      under the profile's resolved storage namespace
+      (:func:`credential_storage_provider_name`).
+    - ``base_url`` is persisted on the provider profile in ``settings.json``
+      so it overrides the built-in default for that profile.
+
+    The response masks ``api_key`` to its last 4 characters; the raw key is
+    never echoed back.
+    """
+    settings = load_settings()
+    profiles = settings.merged_profiles()
+    if name not in profiles:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown provider profile: {name}",
+        )
+
+    profile = profiles[name]
+
+    api_key = (body.api_key or "").strip() if body.api_key is not None else None
+    base_url_provided = body.base_url is not None
+    base_url_value = (body.base_url or "").strip() if base_url_provided else None
+
+    if api_key is None and not base_url_provided:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one of 'api_key' or 'base_url' must be provided.",
+        )
+
+    # Store the API key against the same namespace used by the rest of the
+    # auth subsystem (env-var fallback and CLI both read from this key).
+    if api_key is not None:
+        if not api_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="'api_key' must not be empty.",
+            )
+        if not auth_source_uses_api_key(profile.auth_source):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Profile {name!r} uses auth_source {profile.auth_source!r} "
+                    "which is not API-key based."
+                ),
+            )
+        storage_provider = credential_storage_provider_name(name, profile)
+        try:
+            store_credential(storage_provider, "api_key", api_key)
+        except Exception as exc:  # pragma: no cover - storage failure
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to persist credential: {exc}",
+            ) from exc
+
+    # Persist base_url override on the profile itself. Empty string clears
+    # the override (back to the built-in default on next ``merged_profiles``).
+    if base_url_provided:
+        new_base_url: str | None = base_url_value or None
+        updated_profile = profile.model_copy(update={"base_url": new_base_url})
+        merged = settings.merged_profiles()
+        merged[name] = updated_profile
+        updated_settings = settings.model_copy(update={"profiles": merged})
+        try:
+            save_settings(updated_settings)
+        except Exception as exc:  # pragma: no cover - filesystem failure
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to persist settings: {exc}",
+            ) from exc
+
+        # If we just updated the *active* profile's base_url, reload defaults
+        # for new sessions so they pick up the override.
+        materialized = load_settings()
+        if materialized.active_profile == name:
+            active_profile = materialized.merged_profiles()[name]
+            new_model = materialized.model or active_profile.default_model
+            manager.update_provider_defaults(
+                model=new_model,
+                api_format=active_profile.api_format,
+                base_url=active_profile.base_url,
+            )
+        final_base_url = updated_profile.base_url
+    else:
+        final_base_url = profile.base_url
+
+    response: dict[str, object] = {"ok": True, "base_url": final_base_url}
+    if api_key is not None:
+        response["api_key"] = _mask_api_key(api_key)
+    return response
