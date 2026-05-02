@@ -9,13 +9,15 @@ and custom models from ``profile.allowed_models``. Each model entry carries
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 from openharness.config.settings import (
     CLAUDE_MODEL_ALIAS_OPTIONS,
     Settings,
     is_claude_family_provider,
     load_settings,
+    save_settings,
 )
 from openharness.webui.server.state import require_token
 
@@ -24,6 +26,15 @@ router = APIRouter(
     tags=["models"],
     dependencies=[Depends(require_token)],
 )
+
+
+class _CustomModelBody(BaseModel):
+    """Request body for ``POST /api/models``."""
+
+    provider: str
+    model_id: str
+    label: str | None = None
+    context_window: int | None = None
 
 
 def _build_models_for_profile(profile_name: str, profile) -> dict[str, dict]:
@@ -117,3 +128,108 @@ def list_models() -> dict[str, list[dict]]:
 def list_models_slash() -> dict[str, list[dict]]:
     """Keep behavior stable for callers that include a trailing slash."""
     return list_models()
+
+
+@router.post("", status_code=201)
+def add_custom_model(body: _CustomModelBody) -> dict[str, object]:
+    """Add a custom model to the given provider profile.
+
+    The ``model_id`` is appended to ``ProviderProfile.allowed_models`` for the
+    profile whose key matches ``provider``. The profile settings currently store
+    only custom model ids, so ``label`` and ``context_window`` are accepted for
+    request compatibility but are not persisted.
+
+    Returns ``{"ok": True, "provider": ..., "model_id": ...}`` on success.
+    """
+    settings: Settings = load_settings()
+    profiles = settings.merged_profiles()
+
+    provider_key = body.provider.strip()
+    if not provider_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="provider must not be empty",
+        )
+
+    if provider_key not in profiles:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown provider profile: {provider_key!r}",
+        )
+
+    model_id = body.model_id.strip()
+    if not model_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="model_id must not be empty",
+        )
+
+    profile = profiles[provider_key]
+    if model_id in profile.allowed_models:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Model {model_id!r} already exists in provider {provider_key!r}",
+        )
+
+    updated_allowed = list(profile.allowed_models) + [model_id]
+    updated_profiles = dict(settings.profiles)
+    updated_profiles[provider_key] = profile.model_copy(
+        update={"allowed_models": updated_allowed}
+    )
+    updated_settings = settings.model_copy(update={"profiles": updated_profiles})
+    save_settings(updated_settings)
+
+    return {"ok": True, "provider": provider_key, "model_id": model_id}
+
+
+@router.delete("/{provider}/{model_id}", status_code=200)
+def remove_custom_model(provider: str, model_id: str) -> dict[str, object]:
+    """Remove a custom model from the given provider profile.
+
+    Only models that appear in ``ProviderProfile.allowed_models`` (i.e.
+    ``is_custom=True``) may be deleted.  Attempting to delete a built-in model
+    (the profile's ``default_model`` or a Claude alias) returns **400**.
+
+    Returns ``{"ok": True, "provider": ..., "model_id": ...}`` on success.
+    """
+    settings: Settings = load_settings()
+    profiles = settings.merged_profiles()
+
+    provider_key = provider.strip()
+    if provider_key not in profiles:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown provider profile: {provider_key!r}",
+        )
+
+    profile = profiles[provider_key]
+
+    # Identify built-in model ids for this profile.
+    builtin_ids: set[str] = {profile.default_model}
+    if is_claude_family_provider(profile.provider):
+        for value, _label, _desc in CLAUDE_MODEL_ALIAS_OPTIONS:
+            builtin_ids.add(value)
+
+    target = model_id.strip()
+
+    if target in builtin_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete built-in model {target!r}",
+        )
+
+    if target not in profile.allowed_models:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Custom model {target!r} not found in provider {provider_key!r}",
+        )
+
+    updated_allowed = [m for m in profile.allowed_models if m != target]
+    updated_profiles = dict(settings.profiles)
+    updated_profiles[provider_key] = profile.model_copy(
+        update={"allowed_models": updated_allowed}
+    )
+    updated_settings = settings.model_copy(update={"profiles": updated_profiles})
+    save_settings(updated_settings)
+
+    return {"ok": True, "provider": provider_key, "model_id": target}
