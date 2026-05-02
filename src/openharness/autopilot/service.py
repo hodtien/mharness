@@ -1804,7 +1804,7 @@ class RepoAutopilotStore:
             return False
         if mode == "pr_only":
             return False
-        if mode == "fully_auto":
+        if mode in {"always", "fully_auto"}:
             return True
         return required_label.lower() in labels
 

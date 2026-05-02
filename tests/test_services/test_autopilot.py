@@ -553,6 +553,19 @@ def test_autopilot_existing_pr_card_can_auto_merge(tmp_path: Path, monkeypatch) 
     assert merged["called"] is True
 
 
+def test_automerge_eligible_accepts_always_mode(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    eligible = store._automerge_eligible(
+        {"labels": [], "isDraft": False},
+        {"autopilot": {"github": {"auto_merge": {"mode": "always"}}}},
+    )
+
+    assert eligible is True
+
+
 def test_wait_for_pr_ci_allows_repos_with_no_remote_checks_after_grace(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
