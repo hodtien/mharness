@@ -19,7 +19,13 @@ def serve(config: WebUIConfig) -> None:
     if config.cwd:
         os.chdir(config.cwd)
 
-    app = create_app(config)
+    app = create_app(
+        token=config.token,
+        cwd=config.cwd,
+        model=config.model,
+        api_format=config.api_format,
+        permission_mode=config.permission_mode,
+    )
 
     url = f"http://{config.host}:{config.port}/?token={config.token}"
     print("\n  🌐 OpenHarness Web UI ready at:\n")
