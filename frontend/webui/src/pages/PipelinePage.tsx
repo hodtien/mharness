@@ -278,6 +278,27 @@ function PolicyTab({ onSaved }: PolicyTabProps) {
   );
 }
 
+// ─── Status constants ──────────────────────────────────────────────────────────
+
+const ACTIVE_STATUSES: RepoTaskStatus[] = [
+  "running",
+  "preparing",
+  "verifying",
+  "repairing",
+  "pr_open",
+  "waiting_ci",
+];
+
+function hasActiveCard(cards: PipelineCard[]): boolean {
+  return cards.some((c) => ACTIVE_STATUSES.includes(c.status));
+}
+
+function formatSeconds(seconds: number): string {
+  if (seconds < 60) return `${Math.floor(seconds)}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  return `${Math.floor(seconds / 3600)}h ago`;
+}
+
 // ─── Kanban columns ────────────────────────────────────────────────────────────
 
 const COLUMNS: { id: string; label: string; statuses: RepoTaskStatus[] }[] = [
@@ -515,10 +536,17 @@ export default function PipelinePage() {
   const [loadingAction, setLoadingAction] = useState(false);
   const [showNewIdea, setShowNewIdea] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("board");
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const [secondsAgo, setSecondsAgo] = useState(0);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refreshCards = useCallback(() => {
     apiFetch<{ cards: PipelineCard[]; updated_at: number }>("/api/pipeline/cards")
-      .then((data) => setCards(data.cards))
+      .then((data) => {
+        setCards(data.cards);
+        setLastUpdated(Date.now() / 1000);
+        setSecondsAgo(0);
+      })
       .catch((err) => console.error("refresh cards failed:", err));
   }, []);
 
@@ -532,6 +560,8 @@ export default function PipelinePage() {
         if (cancelled) return;
         setCards(cardsData.cards);
         setJournal(journalData.entries);
+        setLastUpdated(Date.now() / 1000);
+        setSecondsAgo(0);
       })
       .catch((err) => {
         if (!cancelled) setError(String(err));
@@ -543,6 +573,32 @@ export default function PipelinePage() {
       cancelled = true;
     };
   }, []);
+
+  // Auto-refresh: start/stop polling based on active card presence
+  useEffect(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    if (cards.length > 0 && hasActiveCard(cards)) {
+      pollingRef.current = setInterval(refreshCards, 5000);
+    }
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [cards, refreshCards]);
+
+  // Tick: increment secondsAgo every second while lastUpdated is set
+  useEffect(() => {
+    if (lastUpdated === null) return;
+    const id = setInterval(() => {
+      setSecondsAgo(Math.floor(Date.now() / 1000 - lastUpdated));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [lastUpdated]);
 
   const handleAction = useCallback(
     async (cardId: string, action: "accept" | "reject" | "retry") => {
@@ -608,14 +664,21 @@ export default function PipelinePage() {
             Policy
           </button>
         </div>
-        {activeTab === "board" && (
+        <div className="flex items-center gap-3">
+          {lastUpdated !== null && activeTab === "board" && (
+            <span className="mb-1 text-xs text-[var(--text-dim)]">
+              Last updated {formatSeconds(secondsAgo)}
+            </span>
+          )}
+          {activeTab === "board" && (
           <button
             onClick={() => setShowNewIdea(true)}
             className="mb-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20"
           >
             + New idea
-          </button>
-        )}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Content */}
