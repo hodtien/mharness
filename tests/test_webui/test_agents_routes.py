@@ -101,3 +101,177 @@ def test_agents_trailing_slash_is_supported(tmp_path) -> None:
 
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/agents/{name}
+# ---------------------------------------------------------------------------
+
+
+_AUTH = {"Authorization": "Bearer test-token"}
+
+
+def _write_user_agent(config_dir, name: str, body: str = "Hello body.\n") -> "object":
+    """Write a minimal user agent definition file under ``config_dir/agents``."""
+
+    from pathlib import Path
+
+    agents_dir = Path(config_dir) / "agents"
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    path = agents_dir / f"{name}.md"
+    path.write_text(
+        "---\n"
+        f"name: {name}\n"
+        "description: A user-defined helper for unit testing.\n"
+        "model: haiku\n"
+        "effort: low\n"
+        "permissionMode: acceptEdits\n"
+        "tools: [Read, Glob, Grep]\n"
+        "---\n"
+        f"{body}",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_patch_agent_requires_auth(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.patch("/api/agents/whatever", json={"effort": "high"})
+    assert response.status_code == 401
+
+
+def test_patch_agent_returns_404_for_unknown_name(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/agents/does-not-exist",
+        json={"effort": "high"},
+        headers=_AUTH,
+    )
+    assert response.status_code == 404
+
+
+def test_patch_agent_rejects_builtin(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/agents/general-purpose",
+        json={"effort": "high"},
+        headers=_AUTH,
+    )
+    assert response.status_code == 400
+
+
+def test_patch_agent_requires_at_least_one_field(tmp_path, monkeypatch) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    _write_user_agent(config_dir, "my-agent")
+
+    client = _client(tmp_path)
+    response = client.patch("/api/agents/my-agent", json={}, headers=_AUTH)
+    assert response.status_code == 400
+
+
+def test_patch_agent_rejects_invalid_effort(tmp_path, monkeypatch) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    _write_user_agent(config_dir, "my-agent")
+
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/agents/my-agent",
+        json={"effort": "extreme"},
+        headers=_AUTH,
+    )
+    assert response.status_code == 400
+
+
+def test_patch_agent_rejects_invalid_permission_mode(tmp_path, monkeypatch) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    _write_user_agent(config_dir, "my-agent")
+
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/agents/my-agent",
+        json={"permission_mode": "totallyAllow"},
+        headers=_AUTH,
+    )
+    assert response.status_code == 400
+
+
+def test_patch_agent_rejects_unknown_model(tmp_path, monkeypatch) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    _write_user_agent(config_dir, "my-agent")
+
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/agents/my-agent",
+        json={"model": "ghost-model-9000"},
+        headers=_AUTH,
+    )
+    assert response.status_code == 400
+
+
+def test_patch_agent_updates_only_supplied_fields_and_preserves_body(
+    tmp_path, monkeypatch
+) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    body = "You are a helpful test agent.\n\n## Notes\n\n- one\n- two\n"
+    path = _write_user_agent(config_dir, "my-agent", body=body)
+
+    client = _client(tmp_path)
+
+    # Pick a real model from /api/models so validation passes.
+    models = client.get("/api/models", headers=_AUTH).json()
+    sample_model = next(iter(next(iter(models.values()))))["id"]
+
+    response = client.patch(
+        "/api/agents/my-agent",
+        json={"model": sample_model, "effort": "high"},
+        headers=_AUTH,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["name"] == "my-agent"
+    assert payload["model"] == sample_model
+    assert payload["effort"] == "high"
+    # permission_mode was NOT in the request; preserved from the file.
+    assert payload["permission_mode"] == "acceptEdits"
+    assert payload["has_system_prompt"] is True
+
+    # File-on-disk: markdown body and unrelated frontmatter are preserved.
+    new_text = path.read_text(encoding="utf-8")
+    assert new_text.endswith(body)
+    # Frontmatter still contains description and tools (unchanged keys).
+    assert "description: A user-defined helper for unit testing." in new_text
+    assert "tools:" in new_text
+    # camelCase permissionMode key is preserved (we did not touch it).
+    assert "permissionMode: acceptEdits" in new_text
+
+
+def test_patch_agent_can_update_permission_mode_only(tmp_path, monkeypatch) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    _write_user_agent(config_dir, "my-agent")
+
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/agents/my-agent",
+        json={"permission_mode": "plan"},
+        headers=_AUTH,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["permission_mode"] == "plan"
+    # Untouched fields are still the original values.
+    assert payload["model"] == "haiku"
+    assert payload["effort"] == "low"
