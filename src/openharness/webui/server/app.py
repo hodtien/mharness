@@ -24,6 +24,7 @@ from openharness.webui.server.routes import models as models_routes
 from openharness.webui.server.routes import providers as providers_routes
 from openharness.webui.server.routes import sessions as sessions_routes
 from openharness.webui.server.routes import tasks as tasks_routes
+from openharness.webui.server.routes import ws as ws_routes
 from openharness.webui.server.sessions import SessionManager
 from openharness.webui.server.state import WebUIState, generate_token
 
@@ -147,6 +148,7 @@ def create_app(
     app.include_router(modes_routes.router)
     app.include_router(models_routes.router)
     app.include_router(providers_routes.router)
+    app.include_router(ws_routes.router)
 
     resolved_spa: Path | None
     if spa_dir is None:
