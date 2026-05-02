@@ -1,33 +1,32 @@
 {
-  "generated_at": 1777596515.283144,
+  "generated_at": 1777683227.1095529,
   "repo_name": "my-harness",
   "repo_path": "/Users/hodtien/harness/my-harness",
   "focus": {
-    "id": "ap-873ded82",
-    "title": "[P1.2] Backend endpoint GET /api/history/{session_id}",
-    "body": "Trong routes/history.py thêm GET /api/history/{session_id}. Dùng load_session_by_id(cwd, session_id). Return 404 nếu không tồn tại. Trả snapshot đã sanitize: giữ messages nhưng truncate tool_result/output quá dài để tránh response lớn.\n\n## Agent Instructions\n1. Spawn agent tdd-guide trước khi implement: viết test cases cho happy path, 404 case, và truncation behavior.\n2. Sau khi implement xong, spawn agent code-reviewer để review endpoint logic và error handling.",
-    "status": "repairing",
+    "id": "ap-1fcd539b",
+    "title": "[P4.2] Backend: POST/DELETE /api/models — add/remove custom model",
+    "body": "POST /api/models nhận {provider: string, model_id: string, label?: string, context_window?: int}. Thêm vào ProviderProfile.allowed_models cho provider đó. Persist settings. DELETE /api/models/{provider}/{model_id}: chỉ cho phép xoá custom models (is_custom=true). Return 400 nếu cố xoá built-in.",
+    "status": "queued",
     "source_kind": "manual_idea",
     "source_ref": "",
-    "score": 120,
+    "score": 100,
     "score_reasons": [
       "source=manual_idea",
       "direct user-driven input",
-      "urgent signals",
       "recently updated"
     ],
     "labels": [],
-    "created_at": 1777481354.72632,
-    "updated_at": 1777555700.229898,
+    "created_at": 1777646535.6570702,
+    "updated_at": 1777646535.6570702,
     "metadata": {
-      "last_note": "repairing failed run",
+      "last_note": "",
       "url": "",
-      "execution_model": "openclaude-gpt",
+      "execution_model": "",
       "assistant_summary_preview": "",
       "human_gate_pending": false,
       "verification_failed": false,
-      "attempt_count": 2,
-      "max_attempts": 5,
+      "attempt_count": 0,
+      "max_attempts": 0,
       "linked_pr_number": null,
       "linked_pr_url": "",
       "last_ci_conclusion": "",
@@ -38,17 +37,17 @@
     }
   },
   "counts": {
-    "queued": 4,
+    "queued": 6,
     "accepted": 0,
     "preparing": 0,
     "running": 0,
     "verifying": 0,
     "pr_open": 0,
     "waiting_ci": 0,
-    "repairing": 2,
-    "completed": 3,
-    "merged": 0,
-    "failed": 2,
+    "repairing": 0,
+    "completed": 10,
+    "merged": 11,
+    "failed": 0,
     "rejected": 0,
     "superseded": 0
   },
@@ -70,20 +69,21 @@
   "columns": {
     "queued": [
       {
-        "id": "ap-076d72f1",
-        "title": "[P1.5] Frontend HistoryPanel component",
-        "body": "Tạo frontend/webui/src/components/HistoryPanel.tsx. Fetch /api/history, hiển thị danh sách session: summary, model, message_count, created_at dạng readable. Có buttons Resume và Delete. Có loading, empty state, error state.\n\n## Agent Instructions\n1. Sau khi implement xong, spawn agent code-reviewer để review component structure, error handling, và accessibility.",
+        "id": "ap-1fcd539b",
+        "title": "[P4.2] Backend: POST/DELETE /api/models — add/remove custom model",
+        "body": "POST /api/models nhận {provider: string, model_id: string, label?: string, context_window?: int}. Thêm vào ProviderProfile.allowed_models cho provider đó. Persist settings. DELETE /api/models/{provider}/{model_id}: chỉ cho phép xoá custom models (is_custom=true). Return 400 nếu cố xoá built-in.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
-        "score": 120,
+        "score": 100,
         "score_reasons": [
-          "priority=P1",
-          "manual_idea"
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
         ],
         "labels": [],
-        "created_at": 1777481369.440623,
-        "updated_at": 1777547292.535,
+        "created_at": 1777646535.6570702,
+        "updated_at": 1777646535.6570702,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -103,20 +103,21 @@
         }
       },
       {
-        "id": "ap-47ece0cb",
-        "title": "[P1.6] Frontend route /history và resume flow",
-        "body": "Tạo page /history dùng HistoryPanel. Khi click Resume, gọi POST /api/sessions với resume_id, reconnect WebSocket bằng session_id mới, navigate về /chat và hiển thị banner 'Resumed from session ...'.\n\n## Agent Instructions\n1. Sau khi implement xong, spawn agent code-reviewer để review routing integration, WebSocket reconnection logic, và UX flow.",
+        "id": "ap-ec5427da",
+        "title": "[P4.3] Frontend: Settings/Models page",
+        "body": "Tạo page /settings/models. Hiển thị accordion theo provider. Mỗi provider: table model (id, label, context window, default toggle, custom badge). Nút 'Add custom model' mở form modal: chọn provider dropdown, nhập model_id, label optional, context_window optional. Nút delete cho custom models (confirm dialog).",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
-        "score": 120,
+        "score": 100,
         "score_reasons": [
-          "priority=P1",
-          "manual_idea"
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
         ],
         "labels": [],
-        "created_at": 1777481371.448394,
-        "updated_at": 1777547292.535,
+        "created_at": 1777646552.1811562,
+        "updated_at": 1777646552.1811562,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -136,20 +137,21 @@
         }
       },
       {
-        "id": "ap-75b0ad5c",
-        "title": "[P1.7] Header recent sessions dropdown",
-        "body": "Cập nhật Header.tsx thêm dropdown Sessions. Dropdown fetch /api/history?limit=5, hiển thị recent sessions, click item để resume nhanh, link View all chuyển tới /history.\n\n## Agent Instructions\n1. Sau khi implement xong, spawn agent code-reviewer để review component logic, accessibility (keyboard navigation, ARIA), và styling.",
+        "id": "ap-c1e3f203",
+        "title": "[P4.4] Backend: GET /api/agents — list agent definitions",
+        "body": "Tạo src/openharness/webui/server/routes/agents.py. GET /api/agents gọi coordinator/agent_definitions.py load functions. Trả về list {name, description, model, effort, permission_mode, tools_count, has_system_prompt, source_file}.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
-        "score": 120,
+        "score": 100,
         "score_reasons": [
-          "priority=P1",
-          "manual_idea"
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
         ],
         "labels": [],
-        "created_at": 1777481373.590076,
-        "updated_at": 1777547292.535,
+        "created_at": 1777646559.972515,
+        "updated_at": 1777646559.972515,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -169,20 +171,89 @@
         }
       },
       {
-        "id": "ap-4c9d9fef",
-        "title": "[P1.8] Tests cho WebUI history routes",
-        "body": "Tạo tests/webui/test_history_routes.py. Test list empty, list có fake session, load session by id, load unknown returns 404, delete session removes file. Dùng FastAPI TestClient và temp cwd/session dir nếu cần monkeypatch.\n\n## Agent Instructions\n1. Spawn agent tdd-guide để structure test cases theo AAA pattern với proper fixtures.\n2. Sau khi viết xong tests, spawn agent code-reviewer để review test quality, coverage, và isolation.",
+        "id": "ap-c6a4623f",
+        "title": "[WebUI] Fix websocket 1006 connection closed banner and reconnect lifecycle",
+        "body": "Problem: WebUI shows 'Connection closed (code=1006)' in Header after launching/opening the app. Review frontend/webui/src/api/client.ts openWebSocket() and frontend/webui/src/store/session.ts setStatus(), plus backend src/openharness/webui/server/routes/sessions.py and websocket route handling. Current client marks any onclose as errorBanner immediately, retries only once, and can show stale 1006 during normal session replacement/unmount. Acceptance: distinguish expected/manual close from abnormal close, clear stale banner after successful reconnect, provide useful message for auth/backend failures, and add tests for close/reconnect behavior. Repro: run oh webui, open /chat, observe header banner 'Connection closed (code=1006)' as in screenshot.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
-        "score": 120,
+        "score": 100,
         "score_reasons": [
-          "priority=P1",
-          "manual_idea"
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
         ],
         "labels": [],
-        "created_at": 1777481378.476654,
-        "updated_at": 1777547292.535,
+        "created_at": 1777682832.9130938,
+        "updated_at": 1777682832.9130938,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-17390b6f",
+        "title": "[WebUI] Make OpenHarness left menu button work on desktop",
+        "body": "Problem: The hamburger button next to OpenHarness appears clickable but does not visibly affect the UI on desktop. AppLayout toggles sidebarOpen, but Sidebar renders desktop sidebar as always visible with class hidden h-full sm:block and only uses open for the mobile drawer. Acceptance: define desktop behavior for the button (collapse/expand sidebar or hide button on desktop), implement it consistently, preserve mobile drawer behavior, add component tests for desktop and mobile menu interactions. Relevant files: frontend/webui/src/App.tsx, frontend/webui/src/components/Header.tsx, frontend/webui/src/components/Sidebar.tsx, Header.test.tsx or new Sidebar/App layout tests.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777682833.542948,
+        "updated_at": 1777682833.542948,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-1acc1f47",
+        "title": "[WebUI] Add browser smoke test for oh webui startup and primary shell interactions",
+        "body": "Problem: Recent WebUI startup regressions included missing exports, create_app signature mismatch, websocket connection banner, and non-working shell menu button. Add an automated browser smoke test or integration test that starts the WebUI app/server, loads /chat, asserts no initial connection error banner after websocket opens, verifies Sessions and permission dropdowns open, and verifies the OpenHarness menu/sidebar interaction behaves as specified. Acceptance: test fails on the current menu/noisy-connection regressions and passes after fixes; include guidance for running it locally in docs or test output.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777682834.155647,
+        "updated_at": 1777682834.155647,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -208,83 +279,12 @@
     "verifying": [],
     "pr_open": [],
     "waiting_ci": [],
-    "repairing": [
-      {
-        "id": "ap-873ded82",
-        "title": "[P1.2] Backend endpoint GET /api/history/{session_id}",
-        "body": "Trong routes/history.py thêm GET /api/history/{session_id}. Dùng load_session_by_id(cwd, session_id). Return 404 nếu không tồn tại. Trả snapshot đã sanitize: giữ messages nhưng truncate tool_result/output quá dài để tránh response lớn.\n\n## Agent Instructions\n1. Spawn agent tdd-guide trước khi implement: viết test cases cho happy path, 404 case, và truncation behavior.\n2. Sau khi implement xong, spawn agent code-reviewer để review endpoint logic và error handling.",
-        "status": "repairing",
-        "source_kind": "manual_idea",
-        "source_ref": "",
-        "score": 120,
-        "score_reasons": [
-          "source=manual_idea",
-          "direct user-driven input",
-          "urgent signals",
-          "recently updated"
-        ],
-        "labels": [],
-        "created_at": 1777481354.72632,
-        "updated_at": 1777555700.229898,
-        "metadata": {
-          "last_note": "repairing failed run",
-          "url": "",
-          "execution_model": "openclaude-gpt",
-          "assistant_summary_preview": "",
-          "human_gate_pending": false,
-          "verification_failed": false,
-          "attempt_count": 2,
-          "max_attempts": 5,
-          "linked_pr_number": null,
-          "linked_pr_url": "",
-          "last_ci_conclusion": "",
-          "last_ci_summary": "",
-          "last_failure_stage": "",
-          "last_failure_summary": "",
-          "verification_steps": []
-        }
-      },
-      {
-        "id": "ap-22889fc5",
-        "title": "[P1.3] Backend endpoint DELETE /api/history/{session_id}",
-        "body": "Trong routes/history.py thêm DELETE /api/history/{session_id}. Xoá session-{id}.json trong project session dir; nếu latest.json trỏ tới session đó thì xử lý an toàn. Return 204 nếu xoá thành công, 404 nếu không tồn tại.\n\n## Agent Instructions\n1. Spawn agent tdd-guide trước khi implement: viết test cases cho delete success (204), not found (404), và edge case khi latest.json trỏ tới session bị xoá.\n2. Sau khi implement xong, spawn agent security-reviewer để review file deletion logic (path traversal prevention).\n3. Cuối cùng spawn agent code-reviewer để review thay đổi.",
-        "status": "repairing",
-        "source_kind": "manual_idea",
-        "source_ref": "",
-        "score": 120,
-        "score_reasons": [
-          "source=manual_idea",
-          "direct user-driven input",
-          "urgent signals",
-          "recently updated"
-        ],
-        "labels": [],
-        "created_at": 1777481360.5257971,
-        "updated_at": 1777556077.425812,
-        "metadata": {
-          "last_note": "repairing failed run",
-          "url": "",
-          "execution_model": "openclaude-gpt",
-          "assistant_summary_preview": "",
-          "human_gate_pending": false,
-          "verification_failed": false,
-          "attempt_count": 2,
-          "max_attempts": 5,
-          "linked_pr_number": null,
-          "linked_pr_url": "",
-          "last_ci_conclusion": "",
-          "last_ci_summary": "",
-          "last_failure_stage": "",
-          "last_failure_summary": "",
-          "verification_steps": []
-        }
-      }
-    ],
+    "repairing": [],
     "completed": [
       {
-        "id": "ap-22135a12",
-        "title": "[P0.1] Tách backend WebUI thành FastAPI routers",
-        "body": "Refactor src/openharness/webui/server/app.py: tách endpoint hiện tại ra các router riêng trong src/openharness/webui/server/routes/: health.py, sessions.py, tasks.py, cron.py. app.py chỉ còn create_app(), auth dependency, state init và mount routers. Giữ nguyên behavior hiện tại. Thêm hoặc cập nhật tests đảm bảo /api/health, /api/meta, /api/sessions, /api/tasks, /api/cron/jobs vẫn hoạt động. Sau khi xong spawn code-reviewer để review thay đổi.",
+        "id": "ap-e732a7bf",
+        "title": "[P2.2] Backend: PATCH /api/modes — thay đổi modes runtime",
+        "body": "Endpoint PATCH /api/modes nhận body Pydantic model ModesPatch(permission_mode?: str, effort?: str, passes?: int, fast_mode?: bool, output_style?: str, theme?: str). Validate giá trị (permission_mode phải trong ['default','plan','full_auto'], effort trong ['low','medium','high'], passes 1-5). Áp dụng vào AppState hiện tại. Persist vào ~/.openharness/settings.json qua save_settings(). Broadcast state_snapshot qua WebSocket.",
         "status": "completed",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -296,79 +296,28 @@
           "recently updated"
         ],
         "labels": [],
-        "created_at": 1777481328.68591,
-        "updated_at": 1777544916.3913841,
+        "created_at": 1777625793.962349,
+        "updated_at": 1777638585.795248,
         "metadata": {
-          "last_note": "Refactor verified on main; tests aligned to new router layout.",
+          "last_note": "PR #10 is green; human gate pending",
           "url": "",
-          "execution_model": "",
-          "assistant_summary_preview": "The refactor appears already done. Let me check the current state of the branch and verify the test failures.Refactor and tests already exist. Now I need to verify the actual local pytest run state. Let me run targeted tests then full suite to see what's failing.These 6 failures are confirmed pre...",
-          "human_gate_pending": false,
-          "verification_failed": true,
-          "attempt_count": 5,
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase. Let me check for missing imports and run the tests: Build issue: missing `frontend/webui/dist`. Let's see how prior tests work in this project (CI might have a workaround). Let me check the build config and also if there...",
+          "human_gate_pending": true,
+          "verification_failed": false,
+          "attempt_count": 3,
           "max_attempts": 5,
-          "linked_pr_number": null,
-          "linked_pr_url": "",
-          "last_ci_conclusion": "",
-          "last_ci_summary": "",
+          "linked_pr_number": 10,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/10",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
           "last_failure_stage": "agent_runtime_error",
-          "last_failure_summary": "agent execution failed: Exceeded maximum turn limit (12)",
+          "last_failure_summary": "agent execution failed: Network error: peer closed connection without sending complete message body (incomplete chunked read). Check your internet connection and try again.",
           "verification_steps": [
             {
               "command": "uv run pytest -q",
-              "status": "failed",
-              "returncode": 1
-            },
-            {
-              "command": "uv run ruff check src tests scripts",
               "status": "success",
               "returncode": 0
-            },
-            {
-              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
-              "status": "success",
-              "returncode": 0
-            }
-          ]
-        }
-      },
-      {
-        "id": "ap-5fbd2a4c",
-        "title": "[P0.2] Thêm routing cho React WebUI",
-        "body": "Thêm react-router-dom vào frontend/webui. Bọc app bằng BrowserRouter. Tạo layout chung có Sidebar + Header + main Outlet. Route /chat dùng giao diện chat hiện tại, route / redirect về /chat. Đảm bảo SPA fallback backend vẫn phục vụ index.html cho mọi non-api path.\n\n## Agent Instructions\n1. Trước khi implement, spawn agent architect để thiết kế routing layout và component hierarchy.\n2. Sau khi implement xong, spawn agent tdd-guide để viết tests cho routing behavior (redirect, SPA fallback, route matching).\n3. Cuối cùng spawn agent code-reviewer để review toàn bộ thay đổi.",
-        "status": "completed",
-        "source_kind": "manual_idea",
-        "source_ref": "",
-        "score": 120,
-        "score_reasons": [
-          "source=manual_idea",
-          "direct user-driven input",
-          "urgent signals",
-          "recently updated"
-        ],
-        "labels": [],
-        "created_at": 1777481334.228359,
-        "updated_at": 1777554651.422854,
-        "metadata": {
-          "last_note": "Merged to main: AppLayout+Outlet routing, BrowserRouter, SPA fallback, NavLink active styling.",
-          "url": "",
-          "execution_model": "openclaude-gpt",
-          "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase.Hmm, only 3 files in webui. Let me check the other webui-related directories.Just `src/` — no package.json yet! Let me check the App.tsx, components, and the rest of the project.This App.tsx imports many missing component...",
-          "human_gate_pending": false,
-          "verification_failed": true,
-          "attempt_count": 0,
-          "max_attempts": 5,
-          "linked_pr_number": null,
-          "linked_pr_url": "",
-          "last_ci_conclusion": "",
-          "last_ci_summary": "",
-          "last_failure_stage": "git_prepare_failed",
-          "last_failure_summary": "Failed to prepare worktree branch: error: Your local changes to the following files would be overwritten by checkout:\n\tfrontend/webui/src/App.tsx\nPlease commit your changes or stash them before you switch branches.\nAborting",
-          "verification_steps": [
-            {
-              "command": "uv run pytest -q",
-              "status": "failed",
-              "returncode": 1
             },
             {
               "command": "uv run ruff check src tests scripts",
@@ -382,16 +331,16 @@
             },
             {
               "command": "agent:code-reviewer (diff vs main)",
-              "status": "failed",
-              "returncode": 1
+              "status": "skipped",
+              "returncode": 0
             }
           ]
         }
       },
       {
-        "id": "ap-7179c8d1",
-        "title": "[P0.3] Thêm navigation vào Sidebar WebUI",
-        "body": "Cập nhật frontend/webui/src/components/Sidebar.tsx: thêm navigation links cho /chat, /history, /pipeline, /tasks, /settings/modes, /settings/provider, /settings/models, /settings/agents. Dùng NavLink active styling. Giữ các section Status, Tasks, Cron hiện có.\n\n## Agent Instructions\n1. Sau khi implement xong, spawn agent code-reviewer để review thay đổi về component structure, accessibility, và styling.",
+        "id": "ap-c0ed4aa4",
+        "title": "[P2.3] Frontend: Settings/Modes page",
+        "body": "Tạo page /settings/modes. Fetch GET /api/modes on mount. Hiển thị: (1) Permission Mode — 3 radio buttons: Default, Plan, Full Auto với mô tả ngắn; (2) Effort — 3-button toggle low/medium/high; (3) Passes — number input 1-5; (4) Fast Mode — toggle switch; (5) Output Style — dropdown; (6) Theme — dropdown. Khi thay đổi → PATCH /api/modes ngay (debounce 300ms cho numeric).",
         "status": "completed",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -403,28 +352,139 @@
           "recently updated"
         ],
         "labels": [],
-        "created_at": 1777481340.765645,
-        "updated_at": 1777566915.893,
+        "created_at": 1777625852.873573,
+        "updated_at": 1777645085.476481,
         "metadata": {
-          "last_note": "Merged to main: Sidebar navigation links and Settings sub-section.",
+          "last_note": "PR #11 is green; human gate pending",
           "url": "",
-          "execution_model": "openclaude-gpt",
-          "assistant_summary_preview": "I'll start by exploring the current state of the repository and understanding what's been done.Interesting - the Sidebar navigation work is already in commit `29f64f6`. The current uncommitted changes are repair fixes for pytest/ruff. Let me check the current state of those changes.These uncommit...",
-          "human_gate_pending": false,
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "I'll start by exploring the repo structure to understand the codebase.This is a terminal-based UI (ink/react). The task asks for a settings page. Let me check the webui frontend instead which is more likely a web app.Now let me check whether `/api/modes` exists on the backend:GET exists. Is PATCH...",
+          "human_gate_pending": true,
           "verification_failed": false,
-          "attempt_count": 0,
+          "attempt_count": 2,
           "max_attempts": 5,
-          "linked_pr_number": null,
-          "linked_pr_url": "",
-          "last_ci_conclusion": "",
-          "last_ci_summary": "",
+          "linked_pr_number": 11,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/11",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
           "last_failure_stage": "",
           "last_failure_summary": "",
           "verification_steps": [
             {
               "command": "uv run pytest -q",
-              "status": "failed",
-              "returncode": 1
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-2f27ad9f",
+        "title": "[P3.5] Frontend: Settings/Provider page",
+        "body": "Tạo page /settings/provider. Fetch GET /api/providers. Hiển thị grid card cho mỗi provider: icon/emoji theo type, label, status badge (Active/Configured/Not configured), default model. Card active có viền highlight. Click card mở modal: form api_key (password input), base_url, nút Verify, nút Activate. Sau verify thành công hiện danh sách models có thể import.",
+        "status": "completed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777646514.698522,
+        "updated_at": 1777646869.836204,
+        "metadata": {
+          "last_note": "PR #14 is green; human gate pending",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "Hmm, this is a terminal frontend (Ink-based React for CLI). The task asks for a /settings/provider page with grid cards, modals, etc. Let me look around more — there might be a different web frontend.So the actual web UI is `frontend/webui`. Let me explore.Now let me check the Sidebar to add the ...",
+          "human_gate_pending": true,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": 14,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/14",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-1d2b92b3",
+        "title": "[P2.4] Frontend: Header quick-switch permission mode",
+        "body": "Thêm clickable chip trong Header hiển thị permission_mode hiện tại (DEFAULT=xám, PLAN=xanh, AUTO=đỏ/cam). Click mở popover/dropdown với 3 option. Chọn → PATCH /api/modes {permission_mode: ...}. Cập nhật UI ngay optimistic.",
+        "status": "completed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777625857.328417,
+        "updated_at": 1777645777.297086,
+        "metadata": {
+          "last_note": "PR #12 is green; human gate pending",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase, especially the Header component and existing patterns. Now I understand the codebase. I need to add a permission mode chip to the Header with a dropdown. Let me implement this: Now let me check the AppStatePayload type t...",
+          "human_gate_pending": true,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": 12,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/12",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
             },
             {
               "command": "uv run ruff check src tests scripts",
@@ -443,15 +503,344 @@
             }
           ]
         }
+      },
+      {
+        "id": "ap-e7a92226",
+        "title": "[P2.5] Frontend: Visual indicator cho full_auto mode",
+        "body": "Khi permission_mode=full_auto: Header hiện animated badge 'AUTO' màu cam nhấp nháy nhẹ. Sidebar status row permission hiện đỏ. Toast warning 1 lần khi chuyển sang full_auto: 'All tool calls will be auto-approved'. Khi chuyển về default → toast confirm.",
+        "status": "completed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777625861.182789,
+        "updated_at": 1777646213.217997,
+        "metadata": {
+          "last_note": "PR #13 is green; human gate pending",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "Now I understand the layout. Let me check theme colors and understand what header is. The \"Header\" in this terminal frontend appears to be something like `WelcomeBanner` or just `StatusBar`. Looking at the task, it mentions Header (top bar) but in this terminal app, the StatusBar is what contains...",
+          "human_gate_pending": true,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": 13,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/13",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-6df55ce8",
+        "title": "[P2.6] Test: modes routes",
+        "body": "Tạo tests/webui/test_modes_routes.py. Test GET /api/modes trả đúng fields. Test PATCH với giá trị hợp lệ → 200 + giá trị thay đổi. Test PATCH với effort=invalid → 422. Test PATCH permission_mode=full_auto → persist đúng.",
+        "status": "completed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777625934.889536,
+        "updated_at": 1777647400.6169448,
+        "metadata": {
+          "last_note": "PR #15 is green; human gate pending",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase.There is already a modes route test file under `tests/test_webui`; I’ll inspect it and the route to add the requested `tests/webui` coverage coherently.The task asks for `tests/webui/test_modes_routes.py` (a different pat...",
+          "human_gate_pending": true,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": 15,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/15",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-c7c021e7",
+        "title": "[P3.2] Backend: POST /api/providers/{name}/activate",
+        "body": "Endpoint POST /api/providers/{name}/activate: switch active provider profile. Cập nhật settings.json active_profile field. Reload BackendHostConfig cho sessions mới (sessions hiện tại giữ nguyên cho tới khi reconnect). Return {ok: true, model: new_default_model}.",
+        "status": "completed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777646495.953686,
+        "updated_at": 1777661134.408343,
+        "metadata": {
+          "last_note": "PR #17 is green; human gate pending",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "I'll implement the `POST /api/providers/{name}/activate` endpoint. Let me start by exploring the codebase structure. Now let me check the modes route for similar update patterns and how settings are saved:Now let me check existing tests for providers and modes routes: Now I have a clear picture. ...",
+          "human_gate_pending": true,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": 17,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/17",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-61d2e9c7",
+        "title": "[P3.3] Backend: POST /api/providers/{name}/credentials",
+        "body": "Endpoint POST /api/providers/{name}/credentials nhận {api_key?: string, base_url?: string}. Lưu api_key qua auth/storage.py hoặc auth/manager.py credential store đã có (tìm hiểu cách hiện tại lưu key). Lưu base_url override vào provider profile settings. Mask api_key trong response (chỉ trả 4 ký tự cuối).",
+        "status": "completed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777646502.4753122,
+        "updated_at": 1777679960.693015,
+        "metadata": {
+          "last_note": "PR #18 is green; human gate pending",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "Now let me examine the tests for providers and the Settings model regarding profile_overrides/custom_profiles:Now I have a good understanding. The `name` in the URL is the profile name (e.g., \"claude-api\"). Let me check existing tests for providers route to understand patterns: Now I have a clear...",
+          "human_gate_pending": true,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": 18,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/18",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-6ca2dcbc",
+        "title": "[P3.4] Backend: POST /api/providers/{name}/verify",
+        "body": "Endpoint POST /api/providers/{name}/verify: thử kết nối tới provider. Ưu tiên gọi GET /v1/models (miễn phí). Nếu provider không hỗ trợ /v1/models thì gọi 1 completion request nhỏ (~10 token). Trả {ok: bool, error?: string, models?: string[]} trong đó models là danh sách model IDs lấy được. Timeout 10s.",
+        "status": "completed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777646507.351966,
+        "updated_at": 1777680753.566581,
+        "metadata": {
+          "last_note": "PR #19 is green; human gate pending",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase.Now I need to understand provider profiles and how to make the verify call. Let me look at how API keys and base_urls are resolved to make the network call.Now let me look for default base_urls per provider:Now I have eno...",
+          "human_gate_pending": true,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": 19,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/19",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-1322abc1",
+        "title": "[P4.1] Backend: GET /api/models — list models by provider",
+        "body": "Tạo src/openharness/webui/server/routes/models.py. GET /api/models trả về {provider_id: [{id, label, context_window, is_default, is_custom}, ...]}. Merge built-in models từ ProviderProfile + CLAUDE_MODEL_ALIAS_OPTIONS + custom models từ settings.allowed_models. Group theo provider.",
+        "status": "completed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777646531.036701,
+        "updated_at": 1777683227.1056588,
+        "metadata": {
+          "last_note": "PR #21 requires human gate after remote review",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "I'll start by exploring the codebase to understand the existing structure and patterns. Now I have enough context. Let me also look at the providers route patterns more closely to understand how `is_custom` should work: Now I have enough context. Let me create the `models.py` route and wire it in...",
+          "human_gate_pending": true,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": 21,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/21",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
       }
     ],
-    "merged": [],
-    "failed": [
+    "merged": [
       {
-        "id": "ap-feebedcf",
-        "title": "[P1.1] Backend endpoint GET /api/history",
-        "body": "Tạo routes/history.py cho WebUI. Endpoint GET /api/history?limit=20 dùng openharness.services.session_storage.list_session_snapshots(cwd, limit) để trả danh sách session snapshots gồm session_id, summary, message_count, model, created_at. cwd lấy từ WebUIConfig. Mount router vào app. Sau khi xong spawn code-reviewer để review thay đổi.",
-        "status": "failed",
+        "id": "ap-e0ed2172",
+        "title": "[P1.1] Backend: GET /api/history — list session snapshots",
+        "body": "Tạo src/openharness/webui/server/routes/history.py. Endpoint GET /api/history?limit=20 gọi services/session_storage.list_session_snapshots(cwd, limit) trả về danh sách {session_id, summary, message_count, model, created_at}. Cwd lấy từ app.state.webui_config.cwd. Mount router vào app.",
+        "status": "merged",
         "source_kind": "manual_idea",
         "source_ref": "",
         "score": 120,
@@ -462,31 +851,31 @@
           "recently updated"
         ],
         "labels": [],
-        "created_at": 1777481348.033709,
-        "updated_at": 1777596515.279427,
+        "created_at": 1777598188.499031,
+        "updated_at": 1777598758.861356,
         "metadata": {
-          "last_note": "Failed to push branch or upsert PR: pull request create failed: GraphQL: Head sha can't be blank, Base sha can't be blank, No commits between main and autopilot/ap-feebedcf, Head ref must be a branch (createPullRequest)",
+          "last_note": "Merged PR #1",
           "url": "",
           "execution_model": "openclaude-gpt",
-          "assistant_summary_preview": "No WebUI backend exists yet. Let me look around more carefully.WebUI module doesn't exist yet — only described in GUIDE. The task says \"Tạo routes/history.py cho WebUI\". I need to create `src/openharness/webui/` from scratch or this depends on prior tasks. Let me check if there is a parent task o...",
+          "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase.Interesting - `history.py` already exists but it uses a different pattern (with a `build_router` factory + `WebUIConfig`/auth approach). The other route modules use a simpler `router = APIRouter(...)` module-level approac...",
           "human_gate_pending": false,
           "verification_failed": false,
           "attempt_count": 1,
           "max_attempts": 5,
-          "linked_pr_number": null,
-          "linked_pr_url": "",
+          "linked_pr_number": 1,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/1",
           "last_ci_conclusion": "",
           "last_ci_summary": "",
-          "last_failure_stage": "github_pr_open_failed",
-          "last_failure_summary": "Failed to push branch or upsert PR: pull request create failed: GraphQL: Head sha can't be blank, Base sha can't be blank, No commits between main and autopilot/ap-feebedcf, Head ref must be a branch (createPullRequest)",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
           "verification_steps": []
         }
       },
       {
-        "id": "ap-ced3cc17",
-        "title": "[P1.4] Backend resume support cho POST /api/sessions",
-        "body": "Mở rộng POST /api/sessions để nhận optional body {resume_id: string}. Nếu có resume_id, load snapshot bằng load_session_by_id và tạo session mới đã nạp lại conversation messages. Nếu BackendHostConfig/QueryEngine chưa hỗ trợ initial_messages thì thêm support tối thiểu.\n\n## Agent Instructions\n1. Spawn agent architect trước khi implement: thiết kế flow resume session, xác định interface changes cần thiết cho QueryEngine/BackendHostConfig.\n2. Spawn agent tdd-guide để viết tests cho resume flow: happy path, invalid resume_id, session with no messages.\n3. Sau khi implement xong, spawn agent code-reviewer để review thay đổi.",
-        "status": "failed",
+        "id": "ap-1ebbfcbd",
+        "title": "[P1.2] Backend: GET /api/history/{session_id} — load session detail",
+        "body": "Thêm endpoint GET /api/history/{session_id} trong routes/history.py. Gọi services/session_storage.load_session_by_id(cwd, session_id). Trả về full snapshot nhưng truncate tool_result content >500 chars. Return 404 nếu không tìm thấy.",
+        "status": "merged",
         "source_kind": "manual_idea",
         "source_ref": "",
         "score": 120,
@@ -497,57 +886,516 @@
           "recently updated"
         ],
         "labels": [],
-        "created_at": 1777481365.124862,
-        "updated_at": 1777556272.6600902,
+        "created_at": 1777599670.890115,
+        "updated_at": 1777607364.832387,
         "metadata": {
-          "last_note": "agent execution failed: Exceeded maximum turn limit (0)",
+          "last_note": "Merged PR #2",
           "url": "",
           "execution_model": "openclaude-gpt",
-          "assistant_summary_preview": "",
+          "assistant_summary_preview": "I'll start by exploring the repo structure to understand the codebase.Now I have enough context. Let me look at how state is exposed:Now add a test for the new endpoint. Let me see the existing history test for structure to append after:Wait — the persisted message goes through `sanitize_conversa...",
           "human_gate_pending": false,
           "verification_failed": false,
           "attempt_count": 1,
           "max_attempts": 5,
-          "linked_pr_number": null,
-          "linked_pr_url": "",
+          "linked_pr_number": 2,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/2",
           "last_ci_conclusion": "",
           "last_ci_summary": "",
-          "last_failure_stage": "agent_runtime_error",
-          "last_failure_summary": "agent execution failed: Exceeded maximum turn limit (0)",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
           "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-5445de7a",
+        "title": "[P1.3] Backend: DELETE /api/history/{session_id}",
+        "body": "Trước khi implement, spawn agent phù hợp (planner để plan, tdd-guide để viết test trước, code-reviewer sau khi code xong) theo từng bước; ghi kết quả chính vào run report. Thêm endpoint DELETE /api/history/{session_id} trong routes/history.py. Xoá file session-{id}.json trong project session dir. Nếu latest.json trỏ tới session này thì cũng xoá. Return 204 on success, 404 nếu không tồn tại.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777606214.4540339,
+        "updated_at": 1777607609.4625669,
+        "metadata": {
+          "last_note": "Merged PR #3 manually",
+          "url": "",
+          "execution_model": "openclaude-gpt",
+          "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase.Spawning the requested planner and TDD guide agents before implementation.While those run, let me start exploring the repo to understand the structure.Now let's look at existing tests and a related fixture pattern:I have ...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": 3,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/3",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-1c0ec066",
+        "title": "[P1.4] Backend: POST /api/sessions hỗ trợ resume",
+        "body": "Trước khi implement, spawn agent phù hợp (planner để plan, tdd-guide để viết test trước, code-reviewer sau khi code xong) theo từng bước; ghi kết quả chính vào run report. Mở rộng POST /api/sessions trong routes/sessions.py: chấp nhận optional JSON body {resume_id: string}. Khi có resume_id: load snapshot qua load_session_by_id(), tạo BackendHostConfig với initial_messages từ snapshot messages. Cần kiểm tra BackendHostConfig có hỗ trợ initial_messages không, nếu chưa thì thêm field này và wire vào engine/query_engine.py để prepend messages.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777607808.5735302,
+        "updated_at": 1777609365.745806,
+        "metadata": {
+          "last_note": "Merged PR #4 manually",
+          "url": "",
+          "execution_model": "openclaude-gpt",
+          "assistant_summary_preview": "There's no POST endpoint yet. Let me check the routes and bridge integration more.Good — `BackendHostConfig` already has `restore_messages` field. Let me check how it's wired through to the engine.BackendHostConfig already supports `restore_messages` (which is the equivalent of `initial_messages`...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": 4,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/4",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-b34d73b2",
+        "title": "[P1.5] Frontend: HistoryPanel component",
+        "body": "Trước khi implement, thực hiện từng bước sau: (1) spawn planner agent để lập kế hoạch, (2) spawn tdd-guide agent để viết test trước, (3) spawn gan-generator agent để implement theo plan, (4) spawn code-reviewer sau khi code xong. Ghi kết quả chính của từng bước vào run report. Tạo frontend/webui/src/components/HistoryPanel.tsx. Fetch GET /api/history on mount. Hiển thị list card: summary (truncate 60 chars), model badge, message count, relative time (vd: 2h ago). Nút Resume và Delete cho mỗi item. Loading skeleton khi fetch. Empty state: 'No previous sessions'.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777612527.9692469,
+        "updated_at": 1777616334.111403,
+        "metadata": {
+          "last_note": "Merged PR #5 manually",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "Let me check the current state of the branch and verify the verifications pass. The previous failure was the code-reviewer agent command. I’ll run the required role agents now against the current branch, then run verification. Good - agents have reported. Now run the code-reviewer and then full v...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 4,
+          "max_attempts": 5,
+          "linked_pr_number": 5,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/5",
+          "last_ci_conclusion": "failed",
+          "last_ci_summary": "Python tests (3.10)=FAILURE; Python tests (3.11)=FAILURE; Python quality=FAILURE",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "success",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-6bf347e9",
+        "title": "[P1.6] Frontend: Route /history và tích hợp resume",
+        "body": "Trước khi implement: (1) spawn planner agent để lập kế hoạch, (2) spawn tdd-guide agent để viết test trước, (3) spawn gan-generator agent để implement theo plan, (4) spawn code-reviewer sau khi code xong. Ghi kết quả chính của từng bước vào run report. Tạo page /history render HistoryPanel. Khi click Resume: gọi POST /api/sessions {resume_id}, nhận session_id mới, navigate tới /chat, reconnect WebSocket với session mới. Hiển thị banner 'Resumed from session <id>' trong Transcript.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777616570.345769,
+        "updated_at": 1777618502.070127,
+        "metadata": {
+          "last_note": "Merged PR #6 manually",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "Let me directly investigate the current state and fix the failures myself.Now let me check what the actual TS errors are:All three verification commands pass: - ✅ `uv run pytest -q` — 959 passed, 6 skipped - ✅ `uv run ruff check src tests scripts` — All checks passed - ✅ `tsc --noEmit` (terminal)...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 5,
+          "max_attempts": 5,
+          "linked_pr_number": 6,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/6",
+          "last_ci_conclusion": "failed",
+          "last_ci_summary": "Python tests (3.10)=FAILURE; Python tests (3.11)=FAILURE; Python quality=FAILURE",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "success",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-b1dd680e",
+        "title": "[P1.7] Frontend: Header dropdown Sessions",
+        "body": "Trước khi implement: (1) spawn planner agent để lập kế hoạch, (2) spawn tdd-guide agent để viết test trước, (3) spawn gan-generator agent để implement theo plan, (4) spawn code-reviewer sau khi code xong. Ghi kết quả chính của từng bước vào run report. Thêm dropdown button trong Header.tsx cạnh tên OpenHarness. Click mở mini-list 5 sessions gần nhất (fetch /api/history?limit=5). Click item → resume. Link 'View all' → navigate /history.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777619770.430872,
+        "updated_at": 1777622925.888685,
+        "metadata": {
+          "last_note": "Merged PR #7 manually — CI all green, repair_exhausted due to rate limits only",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "Rate limits hitting again. Doing manual investigation. The frontend implementation looks good. Let me check the CI failure — Python 3.10 compatibility issue with the `fix(ci)` commit.All tests pass on Python 3.10 locally. The previous CI failure was likely a flaky infrastructure issue or related ...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 5,
+          "max_attempts": 5,
+          "linked_pr_number": 7,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/7",
+          "last_ci_conclusion": "failed",
+          "last_ci_summary": "Python tests (3.10)=FAILURE",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "success",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-52843010",
+        "title": "[P1.8] Test: history routes happy path + error path",
+        "body": "Trước khi implement: (1) spawn planner agent để lập kế hoạch, (2) spawn tdd-guide agent để viết test trước, (3) spawn gan-generator agent để implement theo plan, (4) spawn code-reviewer sau khi code xong. Ghi kết quả chính của từng bước vào run report. Tạo tests/webui/test_history_routes.py. Dùng FastAPI TestClient. Test: list empty → []; tạo fake session file → list trả về 1 item; load by id → trả đúng data; load unknown id → 404; delete → file bị xoá. Mock cwd.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777623186.480632,
+        "updated_at": 1777624302.139176,
+        "metadata": {
+          "last_note": "repairing failed run",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "Let me assess the current state of the worktree and understand what's happening. Branch already has a clean committed patch. I’ll inspect the test and run report, then reproduce the Python quality failure and fix only what’s needed.Python quality passes in the active worktree, so the reported fai...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 3,
+          "max_attempts": 5,
+          "linked_pr_number": 8,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/8",
+          "last_ci_conclusion": "failed",
+          "last_ci_summary": "Python quality=FAILURE",
+          "last_failure_stage": "remote_ci_failed",
+          "last_failure_summary": "Python quality=FAILURE",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "success",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-757c4465",
+        "title": "[P2.1] Backend: GET /api/modes — trả về current modes",
+        "body": "Tạo src/openharness/webui/server/routes/modes.py. GET /api/modes đọc AppState từ active session host (hoặc từ settings nếu chưa có session): permission_mode, fast_mode, vim_enabled, effort, passes, output_style, theme. Trả JSON object với tất cả các field.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777625144.794635,
+        "updated_at": 1777625611.6839612,
+        "metadata": {
+          "last_note": "PR #9 is green; human gate pending",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "Now I have enough context. Let me look at the existing tests to understand the pattern:Now check if `SessionManager.entries()` method exists:Tests pass. The issue with the main environment was the missing frontend dist build artifact. Let me use the same approach the other tests are using: All ve...",
+          "human_gate_pending": true,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": 9,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/9",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "skipped",
+              "returncode": 1
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "skipped",
+              "returncode": 1
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-743e2f4a",
+        "title": "[P3.1] Backend: GET /api/providers — list provider profiles",
+        "body": "Tạo src/openharness/webui/server/routes/providers.py. GET /api/providers trả về danh sách provider profiles từ default_provider_profiles() merge với custom profiles trong settings. Mỗi item: {id, label, provider, api_format, default_model, base_url, has_credentials: bool, is_active: bool}. Active profile = profile đang dùng trong current session.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777646490.6411872,
+        "updated_at": 1777652000.0,
+        "metadata": {
+          "last_note": "1 verification gate(s) failed",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "I'll investigate the current state of the worktree and understand what's been done so far.Now let me look at the previous code-reviewer failure context. Let me check the latest commits and what the reviewer flagged:Now let me look at the previous failure: \"agent:code-reviewer (diff vs main) rc=1\"...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 5,
+          "max_attempts": 5,
+          "linked_pr_number": 16,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/16",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "local_verification_failed",
+          "last_failure_summary": "agent:code-reviewer (diff vs main) rc=1",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "error",
+              "returncode": 1
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-c77ee7e3",
+        "title": "[P3.6] Test: provider routes",
+        "body": "Tạo tests/webui/test_provider_routes.py. Test list providers trả về ≥9 items. Test activate unknown → 404. Test credentials save + mask. Test verify với mock httpx response.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1777646520.502489,
+        "updated_at": 1777681544.015977,
+        "metadata": {
+          "last_note": "PR #20 merged automatically",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "Existing tests in `tests/test_webui/test_server_routes.py` already cover provider routes. The new task asks specifically for `tests/webui/test_provider_routes.py` — a separate file under `tests/webui/`. Let me look at the existing one more carefully to mimic patterns, then build the simpler test ...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": 20,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/20",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
         }
       }
     ],
+    "failed": [],
     "rejected": [],
     "superseded": []
   },
   "cards": [
     {
-      "id": "ap-873ded82",
-      "title": "[P1.2] Backend endpoint GET /api/history/{session_id}",
-      "body": "Trong routes/history.py thêm GET /api/history/{session_id}. Dùng load_session_by_id(cwd, session_id). Return 404 nếu không tồn tại. Trả snapshot đã sanitize: giữ messages nhưng truncate tool_result/output quá dài để tránh response lớn.\n\n## Agent Instructions\n1. Spawn agent tdd-guide trước khi implement: viết test cases cho happy path, 404 case, và truncation behavior.\n2. Sau khi implement xong, spawn agent code-reviewer để review endpoint logic và error handling.",
-      "status": "repairing",
+      "id": "ap-1fcd539b",
+      "title": "[P4.2] Backend: POST/DELETE /api/models — add/remove custom model",
+      "body": "POST /api/models nhận {provider: string, model_id: string, label?: string, context_window?: int}. Thêm vào ProviderProfile.allowed_models cho provider đó. Persist settings. DELETE /api/models/{provider}/{model_id}: chỉ cho phép xoá custom models (is_custom=true). Return 400 nếu cố xoá built-in.",
+      "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
-      "score": 120,
+      "score": 100,
       "score_reasons": [
         "source=manual_idea",
         "direct user-driven input",
-        "urgent signals",
         "recently updated"
       ],
       "labels": [],
-      "created_at": 1777481354.72632,
-      "updated_at": 1777555700.229898,
+      "created_at": 1777646535.6570702,
+      "updated_at": 1777646535.6570702,
       "metadata": {
-        "last_note": "repairing failed run",
+        "last_note": "",
         "url": "",
-        "execution_model": "openclaude-gpt",
+        "execution_model": "",
         "assistant_summary_preview": "",
         "human_gate_pending": false,
         "verification_failed": false,
-        "attempt_count": 2,
-        "max_attempts": 5,
+        "attempt_count": 0,
+        "max_attempts": 0,
         "linked_pr_number": null,
         "linked_pr_url": "",
         "last_ci_conclusion": "",
@@ -558,55 +1406,21 @@
       }
     },
     {
-      "id": "ap-22889fc5",
-      "title": "[P1.3] Backend endpoint DELETE /api/history/{session_id}",
-      "body": "Trong routes/history.py thêm DELETE /api/history/{session_id}. Xoá session-{id}.json trong project session dir; nếu latest.json trỏ tới session đó thì xử lý an toàn. Return 204 nếu xoá thành công, 404 nếu không tồn tại.\n\n## Agent Instructions\n1. Spawn agent tdd-guide trước khi implement: viết test cases cho delete success (204), not found (404), và edge case khi latest.json trỏ tới session bị xoá.\n2. Sau khi implement xong, spawn agent security-reviewer để review file deletion logic (path traversal prevention).\n3. Cuối cùng spawn agent code-reviewer để review thay đổi.",
-      "status": "repairing",
+      "id": "ap-ec5427da",
+      "title": "[P4.3] Frontend: Settings/Models page",
+      "body": "Tạo page /settings/models. Hiển thị accordion theo provider. Mỗi provider: table model (id, label, context window, default toggle, custom badge). Nút 'Add custom model' mở form modal: chọn provider dropdown, nhập model_id, label optional, context_window optional. Nút delete cho custom models (confirm dialog).",
+      "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
-      "score": 120,
+      "score": 100,
       "score_reasons": [
         "source=manual_idea",
         "direct user-driven input",
-        "urgent signals",
         "recently updated"
       ],
       "labels": [],
-      "created_at": 1777481360.5257971,
-      "updated_at": 1777556077.425812,
-      "metadata": {
-        "last_note": "repairing failed run",
-        "url": "",
-        "execution_model": "openclaude-gpt",
-        "assistant_summary_preview": "",
-        "human_gate_pending": false,
-        "verification_failed": false,
-        "attempt_count": 2,
-        "max_attempts": 5,
-        "linked_pr_number": null,
-        "linked_pr_url": "",
-        "last_ci_conclusion": "",
-        "last_ci_summary": "",
-        "last_failure_stage": "",
-        "last_failure_summary": "",
-        "verification_steps": []
-      }
-    },
-    {
-      "id": "ap-076d72f1",
-      "title": "[P1.5] Frontend HistoryPanel component",
-      "body": "Tạo frontend/webui/src/components/HistoryPanel.tsx. Fetch /api/history, hiển thị danh sách session: summary, model, message_count, created_at dạng readable. Có buttons Resume và Delete. Có loading, empty state, error state.\n\n## Agent Instructions\n1. Sau khi implement xong, spawn agent code-reviewer để review component structure, error handling, và accessibility.",
-      "status": "queued",
-      "source_kind": "manual_idea",
-      "source_ref": "",
-      "score": 120,
-      "score_reasons": [
-        "priority=P1",
-        "manual_idea"
-      ],
-      "labels": [],
-      "created_at": 1777481369.440623,
-      "updated_at": 1777547292.535,
+      "created_at": 1777646552.1811562,
+      "updated_at": 1777646552.1811562,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -626,20 +1440,21 @@
       }
     },
     {
-      "id": "ap-47ece0cb",
-      "title": "[P1.6] Frontend route /history và resume flow",
-      "body": "Tạo page /history dùng HistoryPanel. Khi click Resume, gọi POST /api/sessions với resume_id, reconnect WebSocket bằng session_id mới, navigate về /chat và hiển thị banner 'Resumed from session ...'.\n\n## Agent Instructions\n1. Sau khi implement xong, spawn agent code-reviewer để review routing integration, WebSocket reconnection logic, và UX flow.",
+      "id": "ap-c1e3f203",
+      "title": "[P4.4] Backend: GET /api/agents — list agent definitions",
+      "body": "Tạo src/openharness/webui/server/routes/agents.py. GET /api/agents gọi coordinator/agent_definitions.py load functions. Trả về list {name, description, model, effort, permission_mode, tools_count, has_system_prompt, source_file}.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
-      "score": 120,
+      "score": 100,
       "score_reasons": [
-        "priority=P1",
-        "manual_idea"
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
       ],
       "labels": [],
-      "created_at": 1777481371.448394,
-      "updated_at": 1777547292.535,
+      "created_at": 1777646559.972515,
+      "updated_at": 1777646559.972515,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -659,20 +1474,21 @@
       }
     },
     {
-      "id": "ap-75b0ad5c",
-      "title": "[P1.7] Header recent sessions dropdown",
-      "body": "Cập nhật Header.tsx thêm dropdown Sessions. Dropdown fetch /api/history?limit=5, hiển thị recent sessions, click item để resume nhanh, link View all chuyển tới /history.\n\n## Agent Instructions\n1. Sau khi implement xong, spawn agent code-reviewer để review component logic, accessibility (keyboard navigation, ARIA), và styling.",
+      "id": "ap-c6a4623f",
+      "title": "[WebUI] Fix websocket 1006 connection closed banner and reconnect lifecycle",
+      "body": "Problem: WebUI shows 'Connection closed (code=1006)' in Header after launching/opening the app. Review frontend/webui/src/api/client.ts openWebSocket() and frontend/webui/src/store/session.ts setStatus(), plus backend src/openharness/webui/server/routes/sessions.py and websocket route handling. Current client marks any onclose as errorBanner immediately, retries only once, and can show stale 1006 during normal session replacement/unmount. Acceptance: distinguish expected/manual close from abnormal close, clear stale banner after successful reconnect, provide useful message for auth/backend failures, and add tests for close/reconnect behavior. Repro: run oh webui, open /chat, observe header banner 'Connection closed (code=1006)' as in screenshot.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
-      "score": 120,
+      "score": 100,
       "score_reasons": [
-        "priority=P1",
-        "manual_idea"
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
       ],
       "labels": [],
-      "created_at": 1777481373.590076,
-      "updated_at": 1777547292.535,
+      "created_at": 1777682832.9130938,
+      "updated_at": 1777682832.9130938,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -692,20 +1508,21 @@
       }
     },
     {
-      "id": "ap-4c9d9fef",
-      "title": "[P1.8] Tests cho WebUI history routes",
-      "body": "Tạo tests/webui/test_history_routes.py. Test list empty, list có fake session, load session by id, load unknown returns 404, delete session removes file. Dùng FastAPI TestClient và temp cwd/session dir nếu cần monkeypatch.\n\n## Agent Instructions\n1. Spawn agent tdd-guide để structure test cases theo AAA pattern với proper fixtures.\n2. Sau khi viết xong tests, spawn agent code-reviewer để review test quality, coverage, và isolation.",
+      "id": "ap-17390b6f",
+      "title": "[WebUI] Make OpenHarness left menu button work on desktop",
+      "body": "Problem: The hamburger button next to OpenHarness appears clickable but does not visibly affect the UI on desktop. AppLayout toggles sidebarOpen, but Sidebar renders desktop sidebar as always visible with class hidden h-full sm:block and only uses open for the mobile drawer. Acceptance: define desktop behavior for the button (collapse/expand sidebar or hide button on desktop), implement it consistently, preserve mobile drawer behavior, add component tests for desktop and mobile menu interactions. Relevant files: frontend/webui/src/App.tsx, frontend/webui/src/components/Header.tsx, frontend/webui/src/components/Sidebar.tsx, Header.test.tsx or new Sidebar/App layout tests.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
-      "score": 120,
+      "score": 100,
       "score_reasons": [
-        "priority=P1",
-        "manual_idea"
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
       ],
       "labels": [],
-      "created_at": 1777481378.476654,
-      "updated_at": 1777547292.535,
+      "created_at": 1777682833.542948,
+      "updated_at": 1777682833.542948,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -725,9 +1542,43 @@
       }
     },
     {
-      "id": "ap-22135a12",
-      "title": "[P0.1] Tách backend WebUI thành FastAPI routers",
-      "body": "Refactor src/openharness/webui/server/app.py: tách endpoint hiện tại ra các router riêng trong src/openharness/webui/server/routes/: health.py, sessions.py, tasks.py, cron.py. app.py chỉ còn create_app(), auth dependency, state init và mount routers. Giữ nguyên behavior hiện tại. Thêm hoặc cập nhật tests đảm bảo /api/health, /api/meta, /api/sessions, /api/tasks, /api/cron/jobs vẫn hoạt động. Sau khi xong spawn code-reviewer để review thay đổi.",
+      "id": "ap-1acc1f47",
+      "title": "[WebUI] Add browser smoke test for oh webui startup and primary shell interactions",
+      "body": "Problem: Recent WebUI startup regressions included missing exports, create_app signature mismatch, websocket connection banner, and non-working shell menu button. Add an automated browser smoke test or integration test that starts the WebUI app/server, loads /chat, asserts no initial connection error banner after websocket opens, verifies Sessions and permission dropdowns open, and verifies the OpenHarness menu/sidebar interaction behaves as specified. Acceptance: test fails on the current menu/noisy-connection regressions and passes after fixes; include guidance for running it locally in docs or test output.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777682834.155647,
+      "updated_at": 1777682834.155647,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-e732a7bf",
+      "title": "[P2.2] Backend: PATCH /api/modes — thay đổi modes runtime",
+      "body": "Endpoint PATCH /api/modes nhận body Pydantic model ModesPatch(permission_mode?: str, effort?: str, passes?: int, fast_mode?: bool, output_style?: str, theme?: str). Validate giá trị (permission_mode phải trong ['default','plan','full_auto'], effort trong ['low','medium','high'], passes 1-5). Áp dụng vào AppState hiện tại. Persist vào ~/.openharness/settings.json qua save_settings(). Broadcast state_snapshot qua WebSocket.",
       "status": "completed",
       "source_kind": "manual_idea",
       "source_ref": "",
@@ -739,135 +1590,777 @@
         "recently updated"
       ],
       "labels": [],
-      "created_at": 1777481328.68591,
-      "updated_at": 1777544916.3913841,
+      "created_at": 1777625793.962349,
+      "updated_at": 1777638585.795248,
       "metadata": {
-        "last_note": "Refactor verified on main; tests aligned to new router layout.",
+        "last_note": "PR #10 is green; human gate pending",
         "url": "",
-        "execution_model": "",
-        "assistant_summary_preview": "The refactor appears already done. Let me check the current state of the branch and verify the test failures.Refactor and tests already exist. Now I need to verify the actual local pytest run state. Let me run targeted tests then full suite to see what's failing.These 6 failures are confirmed pre...",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase. Let me check for missing imports and run the tests: Build issue: missing `frontend/webui/dist`. Let's see how prior tests work in this project (CI might have a workaround). Let me check the build config and also if there...",
+        "human_gate_pending": true,
+        "verification_failed": false,
+        "attempt_count": 3,
+        "max_attempts": 5,
+        "linked_pr_number": 10,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/10",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "agent_runtime_error",
+        "last_failure_summary": "agent execution failed: Network error: peer closed connection without sending complete message body (incomplete chunked read). Check your internet connection and try again.",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-c0ed4aa4",
+      "title": "[P2.3] Frontend: Settings/Modes page",
+      "body": "Tạo page /settings/modes. Fetch GET /api/modes on mount. Hiển thị: (1) Permission Mode — 3 radio buttons: Default, Plan, Full Auto với mô tả ngắn; (2) Effort — 3-button toggle low/medium/high; (3) Passes — number input 1-5; (4) Fast Mode — toggle switch; (5) Output Style — dropdown; (6) Theme — dropdown. Khi thay đổi → PATCH /api/modes ngay (debounce 300ms cho numeric).",
+      "status": "completed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777625852.873573,
+      "updated_at": 1777645085.476481,
+      "metadata": {
+        "last_note": "PR #11 is green; human gate pending",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "I'll start by exploring the repo structure to understand the codebase.This is a terminal-based UI (ink/react). The task asks for a settings page. Let me check the webui frontend instead which is more likely a web app.Now let me check whether `/api/modes` exists on the backend:GET exists. Is PATCH...",
+        "human_gate_pending": true,
+        "verification_failed": false,
+        "attempt_count": 2,
+        "max_attempts": 5,
+        "linked_pr_number": 11,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/11",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-2f27ad9f",
+      "title": "[P3.5] Frontend: Settings/Provider page",
+      "body": "Tạo page /settings/provider. Fetch GET /api/providers. Hiển thị grid card cho mỗi provider: icon/emoji theo type, label, status badge (Active/Configured/Not configured), default model. Card active có viền highlight. Click card mở modal: form api_key (password input), base_url, nút Verify, nút Activate. Sau verify thành công hiện danh sách models có thể import.",
+      "status": "completed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777646514.698522,
+      "updated_at": 1777646869.836204,
+      "metadata": {
+        "last_note": "PR #14 is green; human gate pending",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "Hmm, this is a terminal frontend (Ink-based React for CLI). The task asks for a /settings/provider page with grid cards, modals, etc. Let me look around more — there might be a different web frontend.So the actual web UI is `frontend/webui`. Let me explore.Now let me check the Sidebar to add the ...",
+        "human_gate_pending": true,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 14,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/14",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-1d2b92b3",
+      "title": "[P2.4] Frontend: Header quick-switch permission mode",
+      "body": "Thêm clickable chip trong Header hiển thị permission_mode hiện tại (DEFAULT=xám, PLAN=xanh, AUTO=đỏ/cam). Click mở popover/dropdown với 3 option. Chọn → PATCH /api/modes {permission_mode: ...}. Cập nhật UI ngay optimistic.",
+      "status": "completed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777625857.328417,
+      "updated_at": 1777645777.297086,
+      "metadata": {
+        "last_note": "PR #12 is green; human gate pending",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase, especially the Header component and existing patterns. Now I understand the codebase. I need to add a permission mode chip to the Header with a dropdown. Let me implement this: Now let me check the AppStatePayload type t...",
+        "human_gate_pending": true,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 12,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/12",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "success",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-e7a92226",
+      "title": "[P2.5] Frontend: Visual indicator cho full_auto mode",
+      "body": "Khi permission_mode=full_auto: Header hiện animated badge 'AUTO' màu cam nhấp nháy nhẹ. Sidebar status row permission hiện đỏ. Toast warning 1 lần khi chuyển sang full_auto: 'All tool calls will be auto-approved'. Khi chuyển về default → toast confirm.",
+      "status": "completed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777625861.182789,
+      "updated_at": 1777646213.217997,
+      "metadata": {
+        "last_note": "PR #13 is green; human gate pending",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "Now I understand the layout. Let me check theme colors and understand what header is. The \"Header\" in this terminal frontend appears to be something like `WelcomeBanner` or just `StatusBar`. Looking at the task, it mentions Header (top bar) but in this terminal app, the StatusBar is what contains...",
+        "human_gate_pending": true,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 13,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/13",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-6df55ce8",
+      "title": "[P2.6] Test: modes routes",
+      "body": "Tạo tests/webui/test_modes_routes.py. Test GET /api/modes trả đúng fields. Test PATCH với giá trị hợp lệ → 200 + giá trị thay đổi. Test PATCH với effort=invalid → 422. Test PATCH permission_mode=full_auto → persist đúng.",
+      "status": "completed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777625934.889536,
+      "updated_at": 1777647400.6169448,
+      "metadata": {
+        "last_note": "PR #15 is green; human gate pending",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase.There is already a modes route test file under `tests/test_webui`; I’ll inspect it and the route to add the requested `tests/webui` coverage coherently.The task asks for `tests/webui/test_modes_routes.py` (a different pat...",
+        "human_gate_pending": true,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 15,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/15",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-c7c021e7",
+      "title": "[P3.2] Backend: POST /api/providers/{name}/activate",
+      "body": "Endpoint POST /api/providers/{name}/activate: switch active provider profile. Cập nhật settings.json active_profile field. Reload BackendHostConfig cho sessions mới (sessions hiện tại giữ nguyên cho tới khi reconnect). Return {ok: true, model: new_default_model}.",
+      "status": "completed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777646495.953686,
+      "updated_at": 1777661134.408343,
+      "metadata": {
+        "last_note": "PR #17 is green; human gate pending",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "I'll implement the `POST /api/providers/{name}/activate` endpoint. Let me start by exploring the codebase structure. Now let me check the modes route for similar update patterns and how settings are saved:Now let me check existing tests for providers and modes routes: Now I have a clear picture. ...",
+        "human_gate_pending": true,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 17,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/17",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-61d2e9c7",
+      "title": "[P3.3] Backend: POST /api/providers/{name}/credentials",
+      "body": "Endpoint POST /api/providers/{name}/credentials nhận {api_key?: string, base_url?: string}. Lưu api_key qua auth/storage.py hoặc auth/manager.py credential store đã có (tìm hiểu cách hiện tại lưu key). Lưu base_url override vào provider profile settings. Mask api_key trong response (chỉ trả 4 ký tự cuối).",
+      "status": "completed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777646502.4753122,
+      "updated_at": 1777679960.693015,
+      "metadata": {
+        "last_note": "PR #18 is green; human gate pending",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "Now let me examine the tests for providers and the Settings model regarding profile_overrides/custom_profiles:Now I have a good understanding. The `name` in the URL is the profile name (e.g., \"claude-api\"). Let me check existing tests for providers route to understand patterns: Now I have a clear...",
+        "human_gate_pending": true,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 18,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/18",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-6ca2dcbc",
+      "title": "[P3.4] Backend: POST /api/providers/{name}/verify",
+      "body": "Endpoint POST /api/providers/{name}/verify: thử kết nối tới provider. Ưu tiên gọi GET /v1/models (miễn phí). Nếu provider không hỗ trợ /v1/models thì gọi 1 completion request nhỏ (~10 token). Trả {ok: bool, error?: string, models?: string[]} trong đó models là danh sách model IDs lấy được. Timeout 10s.",
+      "status": "completed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777646507.351966,
+      "updated_at": 1777680753.566581,
+      "metadata": {
+        "last_note": "PR #19 is green; human gate pending",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase.Now I need to understand provider profiles and how to make the verify call. Let me look at how API keys and base_urls are resolved to make the network call.Now let me look for default base_urls per provider:Now I have eno...",
+        "human_gate_pending": true,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 19,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/19",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-1322abc1",
+      "title": "[P4.1] Backend: GET /api/models — list models by provider",
+      "body": "Tạo src/openharness/webui/server/routes/models.py. GET /api/models trả về {provider_id: [{id, label, context_window, is_default, is_custom}, ...]}. Merge built-in models từ ProviderProfile + CLAUDE_MODEL_ALIAS_OPTIONS + custom models từ settings.allowed_models. Group theo provider.",
+      "status": "completed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777646531.036701,
+      "updated_at": 1777683227.1056588,
+      "metadata": {
+        "last_note": "PR #21 requires human gate after remote review",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "I'll start by exploring the codebase to understand the existing structure and patterns. Now I have enough context. Let me also look at the providers route patterns more closely to understand how `is_custom` should work: Now I have enough context. Let me create the `models.py` route and wire it in...",
+        "human_gate_pending": true,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 21,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/21",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-e0ed2172",
+      "title": "[P1.1] Backend: GET /api/history — list session snapshots",
+      "body": "Tạo src/openharness/webui/server/routes/history.py. Endpoint GET /api/history?limit=20 gọi services/session_storage.list_session_snapshots(cwd, limit) trả về danh sách {session_id, summary, message_count, model, created_at}. Cwd lấy từ app.state.webui_config.cwd. Mount router vào app.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777598188.499031,
+      "updated_at": 1777598758.861356,
+      "metadata": {
+        "last_note": "Merged PR #1",
+        "url": "",
+        "execution_model": "openclaude-gpt",
+        "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase.Interesting - `history.py` already exists but it uses a different pattern (with a `build_router` factory + `WebUIConfig`/auth approach). The other route modules use a simpler `router = APIRouter(...)` module-level approac...",
         "human_gate_pending": false,
-        "verification_failed": true,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 1,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/1",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-1ebbfcbd",
+      "title": "[P1.2] Backend: GET /api/history/{session_id} — load session detail",
+      "body": "Thêm endpoint GET /api/history/{session_id} trong routes/history.py. Gọi services/session_storage.load_session_by_id(cwd, session_id). Trả về full snapshot nhưng truncate tool_result content >500 chars. Return 404 nếu không tìm thấy.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777599670.890115,
+      "updated_at": 1777607364.832387,
+      "metadata": {
+        "last_note": "Merged PR #2",
+        "url": "",
+        "execution_model": "openclaude-gpt",
+        "assistant_summary_preview": "I'll start by exploring the repo structure to understand the codebase.Now I have enough context. Let me look at how state is exposed:Now add a test for the new endpoint. Let me see the existing history test for structure to append after:Wait — the persisted message goes through `sanitize_conversa...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 2,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/2",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-5445de7a",
+      "title": "[P1.3] Backend: DELETE /api/history/{session_id}",
+      "body": "Trước khi implement, spawn agent phù hợp (planner để plan, tdd-guide để viết test trước, code-reviewer sau khi code xong) theo từng bước; ghi kết quả chính vào run report. Thêm endpoint DELETE /api/history/{session_id} trong routes/history.py. Xoá file session-{id}.json trong project session dir. Nếu latest.json trỏ tới session này thì cũng xoá. Return 204 on success, 404 nếu không tồn tại.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777606214.4540339,
+      "updated_at": 1777607609.4625669,
+      "metadata": {
+        "last_note": "Merged PR #3 manually",
+        "url": "",
+        "execution_model": "openclaude-gpt",
+        "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase.Spawning the requested planner and TDD guide agents before implementation.While those run, let me start exploring the repo to understand the structure.Now let's look at existing tests and a related fixture pattern:I have ...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 3,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/3",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-1c0ec066",
+      "title": "[P1.4] Backend: POST /api/sessions hỗ trợ resume",
+      "body": "Trước khi implement, spawn agent phù hợp (planner để plan, tdd-guide để viết test trước, code-reviewer sau khi code xong) theo từng bước; ghi kết quả chính vào run report. Mở rộng POST /api/sessions trong routes/sessions.py: chấp nhận optional JSON body {resume_id: string}. Khi có resume_id: load snapshot qua load_session_by_id(), tạo BackendHostConfig với initial_messages từ snapshot messages. Cần kiểm tra BackendHostConfig có hỗ trợ initial_messages không, nếu chưa thì thêm field này và wire vào engine/query_engine.py để prepend messages.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777607808.5735302,
+      "updated_at": 1777609365.745806,
+      "metadata": {
+        "last_note": "Merged PR #4 manually",
+        "url": "",
+        "execution_model": "openclaude-gpt",
+        "assistant_summary_preview": "There's no POST endpoint yet. Let me check the routes and bridge integration more.Good — `BackendHostConfig` already has `restore_messages` field. Let me check how it's wired through to the engine.BackendHostConfig already supports `restore_messages` (which is the equivalent of `initial_messages`...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 4,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/4",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-b34d73b2",
+      "title": "[P1.5] Frontend: HistoryPanel component",
+      "body": "Trước khi implement, thực hiện từng bước sau: (1) spawn planner agent để lập kế hoạch, (2) spawn tdd-guide agent để viết test trước, (3) spawn gan-generator agent để implement theo plan, (4) spawn code-reviewer sau khi code xong. Ghi kết quả chính của từng bước vào run report. Tạo frontend/webui/src/components/HistoryPanel.tsx. Fetch GET /api/history on mount. Hiển thị list card: summary (truncate 60 chars), model badge, message count, relative time (vd: 2h ago). Nút Resume và Delete cho mỗi item. Loading skeleton khi fetch. Empty state: 'No previous sessions'.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777612527.9692469,
+      "updated_at": 1777616334.111403,
+      "metadata": {
+        "last_note": "Merged PR #5 manually",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "Let me check the current state of the branch and verify the verifications pass. The previous failure was the code-reviewer agent command. I’ll run the required role agents now against the current branch, then run verification. Good - agents have reported. Now run the code-reviewer and then full v...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 4,
+        "max_attempts": 5,
+        "linked_pr_number": 5,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/5",
+        "last_ci_conclusion": "failed",
+        "last_ci_summary": "Python tests (3.10)=FAILURE; Python tests (3.11)=FAILURE; Python quality=FAILURE",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "success",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-6bf347e9",
+      "title": "[P1.6] Frontend: Route /history và tích hợp resume",
+      "body": "Trước khi implement: (1) spawn planner agent để lập kế hoạch, (2) spawn tdd-guide agent để viết test trước, (3) spawn gan-generator agent để implement theo plan, (4) spawn code-reviewer sau khi code xong. Ghi kết quả chính của từng bước vào run report. Tạo page /history render HistoryPanel. Khi click Resume: gọi POST /api/sessions {resume_id}, nhận session_id mới, navigate tới /chat, reconnect WebSocket với session mới. Hiển thị banner 'Resumed from session <id>' trong Transcript.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777616570.345769,
+      "updated_at": 1777618502.070127,
+      "metadata": {
+        "last_note": "Merged PR #6 manually",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "Let me directly investigate the current state and fix the failures myself.Now let me check what the actual TS errors are:All three verification commands pass: - ✅ `uv run pytest -q` — 959 passed, 6 skipped - ✅ `uv run ruff check src tests scripts` — All checks passed - ✅ `tsc --noEmit` (terminal)...",
+        "human_gate_pending": false,
+        "verification_failed": false,
         "attempt_count": 5,
         "max_attempts": 5,
-        "linked_pr_number": null,
-        "linked_pr_url": "",
-        "last_ci_conclusion": "",
-        "last_ci_summary": "",
-        "last_failure_stage": "agent_runtime_error",
-        "last_failure_summary": "agent execution failed: Exceeded maximum turn limit (12)",
-        "verification_steps": [
-          {
-            "command": "uv run pytest -q",
-            "status": "failed",
-            "returncode": 1
-          },
-          {
-            "command": "uv run ruff check src tests scripts",
-            "status": "success",
-            "returncode": 0
-          },
-          {
-            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
-            "status": "success",
-            "returncode": 0
-          }
-        ]
-      }
-    },
-    {
-      "id": "ap-5fbd2a4c",
-      "title": "[P0.2] Thêm routing cho React WebUI",
-      "body": "Thêm react-router-dom vào frontend/webui. Bọc app bằng BrowserRouter. Tạo layout chung có Sidebar + Header + main Outlet. Route /chat dùng giao diện chat hiện tại, route / redirect về /chat. Đảm bảo SPA fallback backend vẫn phục vụ index.html cho mọi non-api path.\n\n## Agent Instructions\n1. Trước khi implement, spawn agent architect để thiết kế routing layout và component hierarchy.\n2. Sau khi implement xong, spawn agent tdd-guide để viết tests cho routing behavior (redirect, SPA fallback, route matching).\n3. Cuối cùng spawn agent code-reviewer để review toàn bộ thay đổi.",
-      "status": "completed",
-      "source_kind": "manual_idea",
-      "source_ref": "",
-      "score": 120,
-      "score_reasons": [
-        "source=manual_idea",
-        "direct user-driven input",
-        "urgent signals",
-        "recently updated"
-      ],
-      "labels": [],
-      "created_at": 1777481334.228359,
-      "updated_at": 1777554651.422854,
-      "metadata": {
-        "last_note": "Merged to main: AppLayout+Outlet routing, BrowserRouter, SPA fallback, NavLink active styling.",
-        "url": "",
-        "execution_model": "openclaude-gpt",
-        "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase.Hmm, only 3 files in webui. Let me check the other webui-related directories.Just `src/` — no package.json yet! Let me check the App.tsx, components, and the rest of the project.This App.tsx imports many missing component...",
-        "human_gate_pending": false,
-        "verification_failed": true,
-        "attempt_count": 0,
-        "max_attempts": 5,
-        "linked_pr_number": null,
-        "linked_pr_url": "",
-        "last_ci_conclusion": "",
-        "last_ci_summary": "",
-        "last_failure_stage": "git_prepare_failed",
-        "last_failure_summary": "Failed to prepare worktree branch: error: Your local changes to the following files would be overwritten by checkout:\n\tfrontend/webui/src/App.tsx\nPlease commit your changes or stash them before you switch branches.\nAborting",
-        "verification_steps": [
-          {
-            "command": "uv run pytest -q",
-            "status": "failed",
-            "returncode": 1
-          },
-          {
-            "command": "uv run ruff check src tests scripts",
-            "status": "success",
-            "returncode": 0
-          },
-          {
-            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
-            "status": "success",
-            "returncode": 0
-          },
-          {
-            "command": "agent:code-reviewer (diff vs main)",
-            "status": "failed",
-            "returncode": 1
-          }
-        ]
-      }
-    },
-    {
-      "id": "ap-7179c8d1",
-      "title": "[P0.3] Thêm navigation vào Sidebar WebUI",
-      "body": "Cập nhật frontend/webui/src/components/Sidebar.tsx: thêm navigation links cho /chat, /history, /pipeline, /tasks, /settings/modes, /settings/provider, /settings/models, /settings/agents. Dùng NavLink active styling. Giữ các section Status, Tasks, Cron hiện có.\n\n## Agent Instructions\n1. Sau khi implement xong, spawn agent code-reviewer để review thay đổi về component structure, accessibility, và styling.",
-      "status": "completed",
-      "source_kind": "manual_idea",
-      "source_ref": "",
-      "score": 120,
-      "score_reasons": [
-        "source=manual_idea",
-        "direct user-driven input",
-        "urgent signals",
-        "recently updated"
-      ],
-      "labels": [],
-      "created_at": 1777481340.765645,
-      "updated_at": 1777566915.893,
-      "metadata": {
-        "last_note": "Merged to main: Sidebar navigation links and Settings sub-section.",
-        "url": "",
-        "execution_model": "openclaude-gpt",
-        "assistant_summary_preview": "I'll start by exploring the current state of the repository and understanding what's been done.Interesting - the Sidebar navigation work is already in commit `29f64f6`. The current uncommitted changes are repair fixes for pytest/ruff. Let me check the current state of those changes.These uncommit...",
-        "human_gate_pending": false,
-        "verification_failed": false,
-        "attempt_count": 0,
-        "max_attempts": 5,
-        "linked_pr_number": null,
-        "linked_pr_url": "",
-        "last_ci_conclusion": "",
-        "last_ci_summary": "",
+        "linked_pr_number": 6,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/6",
+        "last_ci_conclusion": "failed",
+        "last_ci_summary": "Python tests (3.10)=FAILURE; Python tests (3.11)=FAILURE; Python quality=FAILURE",
         "last_failure_stage": "",
         "last_failure_summary": "",
         "verification_steps": [
           {
             "command": "uv run pytest -q",
-            "status": "failed",
-            "returncode": 1
+            "status": "success",
+            "returncode": 0
           },
           {
             "command": "uv run ruff check src tests scripts",
@@ -888,10 +2381,10 @@
       }
     },
     {
-      "id": "ap-feebedcf",
-      "title": "[P1.1] Backend endpoint GET /api/history",
-      "body": "Tạo routes/history.py cho WebUI. Endpoint GET /api/history?limit=20 dùng openharness.services.session_storage.list_session_snapshots(cwd, limit) để trả danh sách session snapshots gồm session_id, summary, message_count, model, created_at. cwd lấy từ WebUIConfig. Mount router vào app. Sau khi xong spawn code-reviewer để review thay đổi.",
-      "status": "failed",
+      "id": "ap-b1dd680e",
+      "title": "[P1.7] Frontend: Header dropdown Sessions",
+      "body": "Trước khi implement: (1) spawn planner agent để lập kế hoạch, (2) spawn tdd-guide agent để viết test trước, (3) spawn gan-generator agent để implement theo plan, (4) spawn code-reviewer sau khi code xong. Ghi kết quả chính của từng bước vào run report. Thêm dropdown button trong Header.tsx cạnh tên OpenHarness. Click mở mini-list 5 sessions gần nhất (fetch /api/history?limit=5). Click item → resume. Link 'View all' → navigate /history.",
+      "status": "merged",
       "source_kind": "manual_idea",
       "source_ref": "",
       "score": 120,
@@ -902,31 +2395,52 @@
         "recently updated"
       ],
       "labels": [],
-      "created_at": 1777481348.033709,
-      "updated_at": 1777596515.279427,
+      "created_at": 1777619770.430872,
+      "updated_at": 1777622925.888685,
       "metadata": {
-        "last_note": "Failed to push branch or upsert PR: pull request create failed: GraphQL: Head sha can't be blank, Base sha can't be blank, No commits between main and autopilot/ap-feebedcf, Head ref must be a branch (createPullRequest)",
+        "last_note": "Merged PR #7 manually — CI all green, repair_exhausted due to rate limits only",
         "url": "",
-        "execution_model": "openclaude-gpt",
-        "assistant_summary_preview": "No WebUI backend exists yet. Let me look around more carefully.WebUI module doesn't exist yet — only described in GUIDE. The task says \"Tạo routes/history.py cho WebUI\". I need to create `src/openharness/webui/` from scratch or this depends on prior tasks. Let me check if there is a parent task o...",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "Rate limits hitting again. Doing manual investigation. The frontend implementation looks good. Let me check the CI failure — Python 3.10 compatibility issue with the `fix(ci)` commit.All tests pass on Python 3.10 locally. The previous CI failure was likely a flaky infrastructure issue or related ...",
         "human_gate_pending": false,
         "verification_failed": false,
-        "attempt_count": 1,
+        "attempt_count": 5,
         "max_attempts": 5,
-        "linked_pr_number": null,
-        "linked_pr_url": "",
-        "last_ci_conclusion": "",
-        "last_ci_summary": "",
-        "last_failure_stage": "github_pr_open_failed",
-        "last_failure_summary": "Failed to push branch or upsert PR: pull request create failed: GraphQL: Head sha can't be blank, Base sha can't be blank, No commits between main and autopilot/ap-feebedcf, Head ref must be a branch (createPullRequest)",
-        "verification_steps": []
+        "linked_pr_number": 7,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/7",
+        "last_ci_conclusion": "failed",
+        "last_ci_summary": "Python tests (3.10)=FAILURE",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "success",
+            "returncode": 0
+          }
+        ]
       }
     },
     {
-      "id": "ap-ced3cc17",
-      "title": "[P1.4] Backend resume support cho POST /api/sessions",
-      "body": "Mở rộng POST /api/sessions để nhận optional body {resume_id: string}. Nếu có resume_id, load snapshot bằng load_session_by_id và tạo session mới đã nạp lại conversation messages. Nếu BackendHostConfig/QueryEngine chưa hỗ trợ initial_messages thì thêm support tối thiểu.\n\n## Agent Instructions\n1. Spawn agent architect trước khi implement: thiết kế flow resume session, xác định interface changes cần thiết cho QueryEngine/BackendHostConfig.\n2. Spawn agent tdd-guide để viết tests cho resume flow: happy path, invalid resume_id, session with no messages.\n3. Sau khi implement xong, spawn agent code-reviewer để review thay đổi.",
-      "status": "failed",
+      "id": "ap-52843010",
+      "title": "[P1.8] Test: history routes happy path + error path",
+      "body": "Trước khi implement: (1) spawn planner agent để lập kế hoạch, (2) spawn tdd-guide agent để viết test trước, (3) spawn gan-generator agent để implement theo plan, (4) spawn code-reviewer sau khi code xong. Ghi kết quả chính của từng bước vào run report. Tạo tests/webui/test_history_routes.py. Dùng FastAPI TestClient. Test: list empty → []; tạo fake session file → list trả về 1 item; load by id → trả đúng data; load unknown id → 404; delete → file bị xoá. Mock cwd.",
+      "status": "merged",
       "source_kind": "manual_idea",
       "source_ref": "",
       "score": 120,
@@ -937,259 +2451,446 @@
         "recently updated"
       ],
       "labels": [],
-      "created_at": 1777481365.124862,
-      "updated_at": 1777556272.6600902,
+      "created_at": 1777623186.480632,
+      "updated_at": 1777624302.139176,
       "metadata": {
-        "last_note": "agent execution failed: Exceeded maximum turn limit (0)",
+        "last_note": "repairing failed run",
         "url": "",
-        "execution_model": "openclaude-gpt",
-        "assistant_summary_preview": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "Let me assess the current state of the worktree and understand what's happening. Branch already has a clean committed patch. I’ll inspect the test and run report, then reproduce the Python quality failure and fix only what’s needed.Python quality passes in the active worktree, so the reported fai...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 3,
+        "max_attempts": 5,
+        "linked_pr_number": 8,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/8",
+        "last_ci_conclusion": "failed",
+        "last_ci_summary": "Python quality=FAILURE",
+        "last_failure_stage": "remote_ci_failed",
+        "last_failure_summary": "Python quality=FAILURE",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "success",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-757c4465",
+      "title": "[P2.1] Backend: GET /api/modes — trả về current modes",
+      "body": "Tạo src/openharness/webui/server/routes/modes.py. GET /api/modes đọc AppState từ active session host (hoặc từ settings nếu chưa có session): permission_mode, fast_mode, vim_enabled, effort, passes, output_style, theme. Trả JSON object với tất cả các field.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777625144.794635,
+      "updated_at": 1777625611.6839612,
+      "metadata": {
+        "last_note": "PR #9 is green; human gate pending",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "Now I have enough context. Let me look at the existing tests to understand the pattern:Now check if `SessionManager.entries()` method exists:Tests pass. The issue with the main environment was the missing frontend dist build artifact. Let me use the same approach the other tests are using: All ve...",
+        "human_gate_pending": true,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 9,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/9",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "skipped",
+            "returncode": 1
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "skipped",
+            "returncode": 1
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-743e2f4a",
+      "title": "[P3.1] Backend: GET /api/providers — list provider profiles",
+      "body": "Tạo src/openharness/webui/server/routes/providers.py. GET /api/providers trả về danh sách provider profiles từ default_provider_profiles() merge với custom profiles trong settings. Mỗi item: {id, label, provider, api_format, default_model, base_url, has_credentials: bool, is_active: bool}. Active profile = profile đang dùng trong current session.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777646490.6411872,
+      "updated_at": 1777652000.0,
+      "metadata": {
+        "last_note": "1 verification gate(s) failed",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "I'll investigate the current state of the worktree and understand what's been done so far.Now let me look at the previous code-reviewer failure context. Let me check the latest commits and what the reviewer flagged:Now let me look at the previous failure: \"agent:code-reviewer (diff vs main) rc=1\"...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 5,
+        "max_attempts": 5,
+        "linked_pr_number": 16,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/16",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "local_verification_failed",
+        "last_failure_summary": "agent:code-reviewer (diff vs main) rc=1",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "error",
+            "returncode": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-c77ee7e3",
+      "title": "[P3.6] Test: provider routes",
+      "body": "Tạo tests/webui/test_provider_routes.py. Test list providers trả về ≥9 items. Test activate unknown → 404. Test credentials save + mask. Test verify với mock httpx response.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1777646520.502489,
+      "updated_at": 1777681544.015977,
+      "metadata": {
+        "last_note": "PR #20 merged automatically",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "Existing tests in `tests/test_webui/test_server_routes.py` already cover provider routes. The new task asks specifically for `tests/webui/test_provider_routes.py` — a separate file under `tests/webui/`. Let me look at the existing one more carefully to mimic patterns, then build the simpler test ...",
         "human_gate_pending": false,
         "verification_failed": false,
         "attempt_count": 1,
         "max_attempts": 5,
-        "linked_pr_number": null,
-        "linked_pr_url": "",
-        "last_ci_conclusion": "",
-        "last_ci_summary": "",
-        "last_failure_stage": "agent_runtime_error",
-        "last_failure_summary": "agent execution failed: Exceeded maximum turn limit (0)",
-        "verification_steps": []
+        "linked_pr_number": 20,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/20",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
       }
     }
   ],
   "journal": [
     {
-      "timestamp": 1777559419.862367,
-      "kind": "verification_failed",
-      "summary": "[P0.3] Thêm navigation vào Sidebar WebUI: local verification failed, retrying",
-      "task_id": "ap-7179c8d1",
+      "timestamp": 1777679896.034631,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P3.3] Backend: POST /api/providers/{name}/credentials (waiting for remote CI on PR #18)",
+      "task_id": "ap-61d2e9c7",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777679960.682783,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P3.3] Backend: POST /api/providers/{name}/credentials (remote CI status: success)",
+      "task_id": "ap-61d2e9c7",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777679960.694079,
+      "kind": "status_completed",
+      "summary": "completed: [P3.3] Backend: POST /api/providers/{name}/credentials (PR #18 is green; human gate pending)",
+      "task_id": "ap-61d2e9c7",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777679960.698115,
+      "kind": "human_gate_pending",
+      "summary": "[P3.3] Backend: POST /api/providers/{name}/credentials: PR #18 is ready for human gate",
+      "task_id": "ap-61d2e9c7",
       "metadata": {
-        "attempt_count": 4
+        "pr_number": 18
       }
     },
     {
-      "timestamp": 1777559420.618421,
-      "kind": "status_repairing",
-      "summary": "repairing: [P0.3] Thêm navigation vào Sidebar WebUI (repairing failed run)",
-      "task_id": "ap-7179c8d1",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777560054.792413,
-      "kind": "run_finished",
-      "summary": "Agent run finished for [P0.3] Thêm navigation vào Sidebar WebUI",
-      "task_id": "ap-7179c8d1",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-7179c8d1-attempt-05-run.md",
-        "attempt_count": 5
-      }
-    },
-    {
-      "timestamp": 1777560054.7947469,
-      "kind": "status_verifying",
-      "summary": "verifying: [P0.3] Thêm navigation vào Sidebar WebUI (running verification gates)",
-      "task_id": "ap-7179c8d1",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777560084.1013892,
-      "kind": "status_failed",
-      "summary": "failed: [P0.3] Thêm navigation vào Sidebar WebUI (1 verification gate(s) failed)",
-      "task_id": "ap-7179c8d1",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777560084.106838,
-      "kind": "verification_failed",
-      "summary": "[P0.3] Thêm navigation vào Sidebar WebUI: 1 verification gate(s) failed",
-      "task_id": "ap-7179c8d1",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777560985.346005,
+      "timestamp": 1777680301.248682,
       "kind": "status_preparing",
-      "summary": "preparing: [P0.3] Thêm navigation vào Sidebar WebUI (preparing isolated worktree)",
-      "task_id": "ap-7179c8d1",
+      "summary": "preparing: [P3.4] Backend: POST /api/providers/{name}/verify (preparing isolated worktree)",
+      "task_id": "ap-6ca2dcbc",
       "metadata": {}
     },
     {
-      "timestamp": 1777560985.3498938,
-      "kind": "status_failed",
-      "summary": "failed: [P0.3] Thêm navigation vào Sidebar WebUI (repair rounds exhausted)",
-      "task_id": "ap-7179c8d1",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777561139.245429,
-      "kind": "status_preparing",
-      "summary": "preparing: [P0.3] Thêm navigation vào Sidebar WebUI (preparing isolated worktree)",
-      "task_id": "ap-7179c8d1",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777561139.9928331,
+      "timestamp": 1777680301.9773052,
       "kind": "status_running",
-      "summary": "running: [P0.3] Thêm navigation vào Sidebar WebUI (autopilot execution started)",
-      "task_id": "ap-7179c8d1",
+      "summary": "running: [P3.4] Backend: POST /api/providers/{name}/verify (autopilot execution started)",
+      "task_id": "ap-6ca2dcbc",
       "metadata": {}
     },
     {
-      "timestamp": 1777562149.3568058,
+      "timestamp": 1777680666.2208378,
       "kind": "run_finished",
-      "summary": "Agent run finished for [P0.3] Thêm navigation vào Sidebar WebUI",
-      "task_id": "ap-7179c8d1",
+      "summary": "Agent run finished for [P3.4] Backend: POST /api/providers/{name}/verify",
+      "task_id": "ap-6ca2dcbc",
       "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-7179c8d1-attempt-01-run.md",
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-6ca2dcbc-attempt-01-run.md",
         "attempt_count": 1
       }
     },
     {
-      "timestamp": 1777562149.3596349,
+      "timestamp": 1777680666.2261992,
       "kind": "status_verifying",
-      "summary": "verifying: [P0.3] Thêm navigation vào Sidebar WebUI (running verification gates)",
-      "task_id": "ap-7179c8d1",
+      "summary": "verifying: [P3.4] Backend: POST /api/providers/{name}/verify (running verification gates)",
+      "task_id": "ap-6ca2dcbc",
       "metadata": {}
     },
     {
-      "timestamp": 1777562220.398806,
-      "kind": "status_repairing",
-      "summary": "repairing: [P0.3] Thêm navigation vào Sidebar WebUI (local verification failed; retrying)",
-      "task_id": "ap-7179c8d1",
+      "timestamp": 1777680688.759264,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P3.4] Backend: POST /api/providers/{name}/verify (waiting for remote CI on PR #19)",
+      "task_id": "ap-6ca2dcbc",
       "metadata": {}
     },
     {
-      "timestamp": 1777562220.404417,
-      "kind": "verification_failed",
-      "summary": "[P0.3] Thêm navigation vào Sidebar WebUI: local verification failed, retrying",
-      "task_id": "ap-7179c8d1",
+      "timestamp": 1777680753.554572,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P3.4] Backend: POST /api/providers/{name}/verify (remote CI status: success)",
+      "task_id": "ap-6ca2dcbc",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777680753.5689769,
+      "kind": "status_completed",
+      "summary": "completed: [P3.4] Backend: POST /api/providers/{name}/verify (PR #19 is green; human gate pending)",
+      "task_id": "ap-6ca2dcbc",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777680753.577535,
+      "kind": "human_gate_pending",
+      "summary": "[P3.4] Backend: POST /api/providers/{name}/verify: PR #19 is ready for human gate",
+      "task_id": "ap-6ca2dcbc",
       "metadata": {
-        "attempt_count": 1
+        "pr_number": 19
       }
     },
     {
-      "timestamp": 1777562221.083327,
-      "kind": "status_repairing",
-      "summary": "repairing: [P0.3] Thêm navigation vào Sidebar WebUI (repairing failed run)",
-      "task_id": "ap-7179c8d1",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777563238.836361,
-      "kind": "run_finished",
-      "summary": "Agent run finished for [P0.3] Thêm navigation vào Sidebar WebUI",
-      "task_id": "ap-7179c8d1",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-7179c8d1-attempt-02-run.md",
-        "attempt_count": 2
-      }
-    },
-    {
-      "timestamp": 1777563238.838442,
-      "kind": "status_verifying",
-      "summary": "verifying: [P0.3] Thêm navigation vào Sidebar WebUI (running verification gates)",
-      "task_id": "ap-7179c8d1",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777563271.348524,
-      "kind": "status_repairing",
-      "summary": "repairing: [P0.3] Thêm navigation vào Sidebar WebUI (local verification failed; retrying)",
-      "task_id": "ap-7179c8d1",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777563271.3537679,
-      "kind": "verification_failed",
-      "summary": "[P0.3] Thêm navigation vào Sidebar WebUI: local verification failed, retrying",
-      "task_id": "ap-7179c8d1",
-      "metadata": {
-        "attempt_count": 2
-      }
-    },
-    {
-      "timestamp": 1777563272.066113,
-      "kind": "status_repairing",
-      "summary": "repairing: [P0.3] Thêm navigation vào Sidebar WebUI (repairing failed run)",
-      "task_id": "ap-7179c8d1",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777566404.688194,
-      "kind": "run_finished",
-      "summary": "Agent run finished for [P0.3] Thêm navigation vào Sidebar WebUI",
-      "task_id": "ap-7179c8d1",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-7179c8d1-attempt-03-run.md",
-        "attempt_count": 3
-      }
-    },
-    {
-      "timestamp": 1777566404.6917398,
-      "kind": "status_verifying",
-      "summary": "verifying: [P0.3] Thêm navigation vào Sidebar WebUI (running verification gates)",
-      "task_id": "ap-7179c8d1",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777566443.283812,
-      "kind": "status_repairing",
-      "summary": "repairing: [P0.3] Thêm navigation vào Sidebar WebUI (local verification failed; retrying)",
-      "task_id": "ap-7179c8d1",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777566443.288929,
-      "kind": "verification_failed",
-      "summary": "[P0.3] Thêm navigation vào Sidebar WebUI: local verification failed, retrying",
-      "task_id": "ap-7179c8d1",
-      "metadata": {
-        "attempt_count": 3
-      }
-    },
-    {
-      "timestamp": 1777566443.952676,
-      "kind": "status_repairing",
-      "summary": "repairing: [P0.3] Thêm navigation vào Sidebar WebUI (repairing failed run)",
-      "task_id": "ap-7179c8d1",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777596049.692091,
+      "timestamp": 1777681237.74514,
       "kind": "status_preparing",
-      "summary": "preparing: [P1.1] Backend endpoint GET /api/history (preparing isolated worktree)",
-      "task_id": "ap-feebedcf",
+      "summary": "preparing: [P3.6] Test: provider routes (preparing isolated worktree)",
+      "task_id": "ap-c77ee7e3",
       "metadata": {}
     },
     {
-      "timestamp": 1777596050.4650502,
+      "timestamp": 1777681238.4295979,
       "kind": "status_running",
-      "summary": "running: [P1.1] Backend endpoint GET /api/history (autopilot execution started)",
-      "task_id": "ap-feebedcf",
+      "summary": "running: [P3.6] Test: provider routes (autopilot execution started)",
+      "task_id": "ap-c77ee7e3",
       "metadata": {}
     },
     {
-      "timestamp": 1777596484.4135711,
+      "timestamp": 1777681441.820394,
       "kind": "run_finished",
-      "summary": "Agent run finished for [P1.1] Backend endpoint GET /api/history",
-      "task_id": "ap-feebedcf",
+      "summary": "Agent run finished for [P3.6] Test: provider routes",
+      "task_id": "ap-c77ee7e3",
       "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-feebedcf-attempt-01-run.md",
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-c77ee7e3-attempt-01-run.md",
         "attempt_count": 1
       }
     },
     {
-      "timestamp": 1777596484.4156249,
+      "timestamp": 1777681441.823328,
       "kind": "status_verifying",
-      "summary": "verifying: [P1.1] Backend endpoint GET /api/history (running verification gates)",
-      "task_id": "ap-feebedcf",
+      "summary": "verifying: [P3.6] Test: provider routes (running verification gates)",
+      "task_id": "ap-c77ee7e3",
       "metadata": {}
     },
     {
-      "timestamp": 1777596515.281039,
-      "kind": "status_failed",
-      "summary": "failed: [P1.1] Backend endpoint GET /api/history (Failed to push branch or upsert PR: pull request create failed: GraphQL: Head...)",
-      "task_id": "ap-feebedcf",
+      "timestamp": 1777681464.439649,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P3.6] Test: provider routes (waiting for remote CI on PR #20)",
+      "task_id": "ap-c77ee7e3",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777681528.315936,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P3.6] Test: provider routes (remote CI status: success)",
+      "task_id": "ap-c77ee7e3",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777681544.018951,
+      "kind": "status_merged",
+      "summary": "merged: [P3.6] Test: provider routes (PR #20 merged automatically)",
+      "task_id": "ap-c77ee7e3",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777681544.031929,
+      "kind": "merged",
+      "summary": "[P3.6] Test: provider routes: PR #20 merged",
+      "task_id": "ap-c77ee7e3",
+      "metadata": {
+        "pr_number": 20
+      }
+    },
+    {
+      "timestamp": 1777682832.9144719,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [WebUI] Fix websocket 1006 connection closed banner and reconnect lifecycle",
+      "task_id": "ap-c6a4623f",
+      "metadata": {
+        "source_ref": "",
+        "score": 100
+      }
+    },
+    {
+      "timestamp": 1777682833.544445,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [WebUI] Make OpenHarness left menu button work on desktop",
+      "task_id": "ap-17390b6f",
+      "metadata": {
+        "source_ref": "",
+        "score": 100
+      }
+    },
+    {
+      "timestamp": 1777682834.157145,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [WebUI] Add browser smoke test for oh webui startup and primary shell interactions",
+      "task_id": "ap-1acc1f47",
+      "metadata": {
+        "source_ref": "",
+        "score": 100
+      }
+    },
+    {
+      "timestamp": 1777682917.032097,
+      "kind": "status_preparing",
+      "summary": "preparing: [P4.1] Backend: GET /api/models — list models by provider (preparing isolated worktree)",
+      "task_id": "ap-1322abc1",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777682917.668114,
+      "kind": "status_running",
+      "summary": "running: [P4.1] Backend: GET /api/models — list models by provider (autopilot execution started)",
+      "task_id": "ap-1322abc1",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777683114.288905,
+      "kind": "run_finished",
+      "summary": "Agent run finished for [P4.1] Backend: GET /api/models — list models by provider",
+      "task_id": "ap-1322abc1",
+      "metadata": {
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-1322abc1-attempt-01-run.md",
+        "attempt_count": 1
+      }
+    },
+    {
+      "timestamp": 1777683114.290978,
+      "kind": "status_verifying",
+      "summary": "verifying: [P4.1] Backend: GET /api/models — list models by provider (running verification gates)",
+      "task_id": "ap-1322abc1",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777683137.316983,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P4.1] Backend: GET /api/models — list models by provider (waiting for remote CI on PR #21)",
+      "task_id": "ap-1322abc1",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777683201.7921338,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P4.1] Backend: GET /api/models — list models by provider (remote CI status: success)",
+      "task_id": "ap-1322abc1",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777683227.10723,
+      "kind": "status_completed",
+      "summary": "completed: [P4.1] Backend: GET /api/models — list models by provider (PR #21 requires human gate after remote review)",
+      "task_id": "ap-1322abc1",
       "metadata": {}
     }
   ],
@@ -1198,5 +2899,5 @@
     "verification": "/Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml",
     "release": "/Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
   },
-  "active_context": "# Active Repo Context\n\nGenerated at: 2026-05-01 00:48:35 UTC\n\n## Current Task Focus\n- [repairing] [P1.2] Backend endpoint GET /api/history/{session_id} (manual_idea, score=120)\n- Detail: Trong routes/history.py thêm GET /api/history/{session_id}. Dùng load_session_by_id(cwd, session_id). Return 404 nếu không tồn tại. Trả snapshot đã sanitize: giữ messages nhưng truncate tool_result/output quá dài để t...\n\n## In Progress\n- [repairing] ap-873ded82 [P1.2] Backend endpoint GET /api/history/{session_id} (manual_idea)\n- [repairing] ap-22889fc5 [P1.3] Backend endpoint DELETE /api/history/{session_id} (manual_idea)\n\n## Next Up\n- [120] ap-076d72f1 [P1.5] Frontend HistoryPanel component (manual_idea)\n- [120] ap-47ece0cb [P1.6] Frontend route /history và resume flow (manual_idea)\n- [120] ap-75b0ad5c [P1.7] Header recent sessions dropdown (manual_idea)\n- [120] ap-4c9d9fef [P1.8] Tests cho WebUI history routes (manual_idea)\n\n## Recently Completed\n- ap-7179c8d1 [P0.3] Thêm navigation vào Sidebar WebUI\n- ap-5fbd2a4c [P0.2] Thêm routing cho React WebUI\n- ap-22135a12 [P0.1] Tách backend WebUI thành FastAPI routers\n\n## Recent Failures\n- [failed] ap-feebedcf [P1.1] Backend endpoint GET /api/history\n- [failed] ap-ced3cc17 [P1.4] Backend resume support cho POST /api/sessions\n\n## Recent Repo Journal\n- 04-30 16:27 status_repairing: repairing: [P0.3] Thêm navigation vào Sidebar WebUI (local verification failed; retrying)\n- 04-30 16:27 verification_failed: [P0.3] Thêm navigation vào Sidebar WebUI: local verification failed, retrying\n- 04-30 16:27 status_repairing: repairing: [P0.3] Thêm navigation vào Sidebar WebUI (repairing failed run)\n- 05-01 00:40 status_preparing: preparing: [P1.1] Backend endpoint GET /api/history (preparing isolated worktree)\n- 05-01 00:40 status_running: running: [P1.1] Backend endpoint GET /api/history (autopilot execution started)\n- 05-01 00:48 run_finished: Agent run finished for [P1.1] Backend endpoint GET /api/history\n- 05-01 00:48 status_verifying: verifying: [P1.1] Backend endpoint GET /api/history (running verification gates)\n- 05-01 00:48 status_failed: failed: [P1.1] Backend endpoint GET /api/history (Failed to push branch or upsert PR: pull request create failed: GraphQL: Head...)\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
+  "active_context": "# Active Repo Context\n\nGenerated at: 2026-05-02 00:53:47 UTC\n\n## Current Task Focus\n- [queued] [P4.2] Backend: POST/DELETE /api/models — add/remove custom model (manual_idea, score=100)\n- Detail: POST /api/models nhận {provider: string, model_id: string, label?: string, context_window?: int}. Thêm vào ProviderProfile.allowed_models cho provider đó. Persist settings. DELETE /api/models/{provider}/{model_id}: ch...\n\n## In Progress\n- None.\n\n## Next Up\n- [100] ap-1fcd539b [P4.2] Backend: POST/DELETE /api/models — add/remove custom model (manual_idea)\n- [100] ap-ec5427da [P4.3] Frontend: Settings/Models page (manual_idea)\n- [100] ap-c1e3f203 [P4.4] Backend: GET /api/agents — list agent definitions (manual_idea)\n- [100] ap-c6a4623f [WebUI] Fix websocket 1006 connection closed banner and reconnect lifecycle (manual_idea)\n- [100] ap-17390b6f [WebUI] Make OpenHarness left menu button work on desktop (manual_idea)\n- [100] ap-1acc1f47 [WebUI] Add browser smoke test for oh webui startup and primary shell interactions (manual_idea)\n\n## Recently Completed\n- ap-1322abc1 [P4.1] Backend: GET /api/models — list models by provider\n- ap-c77ee7e3 [P3.6] Test: provider routes\n- ap-6ca2dcbc [P3.4] Backend: POST /api/providers/{name}/verify\n- ap-61d2e9c7 [P3.3] Backend: POST /api/providers/{name}/credentials\n- ap-c7c021e7 [P3.2] Backend: POST /api/providers/{name}/activate\n\n## Recent Failures\n- None.\n\n## Recent Repo Journal\n- 05-02 00:47 intake_added: Queued manual_idea: [WebUI] Add browser smoke test for oh webui startup and primary shell interactions\n- 05-02 00:48 status_preparing: preparing: [P4.1] Backend: GET /api/models — list models by provider (preparing isolated worktree)\n- 05-02 00:48 status_running: running: [P4.1] Backend: GET /api/models — list models by provider (autopilot execution started)\n- 05-02 00:51 run_finished: Agent run finished for [P4.1] Backend: GET /api/models — list models by provider\n- 05-02 00:51 status_verifying: verifying: [P4.1] Backend: GET /api/models — list models by provider (running verification gates)\n- 05-02 00:52 status_waiting_ci: waiting_ci: [P4.1] Backend: GET /api/models — list models by provider (waiting for remote CI on PR #21)\n- 05-02 00:53 status_waiting_ci: waiting_ci: [P4.1] Backend: GET /api/models — list models by provider (remote CI status: success)\n- 05-02 00:53 status_completed: completed: [P4.1] Backend: GET /api/models — list models by provider (PR #21 requires human gate after remote review)\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
 }

@@ -4,14 +4,16 @@
 > Cách dùng: copy từng block lệnh `oh autopilot add` chạy trong terminal tại thư mục project root (`/Users/hodtien/harness/my-harness`).
 
 ## Mục lục
-- [P0 — Foundation: Router + Backend restructure](#p0--foundation)
-- [P1 — F1: Quản lý lịch sử chat (resume)](#p1--f1-history--resume)
-- [P2 — F2: Bật/tắt các modes](#p2--f2-modes-toggle)
-- [P3 — F3a: Provider settings](#p3--f3a-provider-settings)
-- [P4 — F3b/c: Models + Agents](#p4--f3bc-models--agents)
-- [P5 — F4: Pipeline & Task dashboard](#p5--f4-pipeline--tasks)
-- [P6 — F5: Auto code-review sau task done](#p6--f5-auto-code-review)
-- [Cross-cutting](#cross-cutting)
+- [WebUI Upgrade — Autopilot Task List](#webui-upgrade--autopilot-task-list)
+  - [Mục lục](#mục-lục)
+  - [P0 — Foundation](#p0--foundation)
+  - [P1 — F1: History \& Resume](#p1--f1-history--resume)
+  - [P2 — F2: Modes Toggle](#p2--f2-modes-toggle)
+  - [P3 — F3a: Provider Settings](#p3--f3a-provider-settings)
+  - [P4 — F3b/c: Models \& Agents](#p4--f3bc-models--agents)
+  - [P5 — F4: Pipeline \& Tasks](#p5--f4-pipeline--tasks)
+  - [P6 — F5: Auto Code-Review](#p6--f5-auto-code-review)
+  - [Cross-cutting](#cross-cutting)
 
 ---
 

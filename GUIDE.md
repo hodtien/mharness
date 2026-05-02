@@ -503,8 +503,27 @@ Mở URL trên trong browser. Token được capture từ `?token=…` rồi lư
                                               └──────────────────────┘
 ```
 
-REST endpoints chỉ dùng để bootstrap (`/api/health`, `/api/meta`,
-`/api/sessions`, `/api/tasks`, `/api/cron/jobs`); mọi event stream của
+### REST API — WebUI routes đầy đủ (phiên bản hiện tại)
+
+| Method   | Path                                   | Mô tả                                           |
+|----------|----------------------------------------|-------------------------------------------------|
+| `GET`    | `/api/health`                          | Health check                                    |
+| `GET`    | `/api/meta`                            | Server metadata                                 |
+| `POST`   | `/api/sessions`                        | Tạo session mới (hỗ trợ `{"resume_id":"..."}`) |
+| `GET`    | `/api/history`                         | Danh sách session snapshots (`?limit=N`)        |
+| `GET`    | `/api/history/{session_id}`            | Chi tiết session                                |
+| `DELETE` | `/api/history/{session_id}`            | Xóa session                                     |
+| `GET`    | `/api/modes`                           | Trả về modes hiện tại (permission, effort, ...) |
+| `PATCH`  | `/api/modes`                           | Cập nhật modes + persist settings + broadcast   |
+| `GET`    | `/api/providers`                       | Danh sách provider profiles + active flag       |
+| `POST`   | `/api/providers/{name}/activate`       | Switch active provider                          |
+| `POST`   | `/api/providers/{name}/credentials`    | Lưu API key / base_url override                 |
+| `POST`   | `/api/providers/{name}/verify`         | Kiểm tra kết nối (GET /v1/models, timeout 10s)  |
+| `GET`    | `/api/tasks`                           | Danh sách tasks đang chạy                       |
+| `GET`    | `/api/cron/jobs`                       | Cron jobs                                       |
+| `WS`     | `/api/ws/{session_id}`                 | Stream events (toàn bộ session I/O)             |
+
+REST endpoints bootstrap session và quản lý config; mọi event stream của
 session đi qua một WebSocket `/api/ws/{session_id}`.
 
 ### Dev mode (Vite HMR)

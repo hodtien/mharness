@@ -134,12 +134,47 @@ oh autopilot export-dashboard  # static kanban → GitHub Pages
 3. run-next — chạy oh -p với context của card:
    ├─ preparing: checkout worktree mới
    ├─ running: agent code + test (permission full_auto)
-   ├─ verifying: CI checks local
+   ├─ verifying: CI checks local (pytest, ruff, tsc)
    ├─ pr_open: gh pr create
-   ├─ waiting_ci: poll CI status
-   └─ completed/merged hoặc failed (auto retry → repairing)
-4. journal — log mọi state transition
+   ├─ waiting_ci: poll CI status trên GitHub
+   ├─ remote_code_review: code-reviewer agent so sánh PR diff vs origin/main
+   │    (block_on: ["critical"] — nếu CRITICAL → human gate, không merge)
+   ├─ automerge: gh pr merge --squash nếu CI pass + review OK
+   └─ post-merge sync: git fetch origin main && git pull --ff-only origin main
+4. completed/merged hoặc failed (auto retry → repairing)
+5. journal — log mọi state transition
 ```
+
+### Auto-merge policy
+
+Autopilot tự merge khi tất cả điều kiện sau đúng:
+
+1. CI checks pass trên GitHub
+2. Remote code review không có `CRITICAL` issue
+3. `auto_merge.mode` cho phép (default: `always`)
+
+Cấu hình trong `.openharness/autopilot/autopilot_policy.yaml`:
+
+```yaml
+github:
+  auto_merge:
+    mode: always          # always | fully_auto | disabled
+  remote_code_review:
+    enabled: true         # false để skip
+    block_on:
+      - critical
+    max_turns: 6
+    max_diff_chars: 80000
+```
+
+Sau khi merge, autopilot tự động sync local `main`:
+
+```bash
+git fetch origin main
+git pull --ff-only origin main
+```
+
+Nếu pull thất bại (e.g. fast-forward conflict), card vẫn giữ trạng thái `merged` và journal ghi `kind: merge_warning`.
 
 ### Setup cho dự án
 
@@ -182,9 +217,11 @@ oh autopilot journal
 
 ### Persistence
 
-- **Registry:** `<repo>/.oh/autopilot/registry.json` — tất cả cards + state
-- **Journal:** `<repo>/.oh/autopilot/journal.jsonl` — event log (1 JSON/line)
-- **Context:** `<repo>/.oh/autopilot/context.md` — synthesized repo context
+- **Registry:** `<repo>/.openharness/autopilot/registry.json` — tất cả cards + state
+- **Journal:** `<repo>/.openharness/autopilot/journal.jsonl` — event log (1 JSON/line)
+- **Context:** `<repo>/.openharness/autopilot/context.md` — synthesized repo context
+- **Policy:** `<repo>/.openharness/autopilot/autopilot_policy.yaml` — verification, GitHub, auto-merge policy
+- **Runs:** `<repo>/.openharness/autopilot/runs/` — per-card run + verification reports
 
 Card schema (synthetic example):
 
@@ -199,6 +236,14 @@ Card schema (synthetic example):
   "source_ref": null
 }
 ```
+
+---
+
+## WebUI upgrade status
+
+Các phase P0–P3 trong `TASKS.md` đã chạy qua autopilot và cập nhật WebUI foundation, history/resume, modes toggle, provider settings, cùng backend REST routes tương ứng. P4+ tiếp tục là backlog cho UI polish, QA, dashboard export, và packaging.
+
+Xem `GUIDE.md` để biết danh sách REST API/WebSocket routes hiện tại.
 
 ---
 
