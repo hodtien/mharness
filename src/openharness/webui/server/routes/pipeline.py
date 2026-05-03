@@ -61,9 +61,18 @@ def _serialize_journal_entry(entry: RepoJournalEntry) -> dict:
 
 
 @router.get("/journal")
-def list_pipeline_journal(limit: int = 50, state: WebUIState = Depends(get_state)) -> dict:
-    """Return the most recent repo journal entries, newest first."""
+def list_pipeline_journal(
+    limit: int = 50,
+    card_id: str | None = None,
+    state: WebUIState = Depends(get_state),
+) -> dict:
+    """Return journal entries, optionally filtered to one card, newest first."""
     store = RepoAutopilotStore(state.cwd)
+    if card_id:
+        # Fetch a wider window then filter, so the limit applies to matched rows.
+        raw = list(reversed(store.load_journal(limit=max(limit * 10, limit))))
+        matched = [e for e in raw if e.task_id == card_id][:limit]
+        return {"entries": [_serialize_journal_entry(entry) for entry in matched]}
     entries = list(reversed(store.load_journal(limit=limit)))
     return {"entries": [_serialize_journal_entry(entry) for entry in entries]}
 

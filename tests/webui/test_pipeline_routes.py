@@ -196,3 +196,20 @@ def test_journal_returns_entries_after_card_enqueued(tmp_path) -> None:
     assert entries[0]["kind"] in {"intake_added", "intake_refresh"}
     assert "timestamp" in entries[0]
     assert "summary" in entries[0]
+
+
+def test_journal_filter_by_card_id(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    # Create a card so a journal entry is appended.
+    card = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Card filter test"})
+
+    response = client.get(
+        f"/api/pipeline/journal?card_id={card.json()['id']}&limit=20",
+        headers=AUTH,
+    )
+
+    assert response.status_code == 200
+    entries = response.json()["entries"]
+    # The entry belongs to the newly created card.
+    assert all(e["task_id"] == card.json()["id"] for e in entries)

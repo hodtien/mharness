@@ -362,17 +362,127 @@ function Card({ card, onClick }: { card: PipelineCard; onClick: () => void }) {
   );
 }
 
+// ─── Kind → icon map ───────────────────────────────────────────────────────────
+
+const KIND_ICONS: Record<string, string> = {
+  merge_warning: "⚠️",
+  code_review: "🔍",
+  ci_check: "✅",
+  ci_failure: "❌",
+  intake_added: "📥",
+  intake_refresh: "🔄",
+  status_change: "🔄",
+  pr_opened: "🔀",
+  pr_merged: "🔀",
+  pr_closed: "🔚",
+  agent_started: "🤖",
+  agent_finished: "🤖",
+  error: "❗",
+  info: "ℹ️",
+};
+
+function kindIcon(kind: string): string {
+  return KIND_ICONS[kind] ?? "📌";
+}
+
+// ─── Activity Tab ──────────────────────────────────────────────────────────────
+
+interface ActivityTabProps {
+  cardId: string;
+  isActive: boolean;
+}
+
+function ActivityTab({ cardId, isActive }: ActivityTabProps) {
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchEntries = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ entries: JournalEntry[] }>(
+        `/api/pipeline/journal?card_id=${encodeURIComponent(cardId)}&limit=20`,
+      );
+      setEntries(data.entries);
+      setError(null);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [cardId]);
+
+  useEffect(() => {
+    setLoading(true);
+    setEntries([]);
+    fetchEntries();
+  }, [fetchEntries]);
+
+  // Auto-refresh every 10 s while this tab is visible
+  useEffect(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (isActive) {
+      timerRef.current = setInterval(fetchEntries, 10_000);
+    }
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [isActive, fetchEntries]);
+
+  if (loading) {
+    return (
+      <div className="p-4 text-sm text-[var(--text-dim)]">Loading activity…</div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 text-sm text-red-300">
+        {error}
+      </div>
+    );
+  }
+
+  if (entries.length === 0) {
+    return (
+      <div className="p-4 text-sm text-[var(--text-dim)]">No activity yet.</div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 p-4">
+      {entries.map((entry, idx) => (
+        <div key={idx} className="flex gap-3 text-sm">
+          <span className="shrink-0 mt-0.5 text-base">{kindIcon(entry.kind)}</span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[var(--text)] leading-snug">{entry.summary}</div>
+            <div className="mt-0.5 text-[10px] text-[var(--text-dim)]">
+              {relativeAge(entry.timestamp)}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Drawer ───────────────────────────────────────────────────────────────────
 
 interface DrawerProps {
   card: PipelineCard | null;
-  journal: JournalEntry[];
   onClose: () => void;
   onAction: (cardId: string, action: "accept" | "reject" | "retry") => void;
   loadingAction: boolean;
 }
 
-function Drawer({ card, journal, onClose, onAction, loadingAction }: DrawerProps) {
+function Drawer({ card, onClose, onAction, loadingAction }: DrawerProps) {
+  const [drawerTab, setDrawerTab] = useState<"info" | "activity">("info");
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -384,10 +494,6 @@ function Drawer({ card, journal, onClose, onAction, loadingAction }: DrawerProps
   }, [card, onClose]);
 
   if (!card) return null;
-
-  const cardJournal = journal.filter(
-    (e) => e.task_id === card.id || e.summary.toLowerCase().includes(card.title.toLowerCase().slice(0, 30)),
-  );
 
   const sourceLabel = SOURCE_LABELS[card.source_kind] ?? card.source_kind;
   const sourceColor = SOURCE_COLOR[card.source_kind] ?? "bg-gray-500/20 text-gray-300 border-gray-500/40";
@@ -432,66 +538,66 @@ function Drawer({ card, journal, onClose, onAction, loadingAction }: DrawerProps
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Score */}
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3">
-            <div className="text-[10px] uppercase tracking-wider text-[var(--text-dim)] mb-1">Score</div>
-            <div className="text-2xl font-bold font-mono text-[var(--accent)]">{card.score}</div>
+        <div className="flex-1 overflow-y-auto">
+          {/* Tab bar */}
+          <div className="flex border-b border-[var(--border)]">
+            <button
+              onClick={() => setDrawerTab("info")}
+              className={`flex-1 px-4 py-2 text-sm font-medium transition ${
+                drawerTab === "info"
+                  ? "border-b-2 border-[var(--accent)] text-[var(--accent)]"
+                  : "text-[var(--text-dim)] hover:text-[var(--text)]"
+              }`}
+            >
+              Info
+            </button>
+            <button
+              onClick={() => setDrawerTab("activity")}
+              className={`flex-1 px-4 py-2 text-sm font-medium transition ${
+                drawerTab === "activity"
+                  ? "border-b-2 border-[var(--accent)] text-[var(--accent)]"
+                  : "text-[var(--text-dim)] hover:text-[var(--text)]"
+              }`}
+            >
+              Activity
+            </button>
           </div>
 
-          {/* Labels */}
-          {card.labels.length > 0 && (
-            <div>
-              <div className="mb-1.5 text-[10px] uppercase tracking-wider text-[var(--text-dim)]">Labels</div>
-              <div className="flex flex-wrap gap-1.5">
-                {card.labels.map((label) => (
-                  <span
-                    key={label}
-                    className="rounded-full border border-[var(--border)] bg-[var(--panel-2)] px-2 py-0.5 text-[11px] text-[var(--text)]"
-                  >
-                    {label}
-                  </span>
-                ))}
+          {/* Tab content */}
+          {drawerTab === "info" ? (
+            <div className="space-y-4 p-4">
+              {/* Score */}
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--text-dim)] mb-1">Score</div>
+                <div className="text-2xl font-bold font-mono text-[var(--accent)]">{card.score}</div>
               </div>
-            </div>
-          )}
 
-          {/* Age */}
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3 text-sm">
-            <div className="mb-0.5 text-[10px] uppercase tracking-wider text-[var(--text-dim)]">Created</div>
-            <div className="text-[var(--text)]">{relativeAge(card.created_at)}</div>
-          </div>
-
-          {/* Journal */}
-          <div>
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-[var(--text-dim)]">
-              Journal ({cardJournal.length})
-            </div>
-            {cardJournal.length === 0 ? (
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3 text-sm text-[var(--text-dim)]">
-                No journal entries.
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                {cardJournal.slice(0, 20).map((entry, idx) => (
-                  <div
-                    key={idx}
-                    className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] p-2"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="text-[11px] font-medium text-[var(--text)]">{entry.summary}</div>
-                      <div className="shrink-0 text-[10px] text-[var(--text-dim)]">
-                        {relativeAge(entry.timestamp)}
-                      </div>
-                    </div>
-                    <div className="mt-0.5 text-[10px] text-[var(--text-dim)]">
-                      {entry.kind}
-                    </div>
+              {/* Labels */}
+              {card.labels.length > 0 && (
+                <div>
+                  <div className="mb-1.5 text-[10px] uppercase tracking-wider text-[var(--text-dim)]">Labels</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {card.labels.map((label) => (
+                      <span
+                        key={label}
+                        className="rounded-full border border-[var(--border)] bg-[var(--panel-2)] px-2 py-0.5 text-[11px] text-[var(--text)]"
+                      >
+                        {label}
+                      </span>
+                    ))}
                   </div>
-                ))}
+                </div>
+              )}
+
+              {/* Age */}
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3 text-sm">
+                <div className="mb-0.5 text-[10px] uppercase tracking-wider text-[var(--text-dim)]">Created</div>
+                <div className="text-[var(--text)]">{relativeAge(card.created_at)}</div>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <ActivityTab cardId={card.id} isActive={drawerTab === "activity"} />
+          )}
         </div>
 
         {/* Actions */}
@@ -532,7 +638,6 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<PipelineCard | null>(null);
-  const [journal, setJournal] = useState<JournalEntry[]>([]);
   const [loadingAction, setLoadingAction] = useState(false);
   const [showNewIdea, setShowNewIdea] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("board");
@@ -552,14 +657,10 @@ export default function PipelinePage() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      apiFetch<{ cards: PipelineCard[]; updated_at: number }>("/api/pipeline/cards"),
-      apiFetch<{ entries: JournalEntry[] }>("/api/pipeline/journal?limit=100"),
-    ])
-      .then(([cardsData, journalData]) => {
+    apiFetch<{ cards: PipelineCard[]; updated_at: number }>("/api/pipeline/cards")
+      .then((cardsData) => {
         if (cancelled) return;
         setCards(cardsData.cards);
-        setJournal(journalData.entries);
         setLastUpdated(Date.now() / 1000);
         setSecondsAgo(0);
       })
@@ -737,7 +838,6 @@ export default function PipelinePage() {
 
       <Drawer
         card={selectedCard}
-        journal={journal}
         onClose={() => setSelectedCard(null)}
         onAction={handleAction}
         loadingAction={loadingAction}
