@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shlex
 import sys
+from pathlib import Path
 from typing import Literal
 
 import yaml
@@ -199,7 +200,8 @@ async def run_next_card(state: WebUIState = Depends(get_state)) -> dict:
             status_code=status.HTTP_409_CONFLICT,
             detail={"error": "already_running", "message": "An autopilot task is already active."},
         )
-    command = f"{shlex.quote(sys.executable)} -m openharness.cli autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
+    oh_executable = str(Path(sys.executable).with_name("oh"))
+    command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
     manager = get_task_manager()
     task = await manager.create_shell_task(
         command=command,
