@@ -6,7 +6,22 @@ import {
   type ProviderProfile,
 } from "../api/client";
 
+interface Toast {
+  id: number;
+  kind: "success" | "error";
+  message: string;
+}
+
 interface AddModalState {
+  provider: string;
+  modelId: string;
+  label: string;
+  contextWindow: string;
+  busy: boolean;
+  error: string | null;
+}
+
+interface EditModalState {
   provider: string;
   modelId: string;
   label: string;
@@ -29,7 +44,9 @@ export default function ModelsSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [openProviders, setOpenProviders] = useState<Record<string, boolean>>({});
   const [addModal, setAddModal] = useState<AddModalState | null>(null);
+  const [editModal, setEditModal] = useState<EditModalState | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
   const reload = async () => {
     setError(null);
@@ -90,6 +107,14 @@ export default function ModelsSettingsPage() {
     });
   };
 
+  const pushToast = (kind: "success" | "error", message: string) => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, kind, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  };
+
   const submitAdd = async () => {
     if (!addModal) return;
     const trimmedId = addModal.modelId.trim();
@@ -117,8 +142,61 @@ export default function ModelsSettingsPage() {
       });
       await reload();
       setAddModal(null);
+      pushToast("success", `Model ${trimmedId} added.`);
     } catch (err) {
       setAddModal({ ...addModal, busy: false, error: String(err) });
+    }
+  };
+
+  const openEdit = (provider: string, model: ModelProfile) => {
+    setEditModal({
+      provider,
+      modelId: model.id,
+      label: model.label ?? "",
+      contextWindow: model.context_window != null ? String(model.context_window) : "",
+      busy: false,
+      error: null,
+    });
+  };
+
+  const submitEdit = async () => {
+    if (!editModal) return;
+    const ctx = editModal.contextWindow.trim();
+    let contextWindow: number | undefined;
+    if (ctx) {
+      const parsed = Number(ctx);
+      if (!Number.isFinite(parsed) || parsed <= 0 || !Number.isInteger(parsed)) {
+        setEditModal({ ...editModal, error: "Context window must be a positive integer." });
+        return;
+      }
+      contextWindow = parsed;
+    }
+    setEditModal({ ...editModal, busy: true, error: null });
+    // No PATCH endpoint exists: delete then re-add with new metadata.
+    try {
+      await api.deleteCustomModel(editModal.provider, editModal.modelId);
+    } catch (err) {
+      setEditModal({ ...editModal, busy: false, error: `Failed to update: ${String(err)}` });
+      return;
+    }
+    try {
+      await api.addCustomModel({
+        provider: editModal.provider,
+        model_id: editModal.modelId,
+        label: editModal.label.trim() || undefined,
+        context_window: contextWindow,
+      });
+      await reload();
+      setEditModal(null);
+      pushToast("success", `Model ${editModal.modelId} updated.`);
+    } catch (err) {
+      // Re-add failed after delete succeeded — surface error and reload state.
+      await reload().catch(() => undefined);
+      setEditModal(null);
+      pushToast(
+        "error",
+        `Update failed after delete; model ${editModal.modelId} was removed: ${String(err)}`,
+      );
     }
   };
 
@@ -128,7 +206,9 @@ export default function ModelsSettingsPage() {
     try {
       await api.deleteCustomModel(deleteConfirm.provider, deleteConfirm.modelId);
       await reload();
+      const removedId = deleteConfirm.modelId;
       setDeleteConfirm(null);
+      pushToast("success", `Model ${removedId} deleted.`);
     } catch (err) {
       setDeleteConfirm({ ...deleteConfirm, busy: false, error: String(err) });
     }
@@ -201,6 +281,7 @@ export default function ModelsSettingsPage() {
                     <ModelsTable
                       providerId={providerId}
                       models={items}
+                      onEdit={(model) => openEdit(providerId, model)}
                       onDelete={(model) =>
                         setDeleteConfirm({
                           provider: providerId,
@@ -229,6 +310,16 @@ export default function ModelsSettingsPage() {
         />
       )}
 
+      {editModal && (
+        <EditCustomModelModal
+          state={editModal}
+          providerLabel={providerLabels[editModal.provider] ?? editModal.provider}
+          onChange={setEditModal}
+          onCancel={() => setEditModal(null)}
+          onSubmit={submitEdit}
+        />
+      )}
+
       {deleteConfirm && (
         <DeleteConfirmModal
           state={deleteConfirm}
@@ -237,6 +328,23 @@ export default function ModelsSettingsPage() {
           onConfirm={submitDelete}
         />
       )}
+
+      {toasts.length > 0 && (
+        <div className="fixed right-4 top-4 z-[60] space-y-2" aria-live="polite">
+          {toasts.map((toast) => (
+            <div
+              key={toast.id}
+              className={`rounded-lg border px-4 py-3 text-sm shadow-lg ${
+                toast.kind === "success"
+                  ? "border-emerald-400/30 bg-emerald-500/15 text-emerald-100"
+                  : "border-red-400/30 bg-red-500/15 text-red-100"
+              }`}
+            >
+              {toast.message}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -244,10 +352,12 @@ export default function ModelsSettingsPage() {
 function ModelsTable({
   providerId,
   models,
+  onEdit,
   onDelete,
 }: {
   providerId: string;
   models: ModelProfile[];
+  onEdit: (model: ModelProfile) => void;
   onDelete: (model: ModelProfile) => void;
 }) {
   if (models.length === 0) {
@@ -300,14 +410,24 @@ function ModelsTable({
               </td>
               <td className="px-5 py-2 text-right">
                 {model.is_custom && (
-                  <button
-                    type="button"
-                    onClick={() => onDelete(model)}
-                    aria-label={`Delete ${model.id}`}
-                    className="rounded-md border border-red-400/30 bg-red-500/10 px-3 py-1 text-xs text-red-200 hover:border-red-400/60"
-                  >
-                    Delete
-                  </button>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onEdit(model)}
+                      aria-label={`Edit ${model.id}`}
+                      className="rounded-md border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-xs text-cyan-200 hover:border-cyan-400/60"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(model)}
+                      aria-label={`Delete ${model.id}`}
+                      className="rounded-md border border-red-400/30 bg-red-500/10 px-3 py-1 text-xs text-red-200 hover:border-red-400/60"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 )}
               </td>
             </tr>
@@ -417,7 +537,6 @@ function AddCustomModelModal({
             <span className="mb-1 block text-[var(--text-dim)]">Context window (optional)</span>
             <input
               type="number"
-              min={1}
               step={1}
               value={state.contextWindow}
               onChange={(event) => onChange({ ...state, contextWindow: event.target.value })}
@@ -448,6 +567,119 @@ function AddCustomModelModal({
             className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-60"
           >
             {state.busy ? "Adding…" : "Add model"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function EditCustomModelModal({
+  state,
+  providerLabel,
+  onChange,
+  onCancel,
+  onSubmit,
+}: {
+  state: EditModalState;
+  providerLabel: string;
+  onChange: (next: EditModalState) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-custom-model-title"
+    >
+      <form
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+        className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <h2 id="edit-custom-model-title" className="text-xl font-semibold text-[var(--text)]">
+            Edit custom model
+          </h2>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={state.busy}
+            className="text-[var(--text-dim)] hover:text-[var(--text)] disabled:opacity-60"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <div className="text-sm">
+            <span className="mb-1 block text-[var(--text-dim)]">Provider</span>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[var(--text)]">
+              {providerLabel}{" "}
+              <span className="font-mono text-xs text-[var(--text-dim)]">({state.provider})</span>
+            </div>
+          </div>
+          <label className="block text-sm">
+            <span className="mb-1 block text-[var(--text-dim)]">Model id</span>
+            <input
+              type="text"
+              value={state.modelId}
+              readOnly
+              aria-readonly="true"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 font-mono text-[var(--text-dim)] outline-none"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-[var(--text-dim)]">Label</span>
+            <input
+              type="text"
+              value={state.label}
+              onChange={(event) => onChange({ ...state, label: event.target.value })}
+              placeholder="Display label"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[var(--text)] outline-none focus:border-cyan-400/60"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-[var(--text-dim)]">Context window (optional)</span>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={state.contextWindow}
+              onChange={(event) => onChange({ ...state, contextWindow: event.target.value })}
+              placeholder="200000"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[var(--text)] outline-none focus:border-cyan-400/60"
+            />
+          </label>
+        </div>
+
+        {state.error && (
+          <div className="mt-4 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
+            {state.error}
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={state.busy}
+            className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text)] hover:border-cyan-400/40 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={state.busy}
+            className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-60"
+          >
+            {state.busy ? "Saving…" : "Save changes"}
           </button>
         </div>
       </form>

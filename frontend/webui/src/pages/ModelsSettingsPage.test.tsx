@@ -246,4 +246,171 @@ describe("ModelsSettingsPage", () => {
     await waitFor(() => expect(screen.queryByText(/delete custom model\?/i)).toBeNull());
     expect(deleteCalls.length).toBe(0);
   });
+
+  it("shows Edit button for custom models, hides for built-in", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /edit gpt-custom/i })).toBeTruthy(),
+    );
+    expect(screen.queryByRole("button", { name: /edit gpt-4o-mini/i })).toBeNull();
+  });
+
+  it("opens edit modal with model_id readonly and prefilled label/context", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /edit gpt-custom/i })).toBeTruthy(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /edit gpt-custom/i }));
+
+    await waitFor(() => expect(screen.getByText(/edit custom model/i)).toBeTruthy());
+
+    // model_id input should be readonly with value "gpt-custom"
+    const modelIdInput = screen.getByRole("textbox", { name: /model id/i }) as HTMLInputElement;
+    expect(modelIdInput.readOnly).toBe(true);
+    expect(modelIdInput.value).toBe("gpt-custom");
+  });
+
+  it("submits edit by calling DELETE then POST with new label/context_window", async () => {
+    mockLocalStorage();
+    const calls: Array<{ url: string; method: string; body?: string }> = [];
+    let modelsState = JSON.parse(JSON.stringify(sampleModels));
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (url === "/api/models" && method === "GET") {
+        return Promise.resolve(jsonResponse(modelsState));
+      }
+      if (url === "/api/providers") {
+        return Promise.resolve(jsonResponse(sampleProviders));
+      }
+      if (method === "DELETE" && url.includes("gpt-custom")) {
+        calls.push({ url, method });
+        modelsState = {
+          ...modelsState,
+          "openai-default": modelsState["openai-default"].filter(
+            (m: { id: string }) => m.id !== "gpt-custom",
+          ),
+        };
+        return Promise.resolve(jsonResponse({ ok: true }));
+      }
+      if (method === "POST" && url === "/api/models") {
+        calls.push({ url, method, body: String(init?.body) });
+        const parsed = JSON.parse(String(init?.body));
+        modelsState = {
+          ...modelsState,
+          "openai-default": [
+            ...modelsState["openai-default"],
+            {
+              id: parsed.model_id,
+              label: parsed.label,
+              context_window: parsed.context_window ?? null,
+              is_default: false,
+              is_custom: true,
+            },
+          ],
+        };
+        return Promise.resolve(jsonResponse({ ok: true, provider: "openai-default", model_id: parsed.model_id }));
+      }
+      return Promise.reject(new Error(`unexpected: ${method} ${url}`));
+    });
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /edit gpt-custom/i })).toBeTruthy(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /edit gpt-custom/i }));
+
+    await waitFor(() => expect(screen.getByText(/edit custom model/i)).toBeTruthy());
+
+    // Update label
+    const labelInput = screen.getByPlaceholderText(/display label/i) as HTMLInputElement;
+    fireEvent.change(labelInput, { target: { value: "GPT Custom v2" } });
+
+    // Update context window
+    const ctxInput = screen.getByPlaceholderText("200000") as HTMLInputElement;
+    fireEvent.change(ctxInput, { target: { value: "64000" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => expect(calls.filter((c) => c.method === "POST").length).toBe(1));
+
+    // Order: DELETE then POST
+    const deleteIdx = calls.findIndex((c) => c.method === "DELETE");
+    const postIdx = calls.findIndex((c) => c.method === "POST");
+    expect(deleteIdx).toBeGreaterThanOrEqual(0);
+    expect(postIdx).toBeGreaterThan(deleteIdx);
+
+    const post = calls[postIdx];
+    expect(post.url).toBe("/api/models");
+    const parsed = JSON.parse(post.body!);
+    expect(parsed.model_id).toBe("gpt-custom");
+    expect(parsed.label).toBe("GPT Custom v2");
+    expect(parsed.context_window).toBe(64000);
+
+    // Toast success appears
+    await waitFor(() => expect(screen.getByText(/updated/i)).toBeTruthy());
+  });
+
+  it("validates context_window must be a positive integer", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /edit gpt-custom/i })).toBeTruthy(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /edit gpt-custom/i }));
+    await waitFor(() => expect(screen.getByText(/edit custom model/i)).toBeTruthy());
+
+    const ctxInput = screen.getByPlaceholderText("200000") as HTMLInputElement;
+    fireEvent.change(ctxInput, { target: { value: "-5" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/context window must be a positive integer/i)).toBeTruthy(),
+    );
+  });
+
+  it("cancel on edit dialog dismisses without API calls", async () => {
+    mockLocalStorage();
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (url === "/api/models" && method === "GET") {
+        return Promise.resolve(jsonResponse(sampleModels));
+      }
+      if (url === "/api/providers") {
+        return Promise.resolve(jsonResponse(sampleProviders));
+      }
+      calls.push(`${method} ${url}`);
+      return Promise.reject(new Error(`unexpected: ${method} ${url}`));
+    });
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /edit gpt-custom/i })).toBeTruthy(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /edit gpt-custom/i }));
+    await waitFor(() => expect(screen.getByText(/edit custom model/i)).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => expect(screen.queryByText(/edit custom model/i)).toBeNull());
+    expect(calls.length).toBe(0);
+  });
 });
