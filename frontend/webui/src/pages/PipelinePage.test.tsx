@@ -159,6 +159,48 @@ describe("PipelinePage", () => {
     expect(screen.getByRole("button", { name: /^Retry$/i })).toBeTruthy();
   });
 
+  it("shows blocker banner for failed cards with note and PR actions", async () => {
+    const blockedCards = [
+      {
+        ...sampleCards[0],
+        id: "card-failed-1",
+        title: "Fix flaky CI",
+        status: "failed",
+        metadata: {
+          last_note: "Tests failed after retry",
+          linked_pr_url: "https://example.test/pr/123",
+        },
+      },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards: blockedCards, updated_at: 0 }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: [] }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("Fix flaky CI"));
+
+    expect(await screen.findByTestId("blocker-banner")).toBeTruthy();
+    expect(screen.getByText("Run failed")).toBeTruthy();
+    expect(screen.getByText("Tests failed after retry")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /^View PR$/i }).getAttribute("href")).toBe("https://example.test/pr/123");
+    expect(screen.getByRole("button", { name: /^Retry$/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /^Merge manually$/i }).getAttribute("href")).toBe("https://example.test/pr/123");
+  });
+
   it("Review tab: shows 'Run Review' when GET /api/review/{id} returns 404", async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === "/api/pipeline/cards" && (!init?.method || init.method === "GET")) {
