@@ -20,6 +20,7 @@ from uuid import uuid4
 
 import yaml
 
+from openharness.autopilot.locking import RepoFileLock
 from openharness.autopilot.types import (
     RepoAutopilotRegistry,
     RepoJournalEntry,
@@ -291,6 +292,10 @@ class RepoAutopilotStore:
         self._journal_path = get_project_repo_journal_path(self._cwd)
         self._context_path = get_project_active_repo_context_path(self._cwd)
         self._runs_dir = get_project_autopilot_runs_dir(self._cwd)
+        # Lock files live next to the artefacts they protect so a single
+        # autopilot directory mkdir already provisions them.
+        self._registry_lock_path = self._registry_path.parent / "registry.lock"
+        self._journal_lock_path = self._journal_path.parent / "journal.lock"
         self._repo_full_name: str | None = None
         self._ensure_layout()
 
@@ -482,8 +487,9 @@ class RepoAutopilotStore:
             task_id=task_id,
             metadata=metadata or {},
         )
-        with self._journal_path.open("a", encoding="utf-8") as handle:
-            handle.write(entry.model_dump_json() + "\n")
+        with RepoFileLock(self._journal_lock_path):
+            with self._journal_path.open("a", encoding="utf-8") as handle:
+                handle.write(entry.model_dump_json() + "\n")
         return entry
 
     def load_active_context(self) -> str:
@@ -2249,26 +2255,28 @@ class RepoAutopilotStore:
             self.rebuild_active_context()
 
     def _load_registry(self) -> RepoAutopilotRegistry:
-        if not self._registry_path.exists():
-            return RepoAutopilotRegistry(updated_at=time.time(), cards=[])
-        try:
-            payload = json.loads(self._registry_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return RepoAutopilotRegistry(updated_at=time.time(), cards=[])
-        return RepoAutopilotRegistry.model_validate(payload)
+        with RepoFileLock(self._registry_lock_path):
+            if not self._registry_path.exists():
+                return RepoAutopilotRegistry(updated_at=time.time(), cards=[])
+            try:
+                payload = json.loads(self._registry_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                return RepoAutopilotRegistry(updated_at=time.time(), cards=[])
+            return RepoAutopilotRegistry.model_validate(payload)
 
     def _save_registry(self, registry: RepoAutopilotRegistry) -> None:
-        registry.updated_at = time.time()
-        atomic_write_text(
-            self._registry_path,
-            json.dumps(
-                registry.model_dump(mode="json"),
-                ensure_ascii=False,
-                indent=2,
-                default=_json_default,
+        with RepoFileLock(self._registry_lock_path):
+            registry.updated_at = time.time()
+            atomic_write_text(
+                self._registry_path,
+                json.dumps(
+                    registry.model_dump(mode="json"),
+                    ensure_ascii=False,
+                    indent=2,
+                    default=_json_default,
+                )
+                + "\n",
             )
-            + "\n",
-        )
 
     def _build_fingerprint(
         self,
