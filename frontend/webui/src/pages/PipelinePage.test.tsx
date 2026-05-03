@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
-import PipelinePage from "./PipelinePage";
+import PipelinePage, { matchesActivityFilter, ActivityFilter } from "./PipelinePage";
 
 function mockLocalStorage() {
   let store: Record<string, string> = {};
@@ -72,6 +72,24 @@ const sampleCards = [
     updated_at: Date.now() / 1000 - 86400,
   },
 ];
+
+describe("matchesActivityFilter", () => {
+  it.each<[ActivityFilter, string, boolean]>([
+    ["all", "intake_added", true],
+    ["failures", "ci_failure", true],
+    ["failures", "error", true],
+    ["failures", "agent_finished", false],
+    ["ci", "ci_check", true],
+    ["ci", "pr_opened", false],
+    ["agent", "agent_started", true],
+    ["agent", "ci_check", false],
+    ["git", "pr_opened", true],
+    ["git", "merge_warning", true],
+    ["git", "ci_failure", false],
+  ])("matches %s filter for %s", (filter, kind, expected) => {
+    expect(matchesActivityFilter(kind, filter)).toBe(expected);
+  });
+});
 
 describe("PipelinePage", () => {
   beforeEach(() => {
@@ -527,5 +545,72 @@ describe("PipelinePage", () => {
     expect(fetchMock.mock.calls.filter((c) => c[0] === "/api/pipeline/cards").length).toBe(1);
 
     vi.useRealTimers();
+  });
+
+  it("Activity tab: shows filter pills and filters entries by kind", async () => {
+    const sampleEntries = [
+      { timestamp: 1000, kind: "ci_check", summary: "CI passed", task_id: "card-queued-1", metadata: {} },
+      { timestamp: 1001, kind: "agent_started", summary: "Agent kicked off", task_id: "card-queued-1", metadata: {} },
+      { timestamp: 1002, kind: "ci_failure", summary: "CI failed", task_id: "card-queued-1", metadata: {} },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards: sampleCards, updated_at: 0 }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: sampleEntries }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    // Open drawer
+    fireEvent.click(await screen.findByText("Add login form"));
+    // Switch to Activity tab
+    fireEvent.click(await screen.findByRole("button", { name: /^Activity$/i }));
+
+    // All entries visible by default
+    await screen.findByText("CI passed");
+    expect(screen.getByText("Agent kicked off")).toBeTruthy();
+    expect(screen.getByText("CI failed")).toBeTruthy();
+
+    // "All" pill is active (aria-pressed="true")
+    const pills = screen.getByTestId("activity-filter-pills");
+    const allBtn = pills.querySelector('[aria-pressed="true"]') as HTMLElement;
+    expect(allBtn?.textContent).toBe("All");
+
+    // Click "CI" filter — only CI entries visible
+    fireEvent.click(screen.getByRole("button", { name: /^CI$/ }));
+    await screen.findByText("CI passed");
+    expect(screen.getByText("CI failed")).toBeTruthy();
+    expect(screen.queryByText("Agent kicked off")).toBeNull();
+
+    // Click "Agent" filter
+    fireEvent.click(screen.getByRole("button", { name: /^Agent$/ }));
+    await screen.findByText("Agent kicked off");
+    expect(screen.queryByText("CI passed")).toBeNull();
+
+    // Click "Failures" filter
+    fireEvent.click(screen.getByRole("button", { name: /^Failures$/ }));
+    await screen.findByText("CI failed");
+    expect(screen.queryByText("CI passed")).toBeNull();
+    expect(screen.queryByText("Agent kicked off")).toBeNull();
+
+    // Click "Git" filter — no entries match → fallback message
+    fireEvent.click(screen.getByRole("button", { name: /^Git$/ }));
+    expect(await screen.findByText(/No entries match this filter/i)).toBeTruthy();
+
+    // Back to All
+    fireEvent.click(screen.getByRole("button", { name: /^All$/ }));
+    expect(await screen.findByText("CI passed")).toBeTruthy();
   });
 });

@@ -555,6 +555,25 @@ function ReviewTab({ cardId, isActive }: ReviewTabProps) {
 
 // ─── Activity Tab ──────────────────────────────────────────────────────────────
 
+export type ActivityFilter = "all" | "failures" | "ci" | "agent" | "git";
+
+export const ACTIVITY_FILTERS: { id: ActivityFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "failures", label: "Failures" },
+  { id: "ci", label: "CI" },
+  { id: "agent", label: "Agent" },
+  { id: "git", label: "Git" },
+];
+
+export function matchesActivityFilter(kind: string, filter: ActivityFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "failures") return /fail|error|repairing/.test(kind);
+  if (filter === "ci") return kind.startsWith("ci_");
+  if (filter === "agent") return kind.startsWith("agent_");
+  if (filter === "git") return /^(pr_|merge_)/.test(kind);
+  return false;
+}
+
 interface ActivityTabProps {
   cardId: string;
   isActive: boolean;
@@ -564,6 +583,7 @@ function ActivityTab({ cardId, isActive }: ActivityTabProps) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<ActivityFilter>("all");
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchEntries = useCallback(async () => {
@@ -617,25 +637,48 @@ function ActivityTab({ cardId, isActive }: ActivityTabProps) {
     );
   }
 
-  if (entries.length === 0) {
-    return (
-      <div className="p-4 text-sm text-[var(--text-dim)]">No activity yet.</div>
-    );
-  }
+  const filteredEntries = entries.filter((e) => matchesActivityFilter(e.kind, activeFilter));
 
   return (
-    <div className="space-y-2 p-4">
-      {entries.map((entry, idx) => (
-        <div key={idx} className="flex gap-3 text-sm">
-          <span className="shrink-0 mt-0.5 text-base">{kindIcon(entry.kind)}</span>
-          <div className="min-w-0 flex-1">
-            <div className="text-[var(--text)] leading-snug">{entry.summary}</div>
-            <div className="mt-0.5 text-[10px] text-[var(--text-dim)]">
-              {relativeAge(entry.timestamp)}
-            </div>
-          </div>
+    <div className="flex flex-col">
+      {/* Filter pills */}
+      <div className="flex gap-1.5 flex-wrap border-b border-[var(--border)] px-4 py-2" data-testid="activity-filter-pills">
+        {ACTIVITY_FILTERS.map(({ id, label }) => (
+          <button
+            key={id}
+            onClick={() => setActiveFilter(id)}
+            aria-pressed={activeFilter === id}
+            className={`rounded-full border px-3 py-0.5 text-xs font-medium transition ${
+              activeFilter === id
+                ? "border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]"
+                : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)] hover:text-[var(--text)]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Entry list */}
+      {filteredEntries.length === 0 ? (
+        <div className="p-4 text-sm text-[var(--text-dim)]">
+          {entries.length === 0 ? "No activity yet." : "No entries match this filter."}
         </div>
-      ))}
+      ) : (
+        <div className="space-y-2 p-4">
+          {filteredEntries.map((entry, idx) => (
+            <div key={idx} className="flex gap-3 text-sm">
+              <span className="shrink-0 mt-0.5 text-base">{kindIcon(entry.kind)}</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[var(--text)] leading-snug">{entry.summary}</div>
+                <div className="mt-0.5 text-[10px] text-[var(--text-dim)]">
+                  {relativeAge(entry.timestamp)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
