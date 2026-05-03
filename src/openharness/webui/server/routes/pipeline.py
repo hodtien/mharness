@@ -88,6 +88,7 @@ def _serialize_card(card: dict) -> dict:
         "source_kind": card["source_kind"],
         "score": card["score"],
         "labels": card["labels"],
+        "model": card.get("model"),
         "created_at": card["created_at"],
         "updated_at": card["updated_at"],
         "model": _safe_text(metadata.get("execution_model")),
@@ -99,6 +100,47 @@ def _serialize_card(card: dict) -> dict:
             "resume_phase": _safe_text(metadata.get("resume_phase")),
         },
     }
+
+
+def _serialize_card_detail(card: dict, *, available_models: list[str]) -> dict:
+    """Return the detailed card payload for GET /api/pipeline/cards/{id}."""
+    metadata = card.get("metadata") or {}
+    return {
+        "id": card["id"],
+        "title": card["title"],
+        "status": card["status"],
+        "source_kind": card["source_kind"],
+        "source_ref": card.get("source_ref", ""),
+        "score": card["score"],
+        "score_reasons": card.get("score_reasons", []),
+        "labels": card["labels"],
+        "model": card.get("model"),
+        "body": card.get("body", ""),
+        "metadata": metadata,
+        "linked_pr_url": _safe_text(metadata.get("linked_pr_url")),
+        "attempt_count": int(metadata.get("attempt_count", 0) or 0),
+        "available_models": available_models,
+        "created_at": card["created_at"],
+        "updated_at": card["updated_at"],
+    }
+
+
+def _collect_available_models(state: WebUIState) -> list[str]:
+    """Return a deduplicated list of allowed models across provider profiles."""
+    try:
+        from openharness.config.settings import load_settings
+    except Exception:
+        return []
+    try:
+        settings = load_settings()
+    except Exception:
+        return []
+    seen: dict[str, None] = {}
+    for profile in settings.profiles.values():
+        for model in profile.allowed_models or []:
+            if model and model not in seen:
+                seen[model] = None
+    return list(seen.keys())
 
 
 def _safe_text(value: str | None) -> str | None:
@@ -219,17 +261,16 @@ _ACTIVE_STATUSES: frozenset[str] = frozenset(
 )
 
 
-@router.patch("/cards/{card_id}/model")
-def patch_pipeline_card_model(
+@router.get("/cards/{card_id}")
+def get_pipeline_card(
     card_id: str,
-    body: CardModelPatchRequest,
     state: WebUIState = Depends(get_state),
 ) -> dict:
-    """Override the execution model used the next time this card runs.
+    """Return full detail for a single pipeline card.
 
-    Pass ``model: null`` (or empty string) to clear the override and fall back
-    to the policy default. Rejected with HTTP 409 while the card is in an
-    active run state, since the model is captured at run-start time.
+    Includes ``model``, full ``metadata``, ``body``, ``linked_pr_url``,
+    ``attempt_count`` and the ``available_models`` list collected from
+    configured provider profiles. Returns HTTP 404 if the card does not exist.
     """
     store = RepoAutopilotStore(state.cwd)
     card = store.get_card(card_id)
@@ -238,23 +279,46 @@ def patch_pipeline_card_model(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "card_not_found", "card_id": card_id},
         )
-    if card.status in _ACTIVE_STATUSES:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": "card_active",
-                "message": "Cannot change model while card is running.",
-                "card_id": card_id,
-                "status": card.status,
-            },
-        )
-    raw_model = (body.model or "").strip()
-    updated = store.update_status(
-        card_id,
-        status=card.status,
-        metadata_updates={"execution_model": raw_model},
+    return _serialize_card_detail(
+        card.model_dump(mode="json"),
+        available_models=_collect_available_models(state),
     )
-    return _serialize_card(updated.model_dump(mode="json"))
+
+
+@router.patch("/cards/{card_id}/model")
+def patch_pipeline_card_model(
+    card_id: str,
+    body: CardModelPatchRequest,
+    state: WebUIState = Depends(get_state),
+) -> dict:
+    """Set or clear the model override for a pipeline card.
+
+    Pass ``{"model": "<id>"}`` to override the default execution model, or
+    ``{"model": null}`` to reset back to the autopilot default.
+
+    The supplied model is *not* strictly validated against the configured
+    provider profiles — unknown values are accepted but a warning is recorded
+    in the response so the Web UI can surface it. Returns HTTP 404 if the
+    card does not exist.
+    """
+    store = RepoAutopilotStore(state.cwd)
+    if store.get_card(card_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "card_not_found", "card_id": card_id},
+        )
+    available = _collect_available_models(state)
+    warning: str | None = None
+    if body.model is not None and available and body.model not in available:
+        warning = (
+            f"Model {body.model!r} is not in the allowed models of any "
+            "configured provider profile."
+        )
+    card = store.update_card_model(card_id, body.model)
+    payload = _serialize_card(card.model_dump(mode="json"))
+    if warning:
+        payload["warning"] = warning
+    return payload
 
 
 # ---------------------------------------------------------------------------

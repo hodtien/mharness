@@ -185,6 +185,105 @@ def test_action_on_unknown_card_returns_404(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/pipeline/cards/{card_id} — detail
+# ---------------------------------------------------------------------------
+
+
+def test_get_card_detail_returns_full_card_with_model(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    created = client.post(
+        "/api/pipeline/cards",
+        headers=AUTH,
+        json={"title": "Detail card", "body": "Full body", "labels": ["ui"]},
+    )
+    assert created.status_code == 201
+    card_id = created.json()["id"]
+
+    response = client.get(f"/api/pipeline/cards/{card_id}", headers=AUTH)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == card_id
+    assert body["title"] == "Detail card"
+    assert body["body"] == "Full body"
+    assert body["model"] is None
+    assert "metadata" in body
+    assert "linked_pr_url" in body
+    assert body["attempt_count"] == 0
+    assert "available_models" in body
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/pipeline/cards/{card_id}/model
+# ---------------------------------------------------------------------------
+
+
+def test_serialize_card_includes_model(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Model field card"})
+
+    assert response.status_code == 201
+    assert "model" in response.json()
+
+
+def test_patch_card_model(tmp_path) -> None:
+    client = _client(tmp_path)
+    created = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Model override card"})
+    assert created.status_code == 201
+    card_id = created.json()["id"]
+
+    response = client.patch(
+        f"/api/pipeline/cards/{card_id}/model",
+        headers=AUTH,
+        json={"model": "oc-medium"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == card_id
+    assert response.json()["model"] == "oc-medium"
+    detail = client.get(f"/api/pipeline/cards/{card_id}", headers=AUTH)
+    assert detail.status_code == 200
+    assert detail.json()["model"] == "oc-medium"
+
+
+def test_patch_card_model_null_resets(tmp_path) -> None:
+    client = _client(tmp_path)
+    created = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Reset model card"})
+    assert created.status_code == 201
+    card_id = created.json()["id"]
+    set_response = client.patch(
+        f"/api/pipeline/cards/{card_id}/model",
+        headers=AUTH,
+        json={"model": "oc-medium"},
+    )
+    assert set_response.status_code == 200
+
+    response = client.patch(
+        f"/api/pipeline/cards/{card_id}/model",
+        headers=AUTH,
+        json={"model": None},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["model"] is None
+
+
+def test_patch_card_model_404(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/pipeline/cards/nonexistent-id/model",
+        headers=AUTH,
+        json={"model": "oc-medium"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["error"] == "card_not_found"
+
+
+# ---------------------------------------------------------------------------
 # GET /api/pipeline/journal
 # ---------------------------------------------------------------------------
 
