@@ -15,7 +15,8 @@ export type RepoTaskStatus =
   | "completed"
   | "merged"
   | "failed"
-  | "rejected";
+  | "rejected"
+  | "killed";
 
 export type RepoTaskSource =
   | "github_issue"
@@ -311,7 +312,9 @@ const COLUMNS: { id: string; label: string; statuses: RepoTaskStatus[] }[] = [
   { id: "queue", label: "Queue", statuses: ["queued", "accepted"] },
   { id: "in_progress", label: "In Progress", statuses: ["preparing", "running", "verifying", "repairing"] },
   { id: "review", label: "Review", statuses: ["pr_open", "waiting_ci"] },
-  { id: "done", label: "Done", statuses: ["completed", "merged", "failed", "rejected"] },
+  { id: "completed", label: "Completed", statuses: ["completed", "merged"] },
+  { id: "failed", label: "Failed", statuses: ["failed"] },
+  { id: "rejected", label: "Rejected", statuses: ["rejected", "killed"] },
 ];
 
 const SOURCE_LABELS: Record<RepoTaskSource, string> = {
@@ -480,10 +483,12 @@ function ActivityTab({ cardId, isActive }: ActivityTabProps) {
 
 // ─── Drawer ───────────────────────────────────────────────────────────────────
 
+const RESETTABLE_STATUSES: RepoTaskStatus[] = ["failed", "rejected", "killed"];
+
 interface DrawerProps {
   card: PipelineCard | null;
   onClose: () => void;
-  onAction: (cardId: string, action: "accept" | "reject" | "retry") => void;
+  onAction: (cardId: string, action: "accept" | "reject" | "retry" | "reset") => void;
   loadingAction: boolean;
 }
 
@@ -608,27 +613,39 @@ function Drawer({ card, onClose, onAction, loadingAction }: DrawerProps) {
 
         {/* Actions */}
         <div className="flex gap-2 border-t border-[var(--border)] p-4">
-          <button
-            onClick={() => onAction(card.id, "accept")}
-            disabled={loadingAction}
-            className="flex-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-40"
-          >
-            Accept
-          </button>
-          <button
-            onClick={() => onAction(card.id, "reject")}
-            disabled={loadingAction}
-            className="flex-1 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-40"
-          >
-            Reject
-          </button>
-          <button
-            onClick={() => onAction(card.id, "retry")}
-            disabled={loadingAction}
-            className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm font-medium text-[var(--text)] transition hover:border-[var(--accent)]/40 disabled:opacity-40"
-          >
-            Retry
-          </button>
+          {RESETTABLE_STATUSES.includes(card.status) ? (
+            <button
+              onClick={() => onAction(card.id, "reset")}
+              disabled={loadingAction}
+              className="flex-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-40"
+            >
+              Reset to Queue
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => onAction(card.id, "accept")}
+                disabled={loadingAction}
+                className="flex-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-40"
+              >
+                Accept
+              </button>
+              <button
+                onClick={() => onAction(card.id, "reject")}
+                disabled={loadingAction}
+                className="flex-1 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-40"
+              >
+                Reject
+              </button>
+              <button
+                onClick={() => onAction(card.id, "retry")}
+                disabled={loadingAction}
+                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm font-medium text-[var(--text)] transition hover:border-[var(--accent)]/40 disabled:opacity-40"
+              >
+                Retry
+              </button>
+            </>
+          )}
         </div>
       </div>
     </>
@@ -708,7 +725,7 @@ export default function PipelinePage() {
   }, [lastUpdated]);
 
   const handleAction = useCallback(
-    async (cardId: string, action: "accept" | "reject" | "retry") => {
+    async (cardId: string, action: "accept" | "reject" | "retry" | "reset") => {
       setLoadingAction(true);
       try {
         await apiFetch(`/api/pipeline/cards/${encodeURIComponent(cardId)}/action`, {

@@ -35,10 +35,11 @@ class CreateManualCardRequest(BaseModel):
 class CardActionRequest(BaseModel):
     """Payload for POST /api/pipeline/cards/{id}/action.
 
-    ``action`` must be one of: ``accept``, ``reject``, ``retry``.
+    ``action`` must be one of: ``accept``, ``reject``, ``retry``, ``reset``.
+    ``reset`` requeues failed/rejected/killed cards back to ``queued``.
     """
 
-    action: Literal["accept", "reject", "retry"]
+    action: Literal["accept", "reject", "retry", "reset"]
 
 
 def _serialize_card(card: dict) -> dict:
@@ -136,6 +137,7 @@ _ACTION_TO_STATUS: dict[str, RepoTaskStatus] = {
     "accept": "accepted",
     "reject": "rejected",
     "retry": "queued",
+    "reset": "queued",
 }
 
 
