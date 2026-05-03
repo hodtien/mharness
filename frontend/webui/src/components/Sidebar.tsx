@@ -31,7 +31,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
       <nav aria-label="Primary" className="flex flex-col gap-1">
         <NavItem to="/chat" label="Chat" icon="💬" onClose={onClose} />
         <NavItem to="/history" label="History" icon="🕘" onClose={onClose} />
-        <NavItem to="/pipeline" label="Pipeline" icon="🚦" onClose={onClose} />
+        <NavItem to="/autopilot" label="Autopilot" icon="🚀" onClose={onClose} />
         <NavItem to="/tasks" label="Tasks" icon="⚙️" onClose={onClose} />
       </nav>
 
