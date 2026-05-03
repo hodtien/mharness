@@ -1,4 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 import { apiFetch } from "../api/client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,6 +42,103 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
   failed: "Failed",
   killed: "Killed",
 };
+
+// ─── Review status badge ──────────────────────────────────────────────────────
+
+type ReviewStatus = "done" | "in_progress" | "pending" | "failed" | "timeout" | "error" | null;
+
+function getReviewStatus(metadata: Record<string, string>): ReviewStatus {
+  const v = metadata["review_status"] ?? null;
+  if (!v) return null;
+  return v as ReviewStatus;
+}
+
+function ReviewBadge({
+  status,
+  onClick,
+}: {
+  status: ReviewStatus;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  if (status === "done") {
+    return (
+      <button
+        onClick={onClick}
+        className="rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/25 cursor-pointer"
+        aria-label="Reviewed — view review"
+      >
+        ✅ Reviewed
+      </button>
+    );
+  }
+  if (status === "in_progress" || status === "pending") {
+    return (
+      <button
+        onClick={onClick}
+        className="rounded-md border border-yellow-500/40 bg-yellow-500/15 px-2 py-0.5 text-xs font-medium text-yellow-300 transition hover:bg-yellow-500/25 cursor-pointer"
+        aria-label="Reviewing — view review"
+      >
+        ⏳ Reviewing
+      </button>
+    );
+  }
+  // null / failed / timeout / error → em dash
+  return <span className="text-sm text-[var(--text-dim)]">—</span>;
+}
+
+// ─── Review Panel (inside detail drawer) ──────────────────────────────────────
+
+interface ReviewData {
+  task_id: string;
+  status: string;
+  markdown: string;
+  created_at: number;
+}
+
+function ReviewPanel({ taskId }: { taskId: string }) {
+  const [state, setState] = useState<"loading" | "not_found" | "done" | "error">("loading");
+  const [review, setReview] = useState<ReviewData | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiFetch<ReviewData>(`/api/review/${encodeURIComponent(taskId)}`);
+        if (!cancelled) {
+          setReview(data);
+          setState("done");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const msg = String(err);
+          if (msg.includes("404")) {
+            setState("not_found");
+          } else {
+            setErrMsg(msg);
+            setState("error");
+          }
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [taskId]);
+
+  if (state === "loading") {
+    return <span className="text-xs text-[var(--text-dim)]">Loading review…</span>;
+  }
+  if (state === "not_found") {
+    return <span className="text-xs text-[var(--text-dim)]">No review yet.</span>;
+  }
+  if (state === "error") {
+    return <span className="text-xs text-red-300">{errMsg}</span>;
+  }
+  return (
+    <div className="prose prose-invert max-w-none text-sm text-[var(--text)]">
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{review?.markdown ?? ""}</ReactMarkdown>
+    </div>
+  );
+}
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -147,12 +247,21 @@ interface DetailDrawerProps {
   onRetry: () => void;
   stopping: boolean;
   retrying: boolean;
+  focusReview?: boolean;
 }
 
-function DetailDrawer({ taskId, onClose, onStop, onRetry, stopping, retrying }: DetailDrawerProps) {
+function DetailDrawer({ taskId, onClose, onStop, onRetry, stopping, retrying, focusReview }: DetailDrawerProps) {
   const [task, setTask] = useState<TaskRecord | null>(null);
   const [fetching, setFetching] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const reviewRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to the review section when the drawer is opened by clicking a badge.
+  useEffect(() => {
+    if (focusReview && task && reviewRef.current && typeof reviewRef.current.scrollIntoView === "function") {
+      reviewRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [focusReview, task]);
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -280,6 +389,16 @@ function DetailDrawer({ taskId, onClose, onStop, onRetry, stopping, retrying }: 
                 </div>
               </div>
 
+              {/* Review */}
+              {getReviewStatus(currentTask.metadata) && (
+                <div ref={reviewRef}>
+                  <div className="mb-1 text-xs font-medium text-[var(--text-dim)]">Review</div>
+                  <div className="max-h-72 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2">
+                    <ReviewPanel taskId={currentTask.id} />
+                  </div>
+                </div>
+              )}
+
               {/* Log Viewer + actions */}
               <LogViewer taskId={currentTask.id} status={currentTask.status} onStop={onStop} stopping={stopping} />
 
@@ -321,6 +440,7 @@ export default function TasksPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [filter, setFilter] = useState<TaskStatus | "all">("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [focusReview, setFocusReview] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
@@ -434,6 +554,7 @@ export default function TasksPage() {
                 <th className="px-4 py-2 text-left font-medium text-[var(--text-dim)]">ID</th>
                 <th className="px-4 py-2 text-left font-medium text-[var(--text-dim)]">Type</th>
                 <th className="px-4 py-2 text-left font-medium text-[var(--text-dim)]">Status</th>
+                <th className="px-4 py-2 text-left font-medium text-[var(--text-dim)]">Review status</th>
                 <th className="px-4 py-2 text-left font-medium text-[var(--text-dim)]">Description</th>
                 <th className="px-4 py-2 text-left font-medium text-[var(--text-dim)]">Created</th>
               </tr>
@@ -442,7 +563,7 @@ export default function TasksPage() {
               {filtered.map((task) => (
                 <tr
                   key={task.id}
-                  onClick={() => setSelectedId(task.id)}
+                  onClick={() => { setFocusReview(false); setSelectedId(task.id); }}
                   className="cursor-pointer border-b border-[var(--border)] transition-colors hover:bg-[var(--panel-2)]/50"
                 >
                   <td className="px-4 py-3 font-mono text-xs text-[var(--text-dim)]">
@@ -455,6 +576,12 @@ export default function TasksPage() {
                     <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[task.status]}`}>
                       {STATUS_LABEL[task.status]}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <ReviewBadge
+                      status={getReviewStatus(task.metadata)}
+                      onClick={(e) => { e.stopPropagation(); setFocusReview(true); setSelectedId(task.id); }}
+                    />
                   </td>
                   <td className="px-4 py-3 text-[var(--text)]">
                     <span className="truncate max-w-xs block">{task.description || <span className="text-[var(--text-dim)]">—</span>}</span>
@@ -478,6 +605,7 @@ export default function TasksPage() {
           onRetry={handleRetry}
           stopping={stopping}
           retrying={retrying}
+          focusReview={focusReview}
         />
       )}
     </div>

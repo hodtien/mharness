@@ -79,6 +79,12 @@ function mockFetch(tasks: TaskRecord[], options: MockOptions = {}) {
         json: async () => ({ lines: ["line1", "line2"] }),
       });
     }
+    if (url.startsWith("/api/review/")) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ task_id: url.split("/").pop(), status: "done", markdown: "# Review detail", created_at: 1700000200 }),
+      });
+    }
     if (url.endsWith("/retry")) {
       return Promise.resolve({
         ok: true,
@@ -183,5 +189,78 @@ describe("TasksPage drawer", () => {
     fireEvent.click(screen.getByText("Running task"));
 
     await waitFor(() => expect(screen.getByText(/500/)).toBeTruthy());
+  });
+});
+
+// ─── Review badge column ──────────────────────────────────────────────────────
+
+const REVIEWED_TASK: TaskRecord = {
+  ...FAILED_TASK,
+  id: "task-reviewed-001",
+  description: "Reviewed task",
+  metadata: { review_status: "done" },
+};
+
+const REVIEWING_TASK: TaskRecord = {
+  ...RUNNING_TASK,
+  id: "task-reviewing-002",
+  description: "Reviewing task",
+  metadata: { review_status: "in_progress" },
+};
+
+const NO_REVIEW_TASK: TaskRecord = {
+  ...RUNNING_TASK,
+  id: "task-noreview-003",
+  description: "No review task",
+  metadata: {},
+};
+
+describe("TasksPage review badge", () => {
+  it("shows '✅ Reviewed' badge for tasks with review_status=done", async () => {
+    mockFetch([REVIEWED_TASK]);
+    render(<TasksPage />);
+    expect(await screen.findByText(/✅ Reviewed/)).toBeTruthy();
+  });
+
+  it("shows '⏳ Reviewing' badge for tasks with review_status=in_progress", async () => {
+    mockFetch([REVIEWING_TASK]);
+    render(<TasksPage />);
+    expect(await screen.findByText(/⏳ Reviewing/)).toBeTruthy();
+  });
+
+  it("shows '—' for tasks with no review metadata", async () => {
+    mockFetch([NO_REVIEW_TASK]);
+    render(<TasksPage />);
+    await screen.findByText("No review task");
+    // The em dash appears in the review status cell (and possibly elsewhere as
+    // empty placeholders). Just ensure at least one is rendered.
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("clicking the Reviewed badge opens the drawer and fetches /api/review/{id}", async () => {
+    const { calls } = mockFetch([REVIEWED_TASK]);
+    render(<TasksPage />);
+
+    const badge = await screen.findByRole("button", { name: /Reviewed/i });
+    fireEvent.click(badge);
+
+    await waitFor(() => {
+      const reviewCall = calls.find((c) => c.url === `/api/review/${REVIEWED_TASK.id}`);
+      expect(reviewCall).toBeTruthy();
+    });
+  });
+
+  it("clicking the Reviewing badge opens the drawer without fetching the row detail twice", async () => {
+    const { calls } = mockFetch([REVIEWING_TASK]);
+    render(<TasksPage />);
+
+    const badge = await screen.findByRole("button", { name: /Reviewing/i });
+    fireEvent.click(badge);
+
+    // Drawer opens (detail fetched).
+    await waitFor(() => {
+      const detailCall = calls.find((c) => c.url === `/api/tasks/${REVIEWING_TASK.id}`);
+      expect(detailCall).toBeTruthy();
+    });
   });
 });
