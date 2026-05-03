@@ -14,6 +14,8 @@
   - [P5 — F4: Pipeline \& Tasks](#p5--f4-pipeline--tasks)
   - [P6 — F5: Auto Code-Review](#p6--f5-auto-code-review)
   - [P7 — Gap Fixes: WebUI Integration](#p7--gap-fixes-webui-integration)
+  - [P8 — Autopilot UI Polish](#p8--autopilot-ui-polish)
+  - [P9 — Parallel Autopilot Execution](#p9--parallel-autopilot-execution)
   - [Cross-cutting](#cross-cutting)
 
 ---
@@ -179,6 +181,414 @@ oh autopilot add idea "[P7.8] Test: gap coverage P7.1–P7.7" --body "Tạo test
 
 ---
 
+## P8 — Autopilot UI Polish
+
+```bash
+oh autopilot add idea "[P8.1] Rebuild Autopilot Kanban board theo lifecycle thật" --body "Thiết kế lại board Autopilot để phản ánh đúng lifecycle thay vì gộp nhiều trạng thái vào In Progress. Cột đề xuất: Queue, Running, Repairing, Waiting CI, Review, Merged, Failed/Rejected. Mapping rõ từng status: queued/accepted→Queue, preparing/running/verifying→Running, repairing→Repairing, waiting_ci/pr_open→Waiting CI, code_review→Review, merged/completed→Merged, failed/rejected/killed→Failed. Card hiển thị status badge màu riêng, spinner khi active, attempt_count, PR link, branch, last_note ngắn. Board auto-refresh 3s khi có active card, 15s khi idle. Spawn agents: planner → a11y-architect → code-reviewer."
+
+oh autopilot add idea "[P8.2] Đổi tên menu Pipeline → Autopilot" --body "Đổi tên nav item 'Pipeline' thành 'Autopilot' trong sidebar (App.tsx). Cập nhật route path /pipeline → /autopilot (giữ redirect từ /pipeline). Đổi tiêu đề trang, document.title, và breadcrumb. Cập nhật tất cả internal link. Spawn agents: code-reviewer."
+
+oh autopilot add idea "[P8.3] Làm rõ Tasks tab — đổi tên thành Jobs và thêm subtitle" --body "Tasks tab hiện tại là background shell processes (autopilot run-next, hooks), không phải autopilot cards — dễ gây nhầm lẫn. Đổi tên nav item thành 'Jobs'. Đổi tiêu đề trang thành 'Background Jobs'. Thêm subtitle nhỏ bên dưới heading: 'Background CLI processes spawned by the system. Autopilot cards are managed in the Autopilot board.' Dùng icon khác biệt (⚙ Jobs, 🤖 Autopilot). Spawn agents: code-reviewer."
+
+oh autopilot add idea "[P8.4] Activity drawer có thể scroll + chiều cao đúng viewport" --body "Trong Autopilot card drawer (P7.7 Activity tab): activity list hiện không scroll được vì container thiếu overflow-y: auto và height bị unconstrained. Fix: wrapper phải có overflow-y: auto, height: 100% hoặc max-height: calc(100vh - <header-height>). Đảm bảo drawer panel tổng thể không overflow ra ngoài viewport trên cả desktop và mobile 375px. Spawn agents: code-reviewer."
+
+oh autopilot add idea "[P8.5] Activity item — truncate message + expand on click" --body "Mỗi activity item trong card drawer hiện hiển thị toàn bộ message text dài, gây khó đọc. Truncate sau 120 chars với '...' và nút 'Show more' expand inline (không mở modal). Status icon cố định bên trái theo kind: repairing=🔴, verifying=🔵, merged=✅, failed=⚠, preparing=🟡. Timestamp relative cố định bên phải. Spawn agents: code-reviewer."
+
+oh autopilot add idea "[P8.6] Activity filter theo loại event" --body "Thêm filter pills bên trên activity list trong card drawer: All | Failures | CI | Agent | Git. Filter theo journal entry kind field. Default: All. Active filter highlight. Giữ filter state trong component (không cần persist). Spawn agents: tdd-guide → code-reviewer."
+
+oh autopilot add idea "[P8.7] Current blocker alert ở đầu card detail" --body "Khi card ở trạng thái failed/repairing/waiting_ci: hiển thị alert banner nổi bật ở đầu drawer (trước activity list) với icon ⚠/⏳, text từ metadata.last_note, và nút action: 'View PR' (link linked_pr_url), 'Retry' (gọi action reset), 'Merge manually'. Ẩn khi card ở trạng thái terminal (merged/rejected/completed). Spawn agents: planner → code-reviewer."
+```
+
+---
+
+## P9 — Parallel Autopilot Execution
+
+> **Phân tích rủi ro & giải pháp**: Hiện tại autopilot chạy single-task (boolean gate `already_running`).
+> Chuyển sang parallel yêu cầu giải quyết: (1) race condition khi claim card, (2) registry/journal
+> file contention, (3) shared main checkout conflicts, (4) worktree cleanup on failure,
+> (5) capacity management. Thứ tự task được sắp xếp theo dependency: lock trước → claim → capacity → model → UI.
+
+```bash
+oh autopilot add idea "[P9.1] Interprocess lock cho registry + journal" --body "
+## Mục tiêu
+Thêm file-based interprocess locking cho registry.json và journal.jsonl để tránh lost-update khi nhiều autopilot process chạy song song.
+
+## Phân tích rủi ro hiện tại
+- _load_registry() đọc → modify → _save_registry() ghi KHÔNG atomic → 2 process đọc cùng lúc, process B ghi đè thay đổi của A
+- append_journal() mở file append nhưng JSONL append trên NFS/SMB có thể interleave
+- Hiện tại chưa có locking cơ chế nào
+
+## Giải pháp đề xuất
+1. Tạo class RepoFileLock trong src/openharness/autopilot/locking.py
+   - Dùng fcntl.flock (Unix) hoặc msvcrt.locking (Windows) — cross-platform
+   - Lock file: .openharness/autopilot/registry.lock, journal.lock
+   - Context manager: with RepoFileLock(path, timeout=10): ...
+   - Timeout + retry (default 10s, backoff 0.1s)
+   - Stale lock detection (PID check nếu lock >60s)
+2. Wrap _load_registry() + _save_registry() trong RepoFileLock('registry.lock')
+3. Wrap append_journal() trong RepoFileLock('journal.lock')
+4. Đảm bảo lock file được tạo trong .openharness/autopilot/ (đã có mkdir)
+
+## Files cần sửa
+- NEW: src/openharness/autopilot/locking.py
+- MODIFY: src/openharness/autopilot/service.py — _load_registry, _save_registry, append_journal
+- NEW: tests/test_autopilot/test_locking.py
+
+## Tests yêu cầu
+- test_lock_acquire_release: lock → unlock → lock lại OK
+- test_lock_blocks_concurrent: 2 threads, thread 2 blocks cho tới khi thread 1 release
+- test_lock_timeout: lock held quá timeout → LockTimeoutError
+- test_lock_stale_detection: lock file tồn tại nhưng PID chết → acquire OK
+- test_registry_save_under_lock: 2 concurrent saves không lost-update
+
+Spawn agents: planner (thiết kế lock protocol) → tdd-guide (viết tests trước) → code-reviewer.
+" --labels "parallel,backend,critical-path"
+
+oh autopilot add idea "[P9.2] Atomic card claim — pick_and_claim_card()" --body "
+## Mục tiêu
+Thay thế pick_next_card() + update_status() riêng lẻ bằng atomic pick_and_claim_card() để tránh 2 process cùng claim 1 card.
+
+## Phân tích rủi ro hiện tại
+- pick_next_card() (line 401) chỉ đọc registry, trả card đầu tiên queued
+- update_status() (line 407) ghi riêng biệt — window giữa pick và claim cho phép race
+- Kết quả: 2 process pick cùng card → cả 2 bắt đầu run → conflict worktree, duplicate PR
+
+## Giải pháp đề xuất
+1. Thêm method pick_and_claim_card(worker_id: str) trong RepoAutopilotStore:
+   - Acquire RepoFileLock('registry.lock') [từ P9.1]
+   - Load registry
+   - Filter cards: status in (queued, accepted), sort by score desc, created_at asc
+   - Set card.status = 'preparing', card.metadata['worker_id'] = worker_id
+   - Save registry
+   - Release lock
+   - Return card or None
+2. worker_id = unique ID per process (uuid4 hoặc PID-timestamp)
+3. run_card() sử dụng pick_and_claim_card() thay vì pick + update riêng
+4. Nếu card đã bị claim (status != queued/accepted) → return None
+
+## Files cần sửa
+- MODIFY: src/openharness/autopilot/service.py — thêm pick_and_claim_card(), sửa run_next()
+- MODIFY: tests/test_services/test_autopilot.py
+
+## Tests yêu cầu
+- test_pick_and_claim_returns_highest_score: 3 cards queued, claim trả card score cao nhất
+- test_pick_and_claim_skips_already_claimed: card đã preparing → skip
+- test_pick_and_claim_sets_worker_id: card.metadata['worker_id'] đúng
+- test_concurrent_claim_no_duplicate: 2 threads claim song song → mỗi thread nhận card khác nhau
+- test_pick_and_claim_none_when_empty: không có queued card → return None
+
+Spawn agents: tdd-guide (viết tests trước) → code-reviewer.
+Depends on: P9.1 (cần RepoFileLock).
+" --labels "parallel,backend,critical-path"
+
+oh autopilot add idea "[P9.3] Main checkout lock cho _pull_base_branch + _install_editable" --body "
+## Mục tiêu
+Bảo vệ shared main checkout (self._cwd) khi nhiều autopilot process cùng gọi _pull_base_branch() hoặc _install_editable() sau merge.
+
+## Phân tích rủi ro hiện tại
+- _pull_base_branch() (line 1436) chạy git fetch + git pull --ff-only trên self._cwd
+- _install_editable() chạy pip install -e . trên self._cwd
+- 2 process merge xong cùng lúc → concurrent git pull → corrupt index
+- 2 process cùng install_editable → dependency conflict
+
+## Giải pháp đề xuất
+1. Thêm RepoFileLock('main-checkout.lock') [reuse P9.1]
+2. Wrap _pull_base_branch() call site trong lock
+3. Wrap _install_editable() call site trong lock
+4. Timeout 60s (pull + install có thể chậm)
+5. Lock scope chỉ ở call site, không lock toàn bộ method
+
+## Files cần sửa
+- MODIFY: src/openharness/autopilot/service.py — wrap _pull_base_branch, _install_editable calls
+- MODIFY: tests/test_services/test_autopilot.py
+
+## Tests yêu cầu
+- test_pull_base_branch_acquires_lock: mock lock, verify acquire called
+- test_pull_base_branch_releases_lock_on_error: pull fails → lock released
+- test_concurrent_pull_serialized: 2 threads pull → serialized execution
+
+Spawn agents: tdd-guide → code-reviewer.
+Depends on: P9.1.
+" --labels "parallel,backend"
+
+oh autopilot add idea "[P9.4] Per-card model field trong RepoTaskCard" --body "
+## Mục tiêu
+Cho phép chỉ định model cho từng autopilot card thay vì dùng chung model mặc định từ policy.
+
+## Phân tích hiện tại
+- RepoTaskCard (types.py line 47) có metadata: dict[str, Any] nhưng KHÔNG có model field
+- run_card() (service.py line 711) xác định effective_model = explicit param hoặc policy default
+- Không có cách nào user chọn model cho 1 card cụ thể
+
+## Giải pháp đề xuất
+1. Thêm field model: str | None = None vào RepoTaskCard (types.py)
+2. Trong run_card(): effective_model = card.model or policy_default
+3. enqueue_card() chấp nhận optional model param
+4. update_card_model(card_id, model) method mới trong RepoAutopilotStore
+5. Migration: registry.json cũ không có model field → Pydantic default None xử lý tự động
+
+## Files cần sửa
+- MODIFY: src/openharness/autopilot/types.py — thêm model field
+- MODIFY: src/openharness/autopilot/service.py — effective_model logic, update_card_model()
+- MODIFY: tests/test_services/test_autopilot.py
+
+## Tests yêu cầu
+- test_card_model_default_none: card mới model=None
+- test_card_model_overrides_policy: card.model='claude-haiku-4-5' → effective dùng haiku
+- test_card_model_none_falls_back_to_policy: card.model=None → dùng policy default
+- test_update_card_model: gọi update → model đổi đúng
+- test_registry_backward_compat: load registry cũ không có model field → OK
+
+Spawn agents: tdd-guide (viết tests trước) → code-reviewer.
+" --labels "parallel,backend"
+
+oh autopilot add idea "[P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model" --body "
+## Mục tiêu
+API endpoint cho phép WebUI gửi model override cho 1 autopilot card.
+
+## Giải pháp đề xuất
+1. Thêm endpoint PATCH /api/pipeline/cards/{id}/model trong routes/pipeline.py
+   - Body: {model: string | null} — null để reset về default
+   - Validate model tồn tại trong allowed models (optional, warn only)
+   - Gọi store.update_card_model(card_id, model)
+   - Return updated card
+   - 404 nếu card không tồn tại
+2. Thêm GET /api/pipeline/cards/{id} endpoint trả full card detail
+   - Include model field, metadata, body, linked_pr_url, attempt_count
+   - Include available_models list (từ provider profiles)
+3. Cập nhật _serialize_card() thêm model field
+
+## Files cần sửa
+- MODIFY: src/openharness/webui/server/routes/pipeline.py
+- MODIFY: tests/test_webui/test_server.py hoặc test_pipeline_routes.py
+
+## Tests yêu cầu
+- test_patch_card_model: set model → 200, card.model updated
+- test_patch_card_model_null_resets: set null → model=None
+- test_patch_card_model_404: unknown card → 404
+- test_get_card_detail: trả full card bao gồm model
+- test_serialize_card_includes_model: model field có trong response
+
+Spawn agents: tdd-guide → code-reviewer.
+Depends on: P9.4 (cần model field trên RepoTaskCard).
+" --labels "parallel,backend,api"
+
+oh autopilot add idea "[P9.6] Frontend: Card detail + model dropdown" --body "
+## Mục tiêu
+Trong Autopilot board, click card mở detail drawer hiển thị model mặc định, user có thể chọn model khác qua dropdown.
+
+## Giải pháp đề xuất
+1. Card detail drawer (mở khi click card trên Kanban board):
+   - Header: card title, status badge, source_kind badge
+   - Section 'Model': hiển thị current model (policy default nếu null)
+     - Dropdown lấy danh sách từ GET /api/models (flatten)
+     - Default option: 'Policy default ({policy_model})' 
+     - Khi chọn → PATCH /api/pipeline/cards/{id}/model
+     - Optimistic update + toast success/error
+   - Section 'Details': body, labels, attempt_count, linked_pr_url
+   - Section 'Activity': journal entries (reuse P7.7)
+   - Section 'Actions': Accept/Reject/Retry/Reset buttons
+2. Model dropdown disabled khi card đang active (running/repairing/etc)
+3. Responsive: drawer full-width trên mobile
+
+## Files cần sửa
+- MODIFY hoặc NEW: frontend/webui/src/components/CardDetailDrawer.tsx
+- MODIFY: frontend/webui/src/pages/AutopilotPage.tsx (hoặc PipelinePage.tsx tùy P8.2)
+
+## Tests yêu cầu
+- Visual: drawer mở đúng, model dropdown hiển thị
+- test_model_dropdown_calls_patch: chọn model → API called
+- test_model_dropdown_disabled_when_active: card running → dropdown disabled
+
+Spawn agents: planner (thiết kế drawer layout) → tdd-guide → code-reviewer → a11y-architect.
+Depends on: P9.5, P8.1 (Kanban board).
+" --labels "parallel,frontend,ui"
+
+oh autopilot add idea "[P9.7] Configurable max_parallel_runs policy" --body "
+## Mục tiêu
+Thêm cấu hình số lượng task tối đa autopilot có thể chạy song song. Default 2 cho giai đoạn phát triển.
+
+## Giải pháp đề xuất
+1. Thêm vào _DEFAULT_AUTOPILOT_POLICY['execution']:
+   max_parallel_runs: 2
+2. Thêm validation: 1 ≤ max_parallel_runs ≤ 10
+3. Web UI: thêm number input trong Policy editor (P5.8) hoặc Settings
+4. CLI: oh autopilot config set max_parallel_runs 3
+
+## Files cần sửa
+- MODIFY: src/openharness/autopilot/service.py — _DEFAULT_AUTOPILOT_POLICY
+- MODIFY: routes/pipeline.py — policy validation
+- MODIFY: tests/test_services/test_autopilot.py
+
+## Tests yêu cầu
+- test_default_max_parallel_runs_is_2: policy default = 2
+- test_max_parallel_runs_validation: <1 hoặc >10 → error
+- test_policy_round_trip: save max_parallel_runs=3 → load = 3
+
+Spawn agents: tdd-guide → code-reviewer.
+" --labels "parallel,backend,config"
+
+oh autopilot add idea "[P9.8] Capacity-based concurrency gate thay already_running" --body "
+## Mục tiêu
+Thay thế boolean check 'already_running' bằng capacity check đếm số task đang active so với max_parallel_runs.
+
+## Phân tích hiện tại
+- routes/pipeline.py run_next_card(): check any(c.status in active_statuses) → 409
+- tick() trong scheduler cũng check tương tự
+- Boolean gate chỉ cho 1 task → cần đổi thành count-based
+
+## Giải pháp đề xuất
+1. Thêm method count_active_cards() trong RepoAutopilotStore:
+   - Count cards với status in {preparing, running, verifying, repairing, waiting_ci, pr_open}
+   - Return int
+2. Thêm method has_capacity(policies) → bool:
+   - return count_active_cards() < policies['execution']['max_parallel_runs']
+3. Sửa routes/pipeline.py run_next_card():
+   - Thay any(c.status in active_statuses) bằng not store.has_capacity(policies)
+   - Error message: 'Maximum parallel runs ({max}) reached. {active} tasks currently active.'
+4. Sửa tick() / scheduler tương tự
+5. run_next() method trong service: gọi has_capacity() trước pick_and_claim_card()
+
+## Files cần sửa
+- MODIFY: src/openharness/autopilot/service.py — count_active_cards, has_capacity, run_next
+- MODIFY: src/openharness/webui/server/routes/pipeline.py — run_next_card capacity check
+- MODIFY: tests/test_services/test_autopilot.py
+- MODIFY: tests/test_webui/test_server.py
+
+## Tests yêu cầu
+- test_count_active_cards: 2 running + 1 queued → count = 2
+- test_has_capacity_true: 1 active, max=2 → True
+- test_has_capacity_false: 2 active, max=2 → False
+- test_run_next_rejects_at_capacity: 2 active → 409 với message đúng
+- test_run_next_allows_when_under_capacity: 1 active, max=2 → 202
+
+Spawn agents: tdd-guide → code-reviewer.
+Depends on: P9.2, P9.7.
+" --labels "parallel,backend,critical-path"
+
+oh autopilot add idea "[P9.9] Worktree cleanup finally block" --body "
+## Mục tiêu
+Đảm bảo worktree luôn được cleanup khi autopilot card fail/crash, tránh leaked worktrees.
+
+## Phân tích hiện tại
+- run_card() tạo worktree qua worktree_manager.create_worktree()
+- Cleanup chỉ xảy ra trên happy path hoặc một số error path cụ thể
+- Nếu exception bất ngờ (OOM, timeout, SIGKILL) → worktree leak
+- Leaked worktrees chiếm disk + block branch name
+
+## Giải pháp đề xuất
+1. Wrap toàn bộ run_card() worktree section trong try/finally:
+   try:
+       worktree = await manager.create_worktree(slug)
+       ... # all card work
+   finally:
+       if worktree and use_worktree:
+           try:
+               await manager.remove_worktree(slug)
+           except Exception as cleanup_exc:
+               self.append_journal(kind='cleanup_warning', ...)
+2. Thêm startup cleanup: khi service init, scan .openharness/worktrees/ cho stale worktrees
+   - Worktree mà card status đã terminal → auto remove
+   - Log cleanup action
+3. Card status update to failed/killed TRƯỚC cleanup (persist trước)
+
+## Files cần sửa
+- MODIFY: src/openharness/autopilot/service.py — run_card() try/finally, startup cleanup
+- MODIFY: tests/test_services/test_autopilot.py
+
+## Tests yêu cầu
+- test_worktree_cleanup_on_exception: mock run raises → worktree removed
+- test_worktree_cleanup_failure_non_fatal: cleanup raises → card still failed, journal entry
+- test_startup_cleans_stale_worktrees: stale worktree + terminal card → removed
+- test_startup_keeps_active_worktrees: active card worktree → NOT removed
+
+Spawn agents: tdd-guide → code-reviewer.
+" --labels "parallel,backend,reliability"
+
+oh autopilot add idea "[P9.10] Rebase strategy cho in-flight worktrees" --body "
+## Mục tiêu
+Khi card A merge vào main, card B đang chạy trên worktree cũ base → cần rebase để tránh merge conflict.
+
+## Phân tích hiện tại
+- Mỗi worktree branch từ main tại thời điểm create
+- Khi card A merge → main advance → card B worktree stale
+- Card B push branch → PR có conflict với new main
+- Hiện tại không có auto-rebase mechanism
+
+## Giải pháp đề xuất
+1. Sau mỗi _pull_base_branch() (khi card merge xong):
+   - List active worktrees qua count_active_cards()
+   - Cho mỗi active worktree: schedule git fetch origin main + git rebase origin/main
+   - Nếu rebase conflict → abort rebase, journal warning, để card tự handle khi verify
+2. Rebase KHÔNG bắt buộc thành công — nếu fail thì card verify step sẽ phát hiện conflict
+3. Async: rebase chạy background, không block main flow
+4. Lock: cần RepoFileLock per-worktree ('card-{id}.lock') khi rebase
+
+## Alternative đơn giản hơn (recommended cho v1):
+- KHÔNG auto-rebase
+- Khi card push branch → nếu PR có conflict → repair step detect và rebase
+- Đã có repair loop → tận dụng existing mechanism
+- Chỉ cần journal entry 'base_advanced' để track
+
+## Files cần sửa
+- MODIFY: src/openharness/autopilot/service.py — post-merge notification, optional rebase
+- MODIFY: tests/test_services/test_autopilot.py
+
+## Tests yêu cầu  
+- test_base_advance_journals_notification: card A merge → journal 'base_advanced' cho active cards
+- test_rebase_conflict_non_fatal: rebase fails → journal warning, card continues
+
+Spawn agents: planner (chọn strategy v1 vs full) → tdd-guide → code-reviewer.
+Depends on: P9.3, P9.8.
+" --labels "parallel,backend,advanced"
+
+oh autopilot add idea "[P9.11] Integration test: 2 cards chạy song song end-to-end" --body "
+## Mục tiêu
+Test tích hợp đảm bảo 2 autopilot cards có thể chạy song song không conflict.
+
+## Test scenarios
+1. test_two_cards_claim_different_cards:
+   - Enqueue 3 cards
+   - 2 workers gọi pick_and_claim_card() đồng thời
+   - Mỗi worker nhận card khác nhau
+   - Không card nào bị claim 2 lần
+
+2. test_two_cards_run_in_parallel_worktrees:
+   - 2 cards claimed
+   - Mỗi card tạo worktree riêng (slug khác nhau)
+   - Cả 2 chạy đồng thời không conflict
+   - Registry reflect cả 2 đang running
+
+3. test_capacity_gate_blocks_third_card:
+   - max_parallel_runs=2
+   - 2 cards đang running
+   - run_next() cho card thứ 3 → blocked (409)
+   - Card 1 finish → run_next() cho card 3 → OK
+
+4. test_merge_one_does_not_corrupt_other:
+   - Card A merge → _pull_base_branch()
+   - Card B vẫn running → không bị ảnh hưởng
+   - Registry vẫn correct
+
+5. test_crash_cleanup_does_not_affect_sibling:
+   - Card A crash → worktree cleanup
+   - Card B vẫn running bình thường
+
+## Files cần sửa
+- NEW: tests/test_autopilot/test_parallel_execution.py
+
+## Mock strategy
+- Mock _run_agent_prompt, _run_gh, git commands
+- Dùng real file system (tmp_path) cho registry + journal + worktree dirs
+- Dùng threading cho concurrent execution
+
+Spawn agents: tdd-guide (viết toàn bộ test scenarios) → code-reviewer.
+Depends on: P9.1, P9.2, P9.3, P9.7, P9.8, P9.9.
+" --labels "parallel,testing"
+```
+
+---
+
 ## Cross-cutting
 
 ```bash
@@ -189,4 +599,4 @@ oh autopilot add idea "[X2] Frontend: Error handling + loading states nhất qu�
 
 ---
 
-**Tổng cộng**: 58 tasks (P0=3, P1=8, P2=6, P3=6, P4=7, P5=10, P6=8, P7=8, Cross=2)
+**Tổng cộng**: 76 tasks (P0=3, P1=8, P2=6, P3=6, P4=7, P5=10, P6=8, P7=8, P8=7, P9=11, Cross=2)
