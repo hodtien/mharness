@@ -142,7 +142,11 @@ def test_patch_modes_vim_enabled_false(tmp_path) -> None:
     """PATCH vim_enabled=False disables vim keybindings and persists."""
     client = _client(tmp_path)
 
-    client.patch("/api/modes", json={"vim_enabled": True}, headers=AUTH)
+    enable = client.patch("/api/modes", json={"vim_enabled": True}, headers=AUTH)
+    assert enable.status_code == 200
+    assert enable.json()["vim_enabled"] is True
+    assert load_settings().vim_mode is True
+
     response = client.patch(
         "/api/modes",
         json={"vim_enabled": False},
@@ -151,5 +155,5 @@ def test_patch_modes_vim_enabled_false(tmp_path) -> None:
     assert response.status_code == 200
     assert response.json()["vim_enabled"] is False
 
-    settings = load_settings()
-    assert settings.vim_mode is False
+    assert load_settings().vim_mode is False
+    assert client.get("/api/modes", headers=AUTH).json()["vim_enabled"] is False
