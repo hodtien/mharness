@@ -15,11 +15,13 @@ RepoTaskStatus = Literal[
     "verifying",
     "pr_open",
     "waiting_ci",
+    "code_review",
     "repairing",
     "completed",
     "merged",
     "failed",
     "rejected",
+    "killed",
     "superseded",
 ]
 RepoTaskSource = Literal[
