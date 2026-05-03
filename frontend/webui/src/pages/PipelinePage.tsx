@@ -60,6 +60,9 @@ function NewIdeaModal({ onClose, onSuccess }: NewIdeaModalProps) {
 
   useEffect(() => {
     titleRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
