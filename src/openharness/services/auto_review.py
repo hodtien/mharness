@@ -158,8 +158,8 @@ async def maybe_spawn_review(
         from openharness.swarm.types import TeammateSpawnConfig
 
         agent_def = get_agent_definition("code-reviewer")
-        model = None
-        if agent_def is not None:
+        model = settings.auto_review.model
+        if model is None and agent_def is not None:
             model = getattr(agent_def, "model", None)
 
         registry = get_backend_registry()

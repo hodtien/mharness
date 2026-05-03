@@ -14,7 +14,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -98,6 +98,8 @@ class AutoReviewSettings(BaseModel):
     """Task lifecycle auto-review settings."""
 
     enabled: bool = False
+    scope: Literal["all", "autopilot_only", "manual_only"] = "autopilot_only"
+    model: str | None = None
     max_wait_seconds: int = 300
 
 
