@@ -94,6 +94,13 @@ class DockerSandboxSettings(BaseModel):
     extra_env: dict[str, str] = Field(default_factory=dict)
 
 
+class AutoReviewSettings(BaseModel):
+    """Task lifecycle auto-review settings."""
+
+    enabled: bool = False
+    max_wait_seconds: int = 300
+
+
 class SandboxSettings(BaseModel):
     """Sandbox-runtime integration settings."""
 
@@ -471,6 +478,8 @@ class Settings(BaseModel):
     enabled_plugins: dict[str, bool] = Field(default_factory=dict)
     allow_project_plugins: bool = False
     mcp_servers: dict[str, McpServerConfig] = Field(default_factory=dict)
+
+    auto_review: AutoReviewSettings = Field(default_factory=AutoReviewSettings)
 
     # UI
     theme: str = "default"
