@@ -149,3 +149,46 @@ def test_retry_running_task_returns_400(tmp_path) -> None:
     response = client.post("/api/tasks/task-001/retry", headers=AUTH)
 
     assert response.status_code == 400
+
+
+def test_get_task_requires_auth(tmp_path) -> None:
+    """GET /api/tasks/{id} is protected by the WebUI token dependency."""
+    _add_task(tmp_path)
+    client = _client(tmp_path)
+
+    response = client.get("/api/tasks/task-001")
+
+    assert response.status_code == 401
+
+
+def test_get_task_includes_optional_fields_when_present(tmp_path) -> None:
+    """GET /api/tasks/{id} serializes optional TaskRecord fields without dropping them."""
+    record = _add_task(tmp_path, status="completed")
+    record.prompt = "Summarize the repo"
+    record.ended_at = 130.0
+    record.return_code = 0
+    client = _client(tmp_path)
+
+    response = client.get("/api/tasks/task-001", headers=AUTH)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["prompt"] == "Summarize the repo"
+    assert body["ended_at"] == 130.0
+    assert body["return_code"] == 0
+
+
+def test_get_task_output_returns_log_tail(tmp_path) -> None:
+    """GET /api/tasks/{id}/output returns the requested tail as lines and joined output."""
+    record = _add_task(tmp_path)
+    record.output_file.write_text("one\ntwo\nthree\n", encoding="utf-8")
+    client = _client(tmp_path)
+
+    response = client.get("/api/tasks/task-001/output?tail=2", headers=AUTH)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["task_id"] == "task-001"
+    assert body["tail"] == 2
+    assert body["lines"] == ["two", "three"]
+    assert body["output"] == "two\nthree"
