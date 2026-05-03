@@ -1868,6 +1868,65 @@ def test_card_model_overrides_policy(tmp_path: Path) -> None:
     assert reloaded.model == "claude-haiku-4-5"
 
 
+def test_card_model_none_falls_back_to_policy(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    # Override policy with a custom default_model
+    from openharness.config.paths import get_project_autopilot_policy_path
+    policy_path = get_project_autopilot_policy_path(repo)
+    policy_path.parent.mkdir(parents=True, exist_ok=True)
+    policy_path.write_text(
+        'execution:\n'
+        '  default_model: "oc-default-model"\n'
+        '  max_turns: 12\n'
+        '  permission_mode: full_auto\n'
+        '  host_mode: self_hosted\n'
+        '  use_worktree: false\n'
+        '  base_branch: main\n'
+        '  max_attempts: 3\n',
+        encoding="utf-8",
+    )
+
+    # Enqueue card without model
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Use policy default",
+        body="fallback test",
+    )
+    assert card.model is None
+
+    # Verify that when run_card is called, it falls back to policy default
+    # We mock run_agent_prompt to capture the model argument
+    used_models = []
+
+    async def capture_model_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
+        used_models.append(model)
+        return "done"
+
+    store._run_agent_prompt = MethodType(capture_model_prompt, store)
+
+    def fake_verification(self, policies, *, cwd=None):
+        return [
+            RepoVerificationStep(
+                command="uv run pytest -q",
+                returncode=0,
+                status="success",
+                stdout="1 passed",
+            )
+        ]
+
+    store._run_verification_steps = MethodType(fake_verification, store)
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    assert result.status == "completed"
+    # The effective model should have fallen back to policy default
+    assert used_models[0] == "oc-default-model"
+
+
 def test_update_card_model(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

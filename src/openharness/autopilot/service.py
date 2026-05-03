@@ -460,6 +460,7 @@ class RepoAutopilotStore:
         existing = next((card for card in registry.cards if card.fingerprint == fingerprint), None)
         merged_labels = self._normalize_labels(labels)
         merged_metadata = dict(metadata or {})
+        normalized_model = _safe_text(model) or None
         if existing is not None:
             if normalized_title:
                 existing.title = normalized_title
@@ -538,6 +539,22 @@ class RepoAutopilotStore:
         if note:
             summary = f"{summary} ({_shorten(note, limit=80)})"
         self.append_journal(kind=f"status_{status}", summary=summary, task_id=card.id)
+        self.rebuild_active_context()
+        return card
+
+    def update_card_model(self, card_id: str, model: str | None) -> RepoTaskCard:
+        registry = self._load_registry()
+        card = next((item for item in registry.cards if item.id == card_id), None)
+        if card is None:
+            raise ValueError(f"No autopilot card found with ID: {card_id}")
+        card.model = _safe_text(model) or None
+        card.updated_at = time.time()
+        self._save_registry(registry)
+        self.append_journal(
+            kind="card_model_updated",
+            summary=f"Updated model for card {card.id}: {card.model or 'none'}",
+            task_id=card.id,
+        )
         self.rebuild_active_context()
         return card
 
