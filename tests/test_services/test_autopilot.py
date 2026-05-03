@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import subprocess
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import MethodType, SimpleNamespace
@@ -1514,3 +1516,240 @@ def test_install_editable_runs_uv_pip_install(tmp_path: Path, monkeypatch) -> No
     store._install_editable()
 
     assert calls == [(["uv", "pip", "install", "-e", "."], repo, 120, True)]
+
+
+# ----------------------------------------------------------------------
+# Main-checkout lock tests (P9.3)
+# ----------------------------------------------------------------------
+
+
+def _run_card_with_locked_pull(
+    store: RepoAutopilotStore,
+    monkeypatch,
+    *,
+    fake_lock_cls,
+    pull_impl,
+    install_impl,
+):
+    """Helper: drive run_card down the existing-PR auto-merge path that
+    contains the main-checkout lock-protected _pull_base_branch and
+    _install_editable call sites.
+    """
+    card, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #500: Existing autopilot PR",
+        body="open",
+        source_ref="pr:500",
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number, policies):
+        return _green_pr_snapshot(pr_number)
+
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=0,
+            status="success",
+            stdout="Severity: NONE",
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci",
+        fake_wait_for_pr_ci,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pull_base_branch",
+        pull_impl,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._install_editable",
+        install_impl,
+    )
+    monkeypatch.setattr("openharness.autopilot.service.RepoFileLock", fake_lock_cls)
+
+    import asyncio
+
+    return asyncio.run(store.run_card(card.id))
+
+
+def test_pull_base_branch_acquires_lock(tmp_path: Path, monkeypatch) -> None:
+    """The post-merge _pull_base_branch call site must acquire the main-checkout lock
+    before pulling, and release it after."""
+    from openharness.autopilot.locking import RepoFileLock as _OriginalLock
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    # Only track events for the main-checkout lock; delegate others to the real impl.
+    main_events: list[tuple[str, object]] = []
+
+    class RecordingLock:
+        def __init__(self, lock_path, *, timeout=10.0):
+            self._path = Path(lock_path)
+            self._is_main = self._path.name == "main-checkout.lock"
+            if self._is_main:
+                main_events.append(("init", (self._path, timeout)))
+            else:
+                self._real = _OriginalLock(lock_path, timeout=timeout)
+
+        def __enter__(self):
+            if self._is_main:
+                main_events.append(("enter", None))
+                return self
+            return self._real.__enter__()
+
+        def __exit__(self, exc_type, exc, tb):
+            if self._is_main:
+                main_events.append(("exit", exc_type))
+                return False
+            return self._real.__exit__(exc_type, exc, tb)
+
+    action_events: list[str] = []
+
+    def fake_pull(self, *, base_branch):
+        action_events.append("pull")
+
+    def fake_install(self):
+        action_events.append("install")
+
+    result = _run_card_with_locked_pull(
+        store,
+        monkeypatch,
+        fake_lock_cls=RecordingLock,
+        pull_impl=fake_pull,
+        install_impl=fake_install,
+    )
+
+    assert result.status == "merged"
+
+    init_events = [e for e in main_events if e[0] == "init"]
+    assert init_events, "RepoFileLock was never instantiated for main-checkout.lock"
+    first_lock_path, first_timeout = init_events[0][1]
+    assert first_lock_path.name == "main-checkout.lock"
+    assert first_timeout == 60.0
+
+    # We need to verify ordering: pull happens between enter/exit and install between enter/exit.
+    # Since we can't easily interleave two event lists, rely on the invariant:
+    # both pull and install must have happened, and there must be 2 enter/exit pairs.
+    enters = [e for e in main_events if e[0] == "enter"]
+    exits = [e for e in main_events if e[0] == "exit"]
+    assert len(enters) == 2, f"Expected 2 lock enters (one for pull, one for install), got {len(enters)}"
+    assert len(exits) == 2, f"Expected 2 lock exits, got {len(exits)}"
+    assert action_events == ["pull", "install"], f"Expected pull then install, got {action_events}"
+
+
+def test_pull_base_branch_releases_lock_on_error(tmp_path: Path, monkeypatch) -> None:
+    """If _pull_base_branch raises, the main-checkout lock must still be released."""
+    from openharness.autopilot.locking import RepoFileLock as _OriginalLock
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    enter_count = 0
+    exit_count = 0
+    saw_exception_in_exit = False
+
+    class CheckingLock:
+        def __init__(self, lock_path, *, timeout=10.0):
+            self._path = Path(lock_path)
+            self._is_main = self._path.name == "main-checkout.lock"
+            if not self._is_main:
+                self._real = _OriginalLock(lock_path, timeout=timeout)
+
+        def __enter__(self):
+            nonlocal enter_count
+            if self._is_main:
+                enter_count += 1
+                return self
+            return self._real.__enter__()
+
+        def __exit__(self, exc_type, exc, tb):
+            nonlocal exit_count, saw_exception_in_exit
+            if self._is_main:
+                exit_count += 1
+                if exc_type is not None:
+                    saw_exception_in_exit = True
+                return False  # propagate exception
+            return self._real.__exit__(exc_type, exc, tb)
+
+    def fail_pull(self, *, base_branch):
+        raise RuntimeError("not fast-forward")
+
+    def fake_install(self):
+        # Should not be called because pull failed.
+        raise AssertionError("install_editable should not run when pull fails")
+
+    result = _run_card_with_locked_pull(
+        store,
+        monkeypatch,
+        fake_lock_cls=CheckingLock,
+        pull_impl=fail_pull,
+        install_impl=fake_install,
+    )
+
+    journal = (repo / ".openharness" / "autopilot" / "repo_journal.jsonl").read_text(encoding="utf-8")
+
+    assert result.status == "merged"
+    assert "post-merge pull failed" in journal
+    # Exactly one enter/exit pair around the failing pull (install was skipped).
+    assert enter_count == 1
+    assert exit_count == 1
+    assert saw_exception_in_exit, "Lock __exit__ must observe the propagating exception"
+
+
+def test_concurrent_pull_serialized(tmp_path: Path) -> None:
+    """Two threads acquiring the production main-checkout lock must be serialized."""
+    from openharness.autopilot.locking import RepoFileLock
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    active = threading.Lock()
+    overlap_detected = False
+    completion_order: list[int] = []
+
+    def worker(worker_id: int) -> None:
+        nonlocal overlap_detected
+        with RepoFileLock(store._main_checkout_lock_path, timeout=60.0):
+            if not active.acquire(blocking=False):
+                overlap_detected = True
+                return
+            try:
+                # Hold the lock long enough for the other thread to attempt acquire.
+                time.sleep(0.1)
+                completion_order.append(worker_id)
+            finally:
+                active.release()
+
+    t1 = threading.Thread(target=worker, args=(1,))
+    t2 = threading.Thread(target=worker, args=(2,))
+    started = time.monotonic()
+    t1.start()
+    t2.start()
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+    elapsed = time.monotonic() - started
+
+    assert not overlap_detected, "Two threads entered the critical section concurrently"
+    assert sorted(completion_order) == [1, 2], f"Both workers must complete, got {completion_order}"
+    # Two non-overlapping 0.1s holds should take at least ~0.18s in aggregate.
+    assert elapsed >= 0.18, f"Lock did not actually serialize work (elapsed={elapsed:.3f}s)"

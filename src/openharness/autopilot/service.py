@@ -296,6 +296,7 @@ class RepoAutopilotStore:
         # autopilot directory mkdir already provisions them.
         self._registry_lock_path = self._registry_path.parent / "registry.lock"
         self._journal_lock_path = self._journal_path.parent / "journal.lock"
+        self._main_checkout_lock_path = self._registry_path.parent / "main-checkout.lock"
         self._repo_full_name: str | None = None
         self._ensure_layout()
 
@@ -1255,7 +1256,8 @@ class RepoAutopilotStore:
                 if use_worktree:
                     await worktree_manager.remove_worktree(self._worktree_slug(card))
                 try:
-                    self._pull_base_branch(base_branch=base_branch)
+                    with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
+                        self._pull_base_branch(base_branch=base_branch)
                 except Exception as exc:
                     self.append_journal(
                         kind="merge_warning",
@@ -1265,7 +1267,8 @@ class RepoAutopilotStore:
                     )
                 else:
                     try:
-                        self._install_editable()
+                        with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
+                            self._install_editable()
                     except Exception as exc:
                         self.append_journal(
                             kind="merge_warning",
@@ -2005,7 +2008,8 @@ class RepoAutopilotStore:
             )
             self._comment_on_pr(pr_number, self._comment_merged(pr_number))
             try:
-                self._pull_base_branch(base_branch=self._base_branch(policies))
+                with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
+                    self._pull_base_branch(base_branch=self._base_branch(policies))
             except Exception as exc:
                 self.append_journal(
                     kind="merge_warning",
@@ -2015,7 +2019,8 @@ class RepoAutopilotStore:
                 )
             else:
                 try:
-                    self._install_editable()
+                    with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
+                        self._install_editable()
                 except Exception as exc:
                     self.append_journal(
                         kind="merge_warning",
