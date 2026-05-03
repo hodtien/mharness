@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type AgentProfile, type AgentPatch, type ModelsResponse } from "../api/client";
+import { api, type AgentProfile, type AgentDetail, type AgentPatch, type ModelsResponse } from "../api/client";
 
 const EFFORT_OPTIONS = ["low", "medium", "high"] as const;
 const PERMISSION_OPTIONS = ["default", "plan", "full_auto"] as const;
@@ -26,6 +26,13 @@ export default function AgentsSettingsPage() {
 
   // Draft state when editing an agent
   const [draft, setDraft] = useState<AgentPatch>({});
+
+  // Detail modal state
+  const [detailAgent, setDetailAgent] = useState<string | null>(null);
+  const [detailData, setDetailData] = useState<AgentDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [systemPromptExpanded, setSystemPromptExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +91,22 @@ export default function AgentsSettingsPage() {
     }
   };
 
+  const openDetail = async (agentName: string) => {
+    setDetailAgent(agentName);
+    setDetailData(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    setSystemPromptExpanded(false);
+    try {
+      const data = await api.getAgent(agentName);
+      setDetailData(data);
+    } catch (err) {
+      setDetailError(String(err));
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const pushToast = (kind: "success" | "error", message: string) => {
     const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { id, kind, message }]);
@@ -138,13 +161,22 @@ export default function AgentsSettingsPage() {
                       </p>
                     </div>
                     {!isEditing && (
-                      <button
-                        type="button"
-                        onClick={() => startEdit(agent)}
-                        className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)]"
-                      >
-                        Edit
-                      </button>
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openDetail(agent.name)}
+                          className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)]"
+                        >
+                          View details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => startEdit(agent)}
+                          className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)]"
+                        >
+                          Edit
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -255,6 +287,136 @@ export default function AgentsSettingsPage() {
           </div>
         ))}
       </div>
+
+      {/* Detail modal */}
+      {detailAgent && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setDetailAgent(null); }}
+        >
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--panel)] shadow-2xl">
+            {/* Header */}
+            <div className="sticky top-0 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-6 py-4">
+              <h2 className="text-lg font-semibold text-[var(--text)]">
+                {detailAgent}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setDetailAgent(null)}
+                className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-sm text-[var(--text-dim)] hover:text-[var(--text)]"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-5 px-6 py-5">
+              {detailLoading ? (
+                <DetailSkeleton />
+              ) : detailError ? (
+                <div className="text-sm text-red-300">{detailError}</div>
+              ) : detailData ? (
+                <>
+                  {/* Description */}
+                  <div>
+                    <Label>Description</Label>
+                    <p className="text-sm text-[var(--text)]">{detailData.description}</p>
+                  </div>
+
+                  {/* Model / Effort / Permission */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label>Model</Label>
+                      <p className="text-sm text-[var(--text)]">{detailData.model ?? "—"}</p>
+                    </div>
+                    <div>
+                      <Label>Effort</Label>
+                      <p className="text-sm capitalize text-[var(--text)]">{detailData.effort ?? "—"}</p>
+                    </div>
+                    <div>
+                      <Label>Permission Mode</Label>
+                      <p className="text-sm text-[var(--text)]">{detailData.permission_mode ?? "—"}</p>
+                    </div>
+                  </div>
+
+                  {/* Source file */}
+                  {detailData.source_file && (
+                    <div>
+                      <Label>Source File</Label>
+                      <p className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs font-mono text-[var(--text-dim)] break-all">
+                        {detailData.source_file}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Tools */}
+                  <div>
+                    <Label>Tools</Label>
+                    {detailData.tools == null ? (
+                      <p className="text-sm text-[var(--text-dim)]">All tools</p>
+                    ) : detailData.tools.length === 0 ? (
+                      <p className="text-sm text-[var(--text-dim)]">No tools</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {detailData.tools.map((tool) => (
+                          <span
+                            key={tool}
+                            className="rounded-full border border-[var(--border)] bg-[var(--panel-2)] px-2.5 py-0.5 text-xs text-[var(--text-dim)]"
+                          >
+                            {tool}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* System Prompt */}
+                  {detailData.has_system_prompt && (
+                    <div>
+                      <Label>System Prompt</Label>
+                      {(() => {
+                        const sp = detailData.system_prompt ?? "";
+                        const truncated = sp.length > 500 ? sp.slice(0, 500) : sp;
+                        const isLong = sp.length > 500;
+                        const shown = isLong && !systemPromptExpanded ? truncated : sp;
+                        return (
+                          <>
+                            <pre className="whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs text-[var(--text-dim)]">
+                              {shown}
+                            </pre>
+                            {isLong && (
+                              <button
+                                type="button"
+                                onClick={() => setSystemPromptExpanded((v) => !v)}
+                                className="mt-1.5 text-xs text-cyan-400 hover:text-cyan-300"
+                              >
+                                {systemPromptExpanded ? "Show less" : `Show more (${sp.length} chars)`}
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Label({ children }: { children: React.ReactNode }) {
+  return <div className="mb-1 text-xs font-medium text-[var(--text-dim)]">{children}</div>;
+}
+
+function DetailSkeleton() {
+  return (
+    <div className="space-y-3">
+      {[200, 150, 180, 120].map((w, i) => (
+        <div key={i} className="h-4 w-full animate-pulse rounded bg-[var(--panel-2)]" style={{ width: `${w}px`, maxWidth: '100%' }} />
+      ))}
     </div>
   );
 }

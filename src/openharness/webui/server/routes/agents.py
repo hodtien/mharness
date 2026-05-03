@@ -172,6 +172,61 @@ def _model_exists(model_id: str) -> bool:
     return False
 
 
+class _AgentDetailResponse(BaseModel):
+    name: str
+    description: str
+    system_prompt: str | None
+    tools: list[str] | None  # None means all tools
+    model: str | None
+    effort: str | None
+    permission_mode: str | None
+    source_file: str | None
+    has_system_prompt: bool
+
+
+def _tools_list(agent: AgentDefinition) -> list[str] | None:
+    """Return the tools list, or None if the agent allows all tools."""
+    tools = agent.tools
+    if tools is None:
+        return None
+    if len(tools) == 1 and tools[0] == "*":
+        return None
+    return list(tools)
+
+
+@router.get("/{name}", response_model=_AgentDetailResponse)
+def get_agent(name: str) -> _AgentDetailResponse:
+    """Return full details for a single agent definition, including the
+    complete ``system_prompt`` and the ``tools`` list.
+
+    Returns **404** if no agent with the given name is found.
+    """
+    try:
+        agents = get_all_agent_definitions()
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("failed to load agent definitions: %s", exc)
+        agents = []
+
+    target = next((a for a in agents if a.name == name), None)
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent {name!r} not found",
+        )
+
+    return _AgentDetailResponse(
+        name=target.name,
+        description=target.description,
+        system_prompt=target.system_prompt,
+        tools=_tools_list(target),
+        model=target.model,
+        effort=target.effort,
+        permission_mode=target.permission_mode,
+        source_file=_source_file(target),
+        has_system_prompt=bool(target.system_prompt),
+    )
+
+
 @router.patch("/{name}")
 def update_agent(name: str, body: _UpdateAgentBody) -> dict[str, object | None]:
     """Update selected fields of a user agent definition file.

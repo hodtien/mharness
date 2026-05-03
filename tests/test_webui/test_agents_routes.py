@@ -134,6 +134,106 @@ def _write_user_agent(config_dir, name: str, body: str = "Hello body.\n") -> "ob
     return path
 
 
+# ---------------------------------------------------------------------------
+# GET /api/agents/{name}
+# ---------------------------------------------------------------------------
+
+
+def test_get_agent_requires_auth(tmp_path) -> None:
+    client = _client(tmp_path)
+    assert client.get("/api/agents/general-purpose").status_code == 401
+
+
+def test_get_agent_returns_404_for_unknown_name(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.get("/api/agents/does-not-exist", headers=_AUTH)
+    assert response.status_code == 404
+
+
+def test_get_agent_returns_builtin_details(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.get("/api/agents/general-purpose", headers=_AUTH)
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    expected_keys = {
+        "name",
+        "description",
+        "system_prompt",
+        "tools",
+        "model",
+        "effort",
+        "permission_mode",
+        "source_file",
+        "has_system_prompt",
+    }
+    assert set(payload.keys()) == expected_keys
+
+    assert payload["name"] == "general-purpose"
+    assert payload["has_system_prompt"] is True
+    # system_prompt is the full content, not None or truncated
+    assert payload["system_prompt"] is not None
+    assert len(payload["system_prompt"]) > 0
+    # Built-ins have no on-disk source file
+    assert payload["source_file"] is None
+
+
+def test_get_agent_returns_user_agent_details(tmp_path, monkeypatch) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    path = _write_user_agent(config_dir, "my-agent", body="You are a test agent.\n")
+
+    client = _client(tmp_path)
+    response = client.get("/api/agents/my-agent", headers=_AUTH)
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["name"] == "my-agent"
+    assert payload["description"] == "A user-defined helper for unit testing."
+    assert payload["model"] == "haiku"
+    assert payload["effort"] == "low"
+    assert payload["permission_mode"] == "acceptEdits"
+    assert payload["source_file"] == str(path)
+    assert payload["has_system_prompt"] is True
+    # The loader strips trailing whitespace from the body.
+    assert payload["system_prompt"] in ("You are a test agent.", "You are a test agent.\n")
+    # tools list is returned as an array
+    assert payload["tools"] == ["Read", "Glob", "Grep"]
+
+
+def test_get_agent_tools_is_none_for_all_tools_agent(tmp_path, monkeypatch) -> None:
+    """An agent with tools: ['*'] should return tools: null (None means all)."""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+
+    agents_dir = config_dir / "agents"
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    (agents_dir / "all-tools.md").write_text(
+        "---\n"
+        "name: all-tools\n"
+        "description: Agent with all tools.\n"
+        "tools: ['*']\n"
+        "---\n"
+        "All tools agent.\n",
+        encoding="utf-8",
+    )
+
+    client = _client(tmp_path)
+    response = client.get("/api/agents/all-tools", headers=_AUTH)
+
+    assert response.status_code == 200
+    assert response.json()["tools"] is None
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/agents/{name}
+# ---------------------------------------------------------------------------
+
+
 def test_patch_agent_requires_auth(tmp_path) -> None:
     client = _client(tmp_path)
     response = client.patch("/api/agents/whatever", json={"effort": "high"})
