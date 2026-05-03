@@ -28,6 +28,11 @@ export type RepoTaskSource =
   | "ohmo_request"
   | "claude_code_candidate";
 
+export interface PipelineCardMetadata {
+  last_note?: string | null;
+  linked_pr_url?: string | null;
+}
+
 export interface PipelineCard {
   id: string;
   title: string;
@@ -37,6 +42,7 @@ export interface PipelineCard {
   labels: string[];
   created_at: number;
   updated_at: number;
+  metadata?: PipelineCardMetadata;
 }
 
 export interface JournalEntry {
@@ -683,6 +689,91 @@ function ActivityTab({ cardId, isActive }: ActivityTabProps) {
   );
 }
 
+// ─── Blocker Banner ───────────────────────────────────────────────────────────
+
+const BLOCKER_STATUSES: RepoTaskStatus[] = ["failed", "repairing", "waiting_ci"];
+
+interface BlockerBannerProps {
+  card: PipelineCard;
+  onAction: (cardId: string, action: "accept" | "reject" | "retry" | "reset") => void;
+  loadingAction: boolean;
+}
+
+export function BlockerBanner({ card, onAction, loadingAction }: BlockerBannerProps) {
+  if (!BLOCKER_STATUSES.includes(card.status)) return null;
+
+  const isFailed = card.status === "failed";
+  const icon = isFailed ? "⚠" : "⏳";
+  const tone = isFailed
+    ? "border-red-500/40 bg-red-500/10 text-red-200"
+    : "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  const labelMap: Record<string, string> = {
+    failed: "Run failed",
+    repairing: "Repairing",
+    waiting_ci: "Waiting on CI",
+  };
+  const note = card.metadata?.last_note ?? null;
+  const prUrl = card.metadata?.linked_pr_url ?? null;
+
+  return (
+    <div
+      role="alert"
+      aria-label="Card blocker"
+      data-testid="blocker-banner"
+      className={`mx-4 mt-3 rounded-lg border p-3 text-sm ${tone}`}
+    >
+      <div className="flex items-start gap-2">
+        <span className="text-lg leading-none" aria-hidden="true">{icon}</span>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold">{labelMap[card.status]}</div>
+          {note && (
+            <div className="mt-0.5 text-[12px] leading-snug opacity-90 break-words">{note}</div>
+          )}
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {prUrl && (
+          <a
+            href={prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border border-current/40 bg-black/10 px-2.5 py-1 text-xs font-medium hover:bg-black/20"
+          >
+            View PR
+          </a>
+        )}
+        <button
+          type="button"
+          onClick={() => onAction(card.id, "reset")}
+          disabled={loadingAction}
+          className="rounded-md border border-current/40 bg-black/10 px-2.5 py-1 text-xs font-medium hover:bg-black/20 disabled:opacity-40"
+        >
+          Retry
+        </button>
+        {prUrl ? (
+          <a
+            href={prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border border-current/40 bg-black/10 px-2.5 py-1 text-xs font-medium hover:bg-black/20"
+          >
+            Merge manually
+          </a>
+        ) : (
+          <button
+            type="button"
+            disabled
+            title="No linked PR"
+            className="rounded-md border border-current/40 bg-black/10 px-2.5 py-1 text-xs font-medium opacity-40"
+          >
+            Merge manually
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Drawer ───────────────────────────────────────────────────────────────────
 
 const RESETTABLE_STATUSES: RepoTaskStatus[] = ["failed", "rejected", "killed"];
@@ -752,6 +843,9 @@ function Drawer({ card, onClose, onAction, loadingAction }: DrawerProps) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
+          {/* Blocker alert – shown for failed/repairing/waiting_ci */}
+          <BlockerBanner card={card} onAction={onAction} loadingAction={loadingAction} />
+
           {/* Tab bar */}
           <div className="flex border-b border-[var(--border)]">
             <button

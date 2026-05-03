@@ -56,7 +56,15 @@ def _serialize_card(card: dict) -> dict:
         "labels": card["labels"],
         "created_at": card["created_at"],
         "updated_at": card["updated_at"],
+        "metadata": {
+            "last_note": _safe_text(card.get("metadata", {}).get("last_note")),
+            "linked_pr_url": _safe_text(card.get("metadata", {}).get("linked_pr_url")),
+        },
     }
+
+
+def _safe_text(value: str | None) -> str | None:
+    return value if value else None
 
 
 def _serialize_journal_entry(entry: RepoJournalEntry) -> dict:

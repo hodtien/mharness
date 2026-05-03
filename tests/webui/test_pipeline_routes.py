@@ -52,6 +52,23 @@ def test_list_cards_returns_enqueued_cards(tmp_path) -> None:
     assert titles == {"First card", "Second card"}
 
 
+def test_list_cards_includes_metadata_fields(tmp_path) -> None:
+    """Cards must expose ``metadata.last_note`` / ``linked_pr_url`` for the blocker banner."""
+    client = _client(tmp_path)
+
+    r = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Metadata card"})
+    assert r.status_code == 201
+
+    response = client.get("/api/pipeline/cards", headers=AUTH)
+    assert response.status_code == 200
+    cards = response.json()["cards"]
+    assert len(cards) == 1
+    card = cards[0]
+    assert "metadata" in card
+    assert "last_note" in card["metadata"]
+    assert "linked_pr_url" in card["metadata"]
+
+
 # ---------------------------------------------------------------------------
 # POST /api/pipeline/cards — enqueue
 # ---------------------------------------------------------------------------

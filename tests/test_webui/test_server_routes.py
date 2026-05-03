@@ -775,13 +775,16 @@ def test_pipeline_cards_returns_serialized_cards(tmp_path) -> None:
     assert card1["labels"] == ["bug", "urgent"]
     assert card1["created_at"] == 900.0
     assert card1["updated_at"] == 950.0
-    # Extra fields (body, fingerprint, source_ref, metadata, score_reasons)
+    # Extra fields (body, fingerprint, source_ref, score_reasons)
     # must NOT appear in the response.
     assert "body" not in card1
     assert "fingerprint" not in card1
     assert "source_ref" not in card1
-    assert "metadata" not in card1
     assert "score_reasons" not in card1
+    # metadata IS included for the blocker banner (last_note + linked_pr_url)
+    assert "metadata" in card1
+    assert "last_note" in card1["metadata"]
+    assert "linked_pr_url" in card1["metadata"]
 
 
 def test_pipeline_cards_post_requires_auth(tmp_path) -> None:
