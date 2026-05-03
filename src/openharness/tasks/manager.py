@@ -381,6 +381,9 @@ def get_task_manager() -> BackgroundTaskManager:
             _DEFAULT_MANAGER.close()
         _DEFAULT_MANAGER = BackgroundTaskManager()
         _DEFAULT_MANAGER_KEY = current_key
+        from openharness.services.auto_review import hook_auto_review
+
+        hook_auto_review(_DEFAULT_MANAGER)
     return _DEFAULT_MANAGER
 
 
