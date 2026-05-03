@@ -22,7 +22,6 @@ import re
 import subprocess
 from pathlib import Path
 
-from openharness.autopilot.types import RepoTaskCard
 from openharness.config.paths import get_project_autopilot_runs_dir
 from openharness.config.settings import Settings, load_settings
 from openharness.tasks.manager import BackgroundTaskManager, get_task_manager
