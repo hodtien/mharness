@@ -157,3 +157,36 @@ def test_patch_modes_vim_enabled_false(tmp_path) -> None:
 
     assert load_settings().vim_mode is False
     assert client.get("/api/modes", headers=AUTH).json()["vim_enabled"] is False
+
+
+def test_patch_modes_vim_enabled_round_trip_true_then_false(tmp_path) -> None:
+    """PATCH vim_enabled supports both boolean values and each value is observable via GET."""
+    client = _client(tmp_path)
+
+    enable = client.patch("/api/modes", json={"vim_enabled": True}, headers=AUTH)
+    assert enable.status_code == 200
+    assert enable.json()["vim_enabled"] is True
+    assert client.get("/api/modes", headers=AUTH).json()["vim_enabled"] is True
+
+    disable = client.patch("/api/modes", json={"vim_enabled": False}, headers=AUTH)
+    assert disable.status_code == 200
+    assert disable.json()["vim_enabled"] is False
+    assert client.get("/api/modes", headers=AUTH).json()["vim_enabled"] is False
+
+
+def test_patch_modes_empty_body_returns_400(tmp_path) -> None:
+    """PATCH /api/modes rejects empty update bodies."""
+    client = _client(tmp_path)
+
+    response = client.patch("/api/modes", json={}, headers=AUTH)
+
+    assert response.status_code == 400
+
+
+def test_patch_modes_unknown_field_returns_422(tmp_path) -> None:
+    """PATCH /api/modes forbids unknown fields to keep the API contract tight."""
+    client = _client(tmp_path)
+
+    response = client.patch("/api/modes", json={"not_a_mode": True}, headers=AUTH)
+
+    assert response.status_code == 422

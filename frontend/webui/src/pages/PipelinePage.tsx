@@ -110,10 +110,11 @@ function NewIdeaModal({ onClose, onSuccess }: NewIdeaModalProps) {
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--text-dim)]">
+            <label htmlFor="idea-title" className="mb-1 block text-xs font-medium text-[var(--text-dim)]">
               Title <span className="text-red-400">*</span>
             </label>
             <input
+              id="idea-title"
               ref={titleRef}
               type="text"
               value={title}
@@ -124,10 +125,11 @@ function NewIdeaModal({ onClose, onSuccess }: NewIdeaModalProps) {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--text-dim)]">
+            <label htmlFor="idea-body" className="mb-1 block text-xs font-medium text-[var(--text-dim)]">
               Body
             </label>
             <textarea
+              id="idea-body"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="Optional details…"
@@ -136,10 +138,11 @@ function NewIdeaModal({ onClose, onSuccess }: NewIdeaModalProps) {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--text-dim)]">
+            <label htmlFor="idea-labels" className="mb-1 block text-xs font-medium text-[var(--text-dim)]">
               Labels <span className="text-[var(--text-dim)]/60">(comma-separated)</span>
             </label>
             <input
+              id="idea-labels"
               type="text"
               value={labelsRaw}
               onChange={(e) => setLabelsRaw(e.target.value)}
