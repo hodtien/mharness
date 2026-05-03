@@ -32,14 +32,14 @@ def resolve_shell_command(
 
     bash = shutil.which("bash")
     if bash:
-        argv = [bash, "-lc", command]
+        argv = [bash, "--noprofile", "--norc", "-c", command]
         if prefer_pty:
             wrapped = _wrap_command_with_script(argv, platform_name=resolved_platform)
             if wrapped is not None:
                 return wrapped
         return argv
     shell = shutil.which("sh") or os.environ.get("SHELL") or "/bin/sh"
-    argv = [shell, "-lc", command]
+    argv = [shell, "--noprofile", "--norc", "-c", command]
     if prefer_pty:
         wrapped = _wrap_command_with_script(argv, platform_name=resolved_platform)
         if wrapped is not None:
@@ -117,6 +117,8 @@ def _wrap_command_with_script(
         return None
     if len(argv) >= 3 and argv[1] == "-lc":
         return [script, "-qefc", argv[2], "/dev/null"]
+    if len(argv) >= 5 and argv[1:4] == ["--noprofile", "--norc", "-c"]:
+        return [script, "-qefc", argv[4], "/dev/null"]
     return None
 
 

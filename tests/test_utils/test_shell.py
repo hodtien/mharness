@@ -19,7 +19,7 @@ def test_resolve_shell_command_prefers_bash_on_linux(monkeypatch):
 
     command = resolve_shell_command("echo hi", platform_name="linux")
 
-    assert command == ["/usr/bin/bash", "-lc", "echo hi"]
+    assert command == ["/usr/bin/bash", "--noprofile", "--norc", "-c", "echo hi"]
 
 
 def test_resolve_shell_command_wraps_with_script_when_pty_requested(monkeypatch):
@@ -69,7 +69,7 @@ def test_resolve_shell_command_skips_script_on_macos(monkeypatch):
 
     command = resolve_shell_command("echo hi", platform_name="macos", prefer_pty=True)
 
-    assert command == ["/bin/bash", "-lc", "echo hi"]
+    assert command == ["/bin/bash", "--noprofile", "--norc", "-c", "echo hi"]
 
 
 def test_resolve_shell_command_linux_without_script_falls_back(monkeypatch):
@@ -83,7 +83,7 @@ def test_resolve_shell_command_linux_without_script_falls_back(monkeypatch):
 
     command = resolve_shell_command("echo hi", platform_name="linux", prefer_pty=True)
 
-    assert command == ["/usr/bin/bash", "-lc", "echo hi"]
+    assert command == ["/usr/bin/bash", "--noprofile", "--norc", "-c", "echo hi"]
 
 
 @pytest.mark.asyncio
@@ -121,5 +121,5 @@ async def test_create_shell_subprocess_defaults_stdin_to_devnull(monkeypatch, tm
         settings=Settings(),
     )
 
-    assert captured["args"] == ("/usr/bin/bash", "-lc", "echo hi")
+    assert captured["args"] == ("/usr/bin/bash", "--noprofile", "--norc", "-c", "echo hi")
     assert captured["kwargs"]["stdin"] is asyncio.subprocess.DEVNULL
