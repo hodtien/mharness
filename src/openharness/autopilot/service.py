@@ -399,7 +399,7 @@ class RepoAutopilotStore:
         return card, True
 
     def pick_next_card(self) -> RepoTaskCard | None:
-        queued = [card for card in self._load_registry().cards if card.status == "queued"]
+        queued = [card for card in self._load_registry().cards if card.status in {"queued", "accepted"}]
         if not queued:
             return None
         return sorted(queued, key=lambda card: (-card.score, card.created_at, card.title.lower()))[0]

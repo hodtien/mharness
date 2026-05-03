@@ -92,6 +92,24 @@ def test_autopilot_pick_next_breaks_score_ties_by_creation_order(tmp_path: Path)
     )
 
 
+def test_autopilot_pick_next_includes_accepted_cards(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Accepted idea",
+        body="ready to run",
+    )
+    store.update_status(card.id, status="accepted")
+
+    chosen = store.pick_next_card()
+
+    assert chosen is not None
+    assert chosen.id == card.id
+
+
 def test_autopilot_scan_claude_code_candidates(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
