@@ -978,6 +978,14 @@ export default function PipelinePage() {
   const [secondsAgo, setSecondsAgo] = useState(0);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  useEffect(() => {
+    const previous = document.title;
+    document.title = "Autopilot · OpenHarness";
+    return () => {
+      document.title = previous;
+    };
+  }, []);
+
   const refreshCards = useCallback(() => {
     apiFetch<{ cards: PipelineCard[]; updated_at: number }>("/api/pipeline/cards")
       .then((data) => {
@@ -1071,7 +1079,7 @@ export default function PipelinePage() {
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <span className="text-sm text-[var(--text-dim)]">Loading pipeline…</span>
+        <span className="text-sm text-[var(--text-dim)]">Loading autopilot…</span>
       </div>
     );
   }
@@ -1090,7 +1098,12 @@ export default function PipelinePage() {
     <div className="relative flex flex-1 flex-col overflow-hidden">
       {/* Tab bar */}
       <div className="flex items-center justify-between border-b border-[var(--border)] px-4 pt-3">
-        <div className="flex gap-1">
+        <div className="flex items-center gap-4">
+          <div className="mb-1">
+            <div className="text-[11px] uppercase tracking-wide text-[var(--text-dim)]">Home / Autopilot</div>
+            <h1 className="text-lg font-semibold text-[var(--text)]">Autopilot</h1>
+          </div>
+          <div className="flex gap-1">
           <button
             onClick={() => setActiveTab("board")}
             className={`rounded-t-lg border px-4 py-2 text-sm font-medium transition ${
@@ -1111,6 +1124,7 @@ export default function PipelinePage() {
           >
             Policy
           </button>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {lastUpdated !== null && activeTab === "board" && (

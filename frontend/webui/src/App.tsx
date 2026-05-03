@@ -13,7 +13,7 @@ import ModesSettingsPage from "./pages/ModesSettingsPage";
 import ProviderSettingsPage from "./pages/ProviderSettingsPage";
 import ModelsSettingsPage from "./pages/ModelsSettingsPage";
 import AgentsSettingsPage from "./pages/AgentsSettingsPage";
-import PipelinePage from "./pages/PipelinePage";
+import AutopilotPage from "./pages/PipelinePage";
 import TasksPage from "./pages/TasksPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 
@@ -134,7 +134,8 @@ export default function App() {
           <Route path="/" element={<RootRedirect />} />
           <Route path="/chat" element={<ChatPage onSend={sendLine} />} />
           <Route path="/history" element={<HistoryPage onResume={reconnectWithSession} />} />
-          <Route path="/pipeline" element={<PipelinePage />} />
+          <Route path="/autopilot" element={<AutopilotPage />} />
+          <Route path="/pipeline" element={<Navigate to="/autopilot" replace />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route
             path="/settings/modes"
