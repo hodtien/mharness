@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { api, apiFetch, getToken } from "../api/client";
+import type { ModelsResponse } from "../api/client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ export interface PipelineCardMetadata {
   linked_pr_url?: string | null;
   resume_available?: boolean;
   resume_phase?: string | null;
+  model_override?: string | null;
 }
 
 export interface PipelineCard {
@@ -48,6 +50,7 @@ export interface PipelineCard {
   model?: string | null;
   attempt_count?: number;
   metadata?: PipelineCardMetadata;
+  model?: string | null;
 }
 
 export interface JournalEntry {
@@ -356,6 +359,112 @@ function relativeAge(timestamp: number): string {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
   return `${Math.floor(diff / 604800)}w ago`;
+}
+
+function isActiveCard(card: PipelineCard): boolean {
+  return ACTIVE_STATUSES.includes(card.status);
+}
+
+// ─── Model Section ────────────────────────────────────────────────────────────
+
+interface ModelSectionProps {
+  card: PipelineCard;
+  policyModel: string;
+  onModelChange: (cardId: string, model: string | null) => void;
+}
+
+function ModelSection({ card, policyModel, onModelChange }: ModelSectionProps) {
+  const [models, setModels] = React.useState<{ id: string; label: string }[]>([]);
+  const [saving, setSaving] = React.useState(false);
+  const [toast, setToast] = React.useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [selectedModel, setSelectedModel] = React.useState<string | null>(() => {
+    return card.metadata?.model_override ?? card.model ?? null;
+  });
+
+  // Re-sync when card changes (e.g. drawer reopens for different card)
+  React.useEffect(() => {
+    setSelectedModel(card.metadata?.model_override ?? card.model ?? null);
+  }, [card.id, card.metadata?.model_override, card.model]);
+
+  // Fetch flat model list once
+  React.useEffect(() => {
+    api.listModels()
+      .then((data: ModelsResponse) => {
+        const flat: { id: string; label: string }[] = [];
+        for (const providerModels of Object.values(data)) {
+          for (const m of providerModels) {
+            flat.push({ id: m.id, label: m.label });
+          }
+        }
+        setModels(flat);
+      })
+      .catch(() => {
+        // silently ignore model fetch errors
+      });
+  }, []);
+
+  const handleChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    const newModel = value === "_policy_" ? null : value;
+    setSaving(true);
+    setToast(null);
+    try {
+      await api.patchCardModel(card.id, newModel);
+      setSelectedModel(newModel);
+      onModelChange(card.id, newModel);
+      setToast({ type: "success", msg: "Model updated" });
+    } catch {
+      setToast({ type: "error", msg: "Failed to update model" });
+    } finally {
+      setSaving(false);
+      setTimeout(() => setToast(null), 2500);
+    }
+  };
+
+  const currentModel = selectedModel ?? card.model ?? null;
+  const displayModel = currentModel ?? policyModel;
+  const isDisabled = isActiveCard(card);
+
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3">
+      <div className="mb-2 text-[10px] uppercase tracking-wider text-[var(--text-dim)]">Model</div>
+      <div className="flex items-center gap-2">
+        <select
+          value={currentModel ?? "_policy_"}
+          onChange={handleChange}
+          disabled={isDisabled || saving}
+          className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-2 py-1.5 text-sm text-[var(--text)] focus:border-[var(--accent)]/60 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="Select model"
+        >
+          <option value="_policy_">Policy default ({policyModel})</option>
+          {models.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+        {isDisabled && (
+          <span className="shrink-0 text-[10px] text-[var(--text-dim)]">Running</span>
+        )}
+      </div>
+      {displayModel !== policyModel && (
+        <div className="mt-1 text-[10px] text-[var(--text-dim)]">
+          Effective: {displayModel}
+        </div>
+      )}
+      {toast && (
+        <div
+          className={`mt-2 rounded px-2 py-1 text-xs ${
+            toast.type === "success"
+              ? "bg-emerald-500/20 text-emerald-300"
+              : "bg-red-500/20 text-red-300"
+          }`}
+        >
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Card ─────────────────────────────────────────────────────────────────────
@@ -1525,6 +1634,7 @@ export default function PipelinePage() {
     },
     [refreshCards],
   );
+
 
   if (loading) {
     return (
