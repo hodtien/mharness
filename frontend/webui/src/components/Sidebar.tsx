@@ -31,8 +31,8 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
       <nav aria-label="Primary" className="flex flex-col gap-1">
         <NavItem to="/chat" label="Chat" icon="💬" onClose={onClose} />
         <NavItem to="/history" label="History" icon="🕘" onClose={onClose} />
-        <NavItem to="/autopilot" label="Autopilot" icon="🚀" onClose={onClose} />
-        <NavItem to="/tasks" label="Tasks" icon="⚙️" onClose={onClose} />
+        <NavItem to="/autopilot" label="Autopilot" icon="🤖" onClose={onClose} />
+        <NavItem to="/tasks" label="Jobs" icon="⚙️" onClose={onClose} />
       </nav>
 
       <Section title="Settings">
@@ -102,9 +102,9 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
         </Section>
       )}
 
-      <Section title={`Tasks (${tasks.length})`}>
+      <Section title={`Jobs (${tasks.length})`}>
         {tasks.length === 0 && (
-          <div className="text-xs text-[var(--text-dim)]">No background tasks.</div>
+          <div className="text-xs text-[var(--text-dim)]">No background jobs.</div>
         )}
         {tasks.slice(0, 12).map((t) => (
           <div

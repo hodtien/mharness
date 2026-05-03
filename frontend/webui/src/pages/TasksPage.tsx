@@ -497,11 +497,20 @@ export default function TasksPage() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Page Header */}
+      <div className="border-b border-[var(--border)] bg-[var(--panel)] px-5 py-4">
+        <h1 className="text-lg font-semibold text-[var(--text)]">Background Jobs</h1>
+        <p className="mt-0.5 text-xs text-[var(--text-dim)]">
+          Background CLI processes spawned by the system. Autopilot cards are managed in the{" "}
+          <a href="/autopilot" className="underline hover:text-[var(--text)] transition">Autopilot board</a>.
+        </p>
+      </div>
+
       {/* Toolbar */}
       <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-5 py-3">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-[var(--text)]">
-            {filter === "all" ? "All tasks" : STATUS_LABEL[filter as TaskStatus]}
+            {filter === "all" ? "All jobs" : STATUS_LABEL[filter as TaskStatus]}
           </span>
           <span className="rounded-full border border-[var(--border)] bg-[var(--panel-2)] px-2 py-0.5 text-xs text-[var(--text-dim)]">
             {filtered.length}
@@ -533,7 +542,7 @@ export default function TasksPage() {
       <div className="flex-1 overflow-auto">
         {loading ? (
           <div className="flex flex-1 items-center justify-center py-20">
-            <span className="text-sm text-[var(--text-dim)]">Loading tasks…</span>
+            <span className="text-sm text-[var(--text-dim)]">Loading jobs…</span>
           </div>
         ) : fetchError ? (
           <div className="flex flex-1 items-center justify-center py-20">
@@ -544,7 +553,7 @@ export default function TasksPage() {
         ) : filtered.length === 0 ? (
           <div className="flex flex-1 items-center justify-center py-20">
             <div className="text-sm text-[var(--text-dim)]">
-              {filter === "all" ? "No tasks found." : `No ${STATUS_LABEL[filter as TaskStatus].toLowerCase()} tasks.`}
+              {filter === "all" ? "No jobs found." : `No ${STATUS_LABEL[filter as TaskStatus].toLowerCase()} jobs.`}
             </div>
           </div>
         ) : (
