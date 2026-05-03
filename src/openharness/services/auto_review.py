@@ -51,14 +51,11 @@ def _parse_changed_files(diff_stat: str) -> list[str]:
     files = []
     for line in diff_stat.splitlines():
         # Each line looks like: " src/foo/bar.py  |  5 +2 -3 "
-        # We only want the file path (first token before " | ").
+        # Skip lines without a "|" — those are summary/blank/warning lines.
+        if "|" not in line:
+            continue
         parts = re.split(r"\s*\|\s*", line, maxsplit=1)
-        if parts and "|" not in line or (len(parts) == 1 and parts[0].strip()):
-            # A line with no "|" separator means no stat info, but the path is present.
-            path = parts[0].strip()
-            if path and not path.startswith("warning:"):
-                files.append(path)
-        elif parts:
+        if parts:
             path = parts[0].strip()
             if path and not path.startswith("warning:"):
                 files.append(path)
