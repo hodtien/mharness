@@ -1,4 +1,7 @@
 import { useEffect, useState, useCallback, useRef, type FormEvent } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 import { apiFetch, getToken } from "../api/client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -394,6 +397,162 @@ function kindIcon(kind: string): string {
   return KIND_ICONS[kind] ?? "📌";
 }
 
+// ─── Markdown helper ──────────────────────────────────────────────────────────
+
+function MarkdownText({ content }: { content: string }) {
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+      {content}
+    </ReactMarkdown>
+  );
+}
+
+// ─── Review Tab ────────────────────────────────────────────────────────────────
+
+interface ReviewTabProps {
+  cardId: string;
+  isActive: boolean;
+}
+
+interface ReviewData {
+  task_id: string;
+  status: string;
+  markdown: string;
+  created_at: number;
+}
+
+function ReviewTab({ cardId, isActive }: ReviewTabProps) {
+  const [reviewState, setReviewState] = useState<
+    "loading" | "not_found" | "running" | "done"
+  >("loading");
+  const [review, setReview] = useState<ReviewData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [rerunning, setRerunning] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchReview = useCallback(async () => {
+    try {
+      const data = await apiFetch<ReviewData>(`/api/review/${encodeURIComponent(cardId)}`);
+      setReview(data);
+      setReviewState("done");
+    } catch (err) {
+      // 404 means no review yet; treat any 4xx as not_found
+      const msg = String(err);
+      if (msg.includes("404")) {
+        setReviewState("not_found");
+      } else {
+        setError(msg);
+        setReviewState("not_found");
+      }
+    }
+  }, [cardId]);
+
+  const startRerun = useCallback(async () => {
+    setRerunning(true);
+    setReviewState("running");
+    setError(null);
+    try {
+      await apiFetch<{ ok: boolean; message: string }>(
+        `/api/review/${encodeURIComponent(cardId)}/rerun`,
+        { method: "POST" },
+      );
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setRerunning(false);
+    }
+  }, [cardId]);
+
+  // Reset when tab becomes active
+  useEffect(() => {
+    if (isActive) {
+      setReviewState("loading");
+      setReview(null);
+      setError(null);
+      fetchReview();
+    }
+  }, [isActive, fetchReview]);
+
+  // Poll every 3 s while in running state
+  useEffect(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (reviewState === "running") {
+      timerRef.current = setInterval(fetchReview, 3000);
+    }
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [reviewState, fetchReview]);
+
+  if (reviewState === "loading") {
+    return (
+      <div className="flex items-center justify-center p-6">
+        <span className="text-sm text-[var(--text-dim)]">Loading review…</span>
+      </div>
+    );
+  }
+
+  if (reviewState === "running") {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 p-6">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
+        <span className="text-sm text-[var(--text-dim)]">Reviewing…</span>
+      </div>
+    );
+  }
+
+  if (reviewState === "not_found") {
+    return (
+      <div className="flex flex-col items-center gap-4 p-6 text-center">
+        <p className="text-sm text-[var(--text-dim)]">
+          No review yet for this task.
+        </p>
+        {error && (
+          <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+            {error}
+          </p>
+        )}
+        <button
+          onClick={startRerun}
+          disabled={rerunning}
+          className="rounded-lg border border-[var(--accent)]/40 bg-[var(--accent)]/20 px-5 py-2 text-sm font-medium text-[var(--accent)] transition hover:bg-[var(--accent)]/30 disabled:opacity-40"
+        >
+          {rerunning ? "Starting…" : "Run Review"}
+        </button>
+      </div>
+    );
+  }
+
+  // done
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2">
+        <span className="text-[10px] uppercase tracking-wider text-[var(--text-dim)]">
+          Review · {review ? relativeAge(review.created_at) : ""}
+        </span>
+        <button
+          onClick={startRerun}
+          disabled={rerunning}
+          className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1 text-xs text-[var(--text-dim)] transition hover:border-[var(--accent)]/40 hover:text-[var(--text)] disabled:opacity-40"
+        >
+          {rerunning ? "Starting…" : "Re-run Review"}
+        </button>
+      </div>
+      <div className="overflow-y-auto p-4">
+        <div className="prose prose-invert max-w-none text-sm text-[var(--text)]">
+          <MarkdownText content={review?.markdown ?? ""} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Activity Tab ──────────────────────────────────────────────────────────────
 
 interface ActivityTabProps {
@@ -493,7 +652,7 @@ interface DrawerProps {
 }
 
 function Drawer({ card, onClose, onAction, loadingAction }: DrawerProps) {
-  const [drawerTab, setDrawerTab] = useState<"info" | "activity">("info");
+  const [drawerTab, setDrawerTab] = useState<"info" | "activity" | "review">("info");
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -572,6 +731,16 @@ function Drawer({ card, onClose, onAction, loadingAction }: DrawerProps) {
             >
               Activity
             </button>
+            <button
+              onClick={() => setDrawerTab("review")}
+              className={`flex-1 px-4 py-2 text-sm font-medium transition ${
+                drawerTab === "review"
+                  ? "border-b-2 border-[var(--accent)] text-[var(--accent)]"
+                  : "text-[var(--text-dim)] hover:text-[var(--text)]"
+              }`}
+            >
+              Review
+            </button>
           </div>
 
           {/* Tab content */}
@@ -606,8 +775,10 @@ function Drawer({ card, onClose, onAction, loadingAction }: DrawerProps) {
                 <div className="text-[var(--text)]">{relativeAge(card.created_at)}</div>
               </div>
             </div>
-          ) : (
+          ) : drawerTab === "activity" ? (
             <ActivityTab cardId={card.id} isActive={drawerTab === "activity"} />
+          ) : (
+            <ReviewTab cardId={card.id} isActive={drawerTab === "review"} />
           )}
         </div>
 
