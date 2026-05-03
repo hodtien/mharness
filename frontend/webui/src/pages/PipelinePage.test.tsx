@@ -655,4 +655,104 @@ describe("PipelinePage", () => {
     fireEvent.click(screen.getByRole("button", { name: /^All$/ }));
     expect(await screen.findByText("CI passed")).toBeTruthy();
   });
+
+  it("Activity tab: truncates long messages with Show more", async () => {
+    const longSummary = "This is a very long summary that exceeds one hundred and twenty characters and should be truncated when displayed in the activity list";
+    const sampleEntries = [
+      { timestamp: 1000, kind: "ci_check", summary: longSummary, task_id: "card-1", metadata: {} },
+      { timestamp: 1001, kind: "agent_started", summary: "Short text", task_id: "card-1", metadata: {} },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards: sampleCards, updated_at: 0 }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: sampleEntries }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("Add login form"));
+    fireEvent.click(await screen.findByRole("button", { name: /^Activity$/i }));
+
+    // Long entry truncated — truncated text present, Show more button visible
+    const truncatedPart = longSummary.slice(0, 120);
+    expect(await screen.findByText(new RegExp(`^${truncatedPart}`))).toBeTruthy();
+    const showMore = await screen.findByRole("button", { name: /^Show more$/ });
+    expect(showMore).toBeTruthy();
+
+    // Short entry not truncated
+    expect(await screen.findByText("Short text")).toBeTruthy();
+
+    // Expand the truncated entry
+    fireEvent.click(showMore);
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /^Show more$/ })).toBeNull();
+    });
+    // Full text visible with Show less button
+    await screen.findByText(longSummary);
+    const showLess = screen.getByRole("button", { name: /^Show less$/ });
+    expect(showLess).toBeTruthy();
+
+    // Collapse back
+    fireEvent.click(showLess);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^Show more$/ })).toBeTruthy();
+    });
+  });
+
+  it("Activity tab: status icons match kind per spec", async () => {
+    const statusEntries = [
+      { timestamp: 1, kind: "repairing", summary: "Repairing step", task_id: "t1", metadata: {} },
+      { timestamp: 2, kind: "verifying", summary: "Verifying", task_id: "t1", metadata: {} },
+      { timestamp: 3, kind: "merged", summary: "Merged", task_id: "t1", metadata: {} },
+      { timestamp: 4, kind: "failed", summary: "Failed", task_id: "t1", metadata: {} },
+      { timestamp: 5, kind: "preparing", summary: "Preparing", task_id: "t1", metadata: {} },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards: sampleCards, updated_at: 0 }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: statusEntries }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("Add login form"));
+    fireEvent.click(await screen.findByRole("button", { name: /^Activity$/i }));
+    await screen.findByText("Repairing step");
+
+    // Find all icon spans via data-testid
+    const icons = Array.from(document.querySelectorAll('[data-testid="activity-item-icon"]')).map(
+      (s) => s.textContent ?? "",
+    );
+
+    // repair icon (🔴), verify (🔵), merged (✅), failed (⚠️), preparing (🟡)
+    expect(icons.filter((i) => i === "🔴").length).toBeGreaterThan(0);
+    expect(icons.filter((i) => i === "🔵").length).toBeGreaterThan(0);
+    expect(icons.filter((i) => i === "✅").length).toBeGreaterThan(0);
+    expect(icons.filter((i) => i === "⚠️").length).toBeGreaterThan(0);
+    expect(icons.filter((i) => i === "🟡").length).toBeGreaterThan(0);
+  });
 });
