@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, type FormEvent } from "react";
+import React, { useEffect, useState, useCallback, useRef, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -383,6 +383,13 @@ function Card({ card, onClick }: { card: PipelineCard; onClick: () => void }) {
 // ─── Kind → icon map ───────────────────────────────────────────────────────────
 
 const KIND_ICONS: Record<string, string> = {
+  // Status-based icons per task spec
+  repairing: "🔴",
+  verifying: "🔵",
+  merged: "✅",
+  failed: "⚠️",
+  preparing: "🟡",
+  // Event-based icons
   merge_warning: "⚠️",
   code_review: "🔍",
   ci_check: "✅",
@@ -401,6 +408,41 @@ const KIND_ICONS: Record<string, string> = {
 
 function kindIcon(kind: string): string {
   return KIND_ICONS[kind] ?? "📌";
+}
+
+// ─── TruncatedText ─────────────────────────────────────────────────────────────
+
+const TRUNCATE_LIMIT = 120;
+
+function TruncatedText({ text }: { text: string }) {
+  const [expanded, setExpanded] = React.useState(false);
+  if (text.length <= TRUNCATE_LIMIT) {
+    return <span>{text}</span>;
+  }
+  if (expanded) {
+    return (
+      <span>
+        {text}{" "}
+        <button
+          onClick={() => setExpanded(false)}
+          className="ml-1 text-[var(--accent)] underline-offset-2 hover:underline"
+        >
+          Show less
+        </button>
+      </span>
+    );
+  }
+  return (
+    <span>
+      {text.slice(0, TRUNCATE_LIMIT)}…{" "}
+      <button
+        onClick={() => setExpanded(true)}
+        className="ml-1 text-[var(--accent)] underline-offset-2 hover:underline"
+      >
+        Show more
+      </button>
+    </span>
+  );
 }
 
 // ─── Markdown helper ──────────────────────────────────────────────────────────
@@ -674,12 +716,19 @@ function ActivityTab({ cardId, isActive }: ActivityTabProps) {
         <div className="flex-1 overflow-y-auto p-4 min-h-0">
           <div className="space-y-2">
           {filteredEntries.map((entry, idx) => (
-            <div key={idx} className="flex gap-3 text-sm">
-              <span className="shrink-0 mt-0.5 text-base">{kindIcon(entry.kind)}</span>
+            <div key={idx} className="flex gap-3 text-sm" data-testid="activity-item">
+              <span
+                className="shrink-0 mt-0.5 text-base"
+                data-testid="activity-item-icon"
+              >
+                {kindIcon(entry.kind)}
+              </span>
               <div className="min-w-0 flex-1">
-                <div className="text-[var(--text)] leading-snug">{entry.summary}</div>
-                <div className="mt-0.5 text-[10px] text-[var(--text-dim)]">
-                  {relativeAge(entry.timestamp)}
+                <div className="flex items-start justify-between gap-2">
+                  <TruncatedText text={entry.summary} />
+                  <span className="shrink-0 text-[10px] text-[var(--text-dim)]">
+                    {relativeAge(entry.timestamp)}
+                  </span>
                 </div>
               </div>
             </div>
