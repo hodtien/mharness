@@ -129,6 +129,18 @@ export interface AgentProfile {
   source_file?: string | null;
 }
 
+export interface AgentDetail {
+  name: string;
+  description: string;
+  system_prompt: string | null;
+  tools: string[] | null;
+  model: string | null;
+  effort: string | null;
+  permission_mode: string | null;
+  source_file: string | null;
+  has_system_prompt: boolean;
+}
+
 export interface AgentPatch {
   model?: string;
   effort?: string;
@@ -189,6 +201,7 @@ export const api = {
       { method: "DELETE" },
     ),
   listAgents: () => apiFetch<AgentProfile[]>("/api/agents"),
+  getAgent: (name: string) => apiFetch<AgentDetail>(`/api/agents/${encodeURIComponent(name)}`),
   patchAgent: (name: string, patch: AgentPatch) =>
     apiFetch<AgentProfile>(`/api/agents/${encodeURIComponent(name)}`, {
       method: "PATCH",

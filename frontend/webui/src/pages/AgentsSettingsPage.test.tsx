@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import AgentsSettingsPage from "./AgentsSettingsPage";
 
@@ -33,6 +33,8 @@ function jsonResponse(data: unknown, status = 200) {
 const LONG_DESC =
   "R".repeat(130); // 130 chars — exceeds the 120-char truncation limit
 
+const LONG_SYSTEM_PROMPT = `${"System prompt details. ".repeat(30)}Final expanded instructions.`;
+
 const sampleAgents = [
   {
     name: "general-purpose",
@@ -55,6 +57,31 @@ const sampleAgents = [
     source_file: "/tmp/researcher.md",
   },
 ];
+
+const sampleAgentDetails = {
+  "general-purpose": {
+    name: "general-purpose",
+    description: "Full generic helper agent description shown in the details modal.",
+    system_prompt: LONG_SYSTEM_PROMPT,
+    tools: ["read_file", "grep", "bash"],
+    model: "gpt-4o-mini",
+    effort: "medium",
+    permission_mode: "default",
+    source_file: "/agents/general-purpose.md",
+    has_system_prompt: true,
+  },
+  researcher: {
+    name: "researcher",
+    description: LONG_DESC,
+    system_prompt: "Research carefully.",
+    tools: ["web_search", "web_fetch", "read_file", "grep"],
+    model: null,
+    effort: "high",
+    permission_mode: "plan",
+    source_file: "/tmp/researcher.md",
+    has_system_prompt: true,
+  },
+};
 
 const sampleModels = {
   "openai-default": [
@@ -79,6 +106,10 @@ function setupFetch(overrides: FetchOverrides = {}) {
     if (url === "/api/models" && (!init?.method || init.method === "GET")) {
       return Promise.resolve(jsonResponse(sampleModels));
     }
+    if (url.startsWith("/api/agents/") && (!init?.method || init.method === "GET")) {
+      const name = decodeURIComponent(url.slice("/api/agents/".length));
+      return Promise.resolve(jsonResponse(sampleAgentDetails[name as keyof typeof sampleAgentDetails]));
+    }
     if (url.startsWith("/api/agents/") && init?.method === "PATCH") {
       const name = decodeURIComponent(url.slice("/api/agents/".length));
       const body = JSON.parse(String(init?.body ?? "{}"));
@@ -92,6 +123,16 @@ function setupFetch(overrides: FetchOverrides = {}) {
     return Promise.reject(new Error(`unexpected fetch: ${url}`));
   });
   return calls;
+}
+
+async function renderAgentsPage() {
+  render(
+    <BrowserRouter>
+      <AgentsSettingsPage />
+    </BrowserRouter>,
+  );
+
+  await waitFor(() => expect(screen.getByText("general-purpose")).toBeTruthy());
 }
 
 describe("AgentsSettingsPage", () => {
@@ -113,6 +154,64 @@ describe("AgentsSettingsPage", () => {
     // long description should be truncated with ellipsis
     const truncated = screen.getByText(/^R+\u2026$/);
     expect(truncated.textContent?.length).toBe(120);
+  });
+
+  it("shows View details button on agent cards", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    await renderAgentsPage();
+
+    expect(screen.getAllByRole("button", { name: /view details/i })).toHaveLength(2);
+  });
+
+  it("opens the details modal when clicking View details", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    await renderAgentsPage();
+    fireEvent.click(screen.getAllByRole("button", { name: /view details/i })[0]);
+
+    await waitFor(() => expect(screen.getByText("Full generic helper agent description shown in the details modal.")).toBeTruthy());
+    expect(screen.getAllByText("general-purpose").length).toBeGreaterThan(1);
+    expect(screen.getByRole("button", { name: "✕" })).toBeTruthy();
+  });
+
+  it("shows agent name, description, model metadata, and tools in the details modal", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    await renderAgentsPage();
+    fireEvent.click(screen.getAllByRole("button", { name: /view details/i })[0]);
+
+    await waitFor(() => expect(screen.getByText("Full generic helper agent description shown in the details modal.")).toBeTruthy());
+    const modal = screen.getByText("Full generic helper agent description shown in the details modal.").closest(".space-y-5");
+    expect(modal).toBeTruthy();
+    const modalContent = within(modal as HTMLElement);
+    expect(screen.getAllByText("general-purpose").length).toBeGreaterThan(1);
+    expect(modalContent.getByText("gpt-4o-mini")).toBeTruthy();
+    expect(modalContent.getByText("medium")).toBeTruthy();
+    expect(modalContent.getByText("default")).toBeTruthy();
+    expect(modalContent.getByText("/agents/general-purpose.md")).toBeTruthy();
+    expect(modalContent.getByText("read_file")).toBeTruthy();
+    expect(modalContent.getByText("grep")).toBeTruthy();
+    expect(modalContent.getByText("bash")).toBeTruthy();
+  });
+
+  it("expands and collapses long system prompts with Show more toggle", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    await renderAgentsPage();
+    fireEvent.click(screen.getAllByRole("button", { name: /view details/i })[0]);
+
+    const showMore = await screen.findByRole("button", { name: `Show more (${LONG_SYSTEM_PROMPT.length} chars)` });
+    expect(screen.queryByText(/Final expanded instructions/)).toBeNull();
+
+    fireEvent.click(showMore);
+
+    expect(screen.getByText(/Final expanded instructions/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /show less/i })).toBeTruthy();
   });
 
   it("opens inline editor when clicking Edit and saves changes", async () => {
