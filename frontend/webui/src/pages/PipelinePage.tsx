@@ -646,7 +646,7 @@ function ActivityTab({ cardId, isActive }: ActivityTabProps) {
   const filteredEntries = entries.filter((e) => matchesActivityFilter(e.kind, activeFilter));
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-1 flex-col min-h-0">
       {/* Filter pills */}
       <div className="flex gap-1.5 flex-wrap border-b border-[var(--border)] px-4 py-2" data-testid="activity-filter-pills">
         {ACTIVITY_FILTERS.map(({ id, label }) => (
@@ -667,11 +667,12 @@ function ActivityTab({ cardId, isActive }: ActivityTabProps) {
 
       {/* Entry list */}
       {filteredEntries.length === 0 ? (
-        <div className="p-4 text-sm text-[var(--text-dim)]">
+        <div className="shrink-0 p-4 text-sm text-[var(--text-dim)]">
           {entries.length === 0 ? "No activity yet." : "No entries match this filter."}
         </div>
       ) : (
-        <div className="space-y-2 p-4">
+        <div className="flex-1 overflow-y-auto p-4 min-h-0">
+          <div className="space-y-2">
           {filteredEntries.map((entry, idx) => (
             <div key={idx} className="flex gap-3 text-sm">
               <span className="shrink-0 mt-0.5 text-base">{kindIcon(entry.kind)}</span>
@@ -683,6 +684,7 @@ function ActivityTab({ cardId, isActive }: ActivityTabProps) {
               </div>
             </div>
           ))}
+          </div>
         </div>
       )}
     </div>
@@ -813,7 +815,7 @@ function Drawer({ card, onClose, onAction, loadingAction }: DrawerProps) {
 
       {/* Panel */}
       <div
-        className="fixed bottom-0 right-0 top-0 z-50 flex w-full max-w-lg flex-col border-l border-[var(--border)] bg-[var(--panel)] shadow-2xl sm:bottom-auto"
+        className="fixed bottom-0 right-0 top-0 z-50 flex w-full max-w-lg max-h-screen flex-col border-l border-[var(--border)] bg-[var(--panel)] shadow-2xl sm:bottom-auto"
         role="dialog"
         aria-modal="true"
         aria-label="Card detail"
@@ -842,12 +844,12 @@ function Drawer({ card, onClose, onAction, loadingAction }: DrawerProps) {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* Blocker alert – shown for failed/repairing/waiting_ci */}
           <BlockerBanner card={card} onAction={onAction} loadingAction={loadingAction} />
 
           {/* Tab bar */}
-          <div className="flex border-b border-[var(--border)]">
+          <div className="flex shrink-0 border-b border-[var(--border)]">
             <button
               onClick={() => setDrawerTab("info")}
               className={`flex-1 px-4 py-2 text-sm font-medium transition ${
