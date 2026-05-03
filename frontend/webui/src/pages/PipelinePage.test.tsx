@@ -104,7 +104,7 @@ describe("PipelinePage", () => {
     expect(screen.getByText("Queue")).toBeTruthy();
     expect(screen.getByText("In Progress")).toBeTruthy();
     expect(screen.getByText("Review")).toBeTruthy();
-    expect(screen.getByText("Done")).toBeTruthy();
+    expect(screen.getByText("Completed")).toBeTruthy();
 
     expect(screen.getByText("Add login form")).toBeTruthy();
     expect(screen.getByText("Fix auth bug")).toBeTruthy();
@@ -139,6 +139,93 @@ describe("PipelinePage", () => {
     expect(screen.getByRole("button", { name: /^Accept$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Reject$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Retry$/i })).toBeTruthy();
+  });
+
+  it("Review tab: shows 'Run Review' when GET /api/review/{id} returns 404", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/pipeline/cards" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve(jsonResponse({ cards: sampleCards, updated_at: 0 }));
+      }
+      if (url.startsWith("/api/pipeline/journal")) {
+        return Promise.resolve(jsonResponse({ entries: [] }));
+      }
+      if (url.startsWith("/api/review/") && !url.endsWith("/rerun")) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          statusText: "Not Found",
+          headers: { get: () => null },
+          json: async () => ({ detail: { error: "review_not_found" } }),
+          text: async () => '{"detail":{"error":"review_not_found"}}',
+        });
+      }
+      if (url.endsWith("/rerun") && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({ ok: true, message: "Review started" }));
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("Add login form"));
+    fireEvent.click(await screen.findByRole("button", { name: /^Review$/i }));
+
+    const runBtn = await screen.findByRole("button", { name: /Run Review/i });
+    expect(runBtn).toBeTruthy();
+
+    fireEvent.click(runBtn);
+
+    await waitFor(() => {
+      const rerunCalls = fetchMock.mock.calls.filter(
+        (c) => String(c[0]).endsWith("/rerun") && (c[1] as RequestInit | undefined)?.method === "POST",
+      );
+      expect(rerunCalls.length).toBe(1);
+      expect(String(rerunCalls[0][0])).toBe("/api/review/card-queued-1/rerun");
+    });
+
+    // Spinner / Reviewing… visible while running
+    expect(await screen.findByText(/Reviewing/i)).toBeTruthy();
+  });
+
+  it("Review tab: renders markdown and shows 'Re-run Review' when review is done", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/pipeline/cards" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve(jsonResponse({ cards: sampleCards, updated_at: 0 }));
+      }
+      if (url.startsWith("/api/pipeline/journal")) {
+        return Promise.resolve(jsonResponse({ entries: [] }));
+      }
+      if (url.startsWith("/api/review/") && !url.endsWith("/rerun")) {
+        return Promise.resolve(
+          jsonResponse({
+            task_id: "card-queued-1",
+            status: "done",
+            markdown: "# Looks good\n\nNo issues found.",
+            created_at: Date.now() / 1000 - 60,
+          }),
+        );
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("Add login form"));
+    fireEvent.click(await screen.findByRole("button", { name: /^Review$/i }));
+
+    expect(await screen.findByText(/Looks good/)).toBeTruthy();
+    expect(screen.getByText(/No issues found/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Re-run Review/i })).toBeTruthy();
   });
 
   it("calls POST action endpoint when Accept is clicked", async () => {
