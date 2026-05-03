@@ -213,3 +213,86 @@ def test_journal_filter_by_card_id(tmp_path) -> None:
     entries = response.json()["entries"]
     # The entry belongs to the newly created card.
     assert all(e["task_id"] == card.json()["id"] for e in entries)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/pipeline/run-next
+# ---------------------------------------------------------------------------
+
+
+def test_run_next_returns_409_when_no_queued_cards(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.post("/api/pipeline/run-next", headers=AUTH)
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["error"] == "no_queued_cards"
+
+
+def test_run_next_returns_409_when_already_running(tmp_path) -> None:
+    import json
+
+    reg_dir = tmp_path / ".openharness" / "autopilot"
+    reg_dir.mkdir(parents=True)
+    registry = {
+        "updated_at": 0.0,
+        "cards": [
+            {
+                "id": "ap-test-running",
+                "fingerprint": "fp-running",
+                "title": "In progress card",
+                "status": "running",
+                "source_kind": "manual_idea",
+                "score": 0,
+                "labels": [],
+                "body": "",
+                "created_at": 0.0,
+                "updated_at": 0.0,
+                "metadata": {},
+            },
+            {
+                "id": "ap-test-queued",
+                "fingerprint": "fp-queued",
+                "title": "Waiting card",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "score": 0,
+                "labels": [],
+                "body": "",
+                "created_at": 1.0,
+                "updated_at": 1.0,
+                "metadata": {},
+            },
+        ],
+    }
+    (reg_dir / "registry.json").write_text(json.dumps(registry), encoding="utf-8")
+
+    client = _client(tmp_path)
+    response = client.post("/api/pipeline/run-next", headers=AUTH)
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["error"] == "already_running"
+
+
+def test_run_next_returns_202_and_task_id_when_queued_card_exists(tmp_path, monkeypatch) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    import openharness.webui.server.routes.pipeline as pipeline_routes
+
+    fake_task = MagicMock()
+    fake_task.id = "task-stub-001"
+    mock_manager = MagicMock()
+    mock_manager.create_shell_task = AsyncMock(return_value=fake_task)
+    monkeypatch.setattr(pipeline_routes, "get_task_manager", lambda: mock_manager)
+
+    client = _client(tmp_path)
+    r = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Ready to run"})
+    assert r.status_code == 201
+
+    response = client.post("/api/pipeline/run-next", headers=AUTH)
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "accepted"
+    assert "task_id" in body
+    mock_manager.create_shell_task.assert_called_once()

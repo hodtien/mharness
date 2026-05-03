@@ -663,6 +663,8 @@ export default function PipelinePage() {
   const [selectedCard, setSelectedCard] = useState<PipelineCard | null>(null);
   const [loadingAction, setLoadingAction] = useState(false);
   const [showNewIdea, setShowNewIdea] = useState(false);
+  const [runningNext, setRunningNext] = useState(false);
+  const [runNextError, setRunNextError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("board");
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
@@ -723,6 +725,20 @@ export default function PipelinePage() {
     }, 1000);
     return () => clearInterval(id);
   }, [lastUpdated]);
+
+  const handleRunNext = useCallback(async () => {
+    setRunningNext(true);
+    setRunNextError(null);
+    try {
+      await apiFetch("/api/pipeline/run-next", { method: "POST" });
+      setTimeout(refreshCards, 1500);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setRunNextError(msg.includes("no_queued_cards") ? "No queued cards." : msg.includes("already_running") ? "Already running." : msg);
+    } finally {
+      setRunningNext(false);
+    }
+  }, [refreshCards]);
 
   const handleAction = useCallback(
     async (cardId: string, action: "accept" | "reject" | "retry" | "reset") => {
@@ -795,12 +811,27 @@ export default function PipelinePage() {
             </span>
           )}
           {activeTab === "board" && (
-          <button
-            onClick={() => setShowNewIdea(true)}
-            className="mb-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20"
-          >
-            + New idea
-            </button>
+            <div className="mb-1 flex flex-col items-end gap-1">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRunNext}
+                  disabled={runningNext}
+                  className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-300 transition hover:bg-blue-500/20 disabled:opacity-40"
+                  title="Run the highest-priority queued card"
+                >
+                  {runningNext ? "Starting…" : "▶ Run Next"}
+                </button>
+                <button
+                  onClick={() => setShowNewIdea(true)}
+                  className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+                >
+                  + New idea
+                </button>
+              </div>
+              {runNextError && (
+                <span className="text-[11px] text-red-400">{runNextError}</span>
+              )}
+            </div>
           )}
         </div>
       </div>

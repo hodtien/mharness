@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shlex
+import sys
 from typing import Literal
 
 import yaml
@@ -12,7 +14,7 @@ from pydantic import BaseModel, Field, ValidationError
 from openharness.autopilot.service import RepoAutopilotStore
 from openharness.config.paths import get_project_autopilot_policy_path
 from openharness.autopilot.types import RepoAutopilotRegistry, RepoJournalEntry, RepoTaskStatus
-from openharness.webui.server.state import WebUIState, get_state, require_token
+from openharness.webui.server.state import WebUIState, get_state, get_task_manager, require_token
 
 router = APIRouter(
     prefix="/api/pipeline",
@@ -163,6 +165,49 @@ def action_pipeline_card(
     new_status = _ACTION_TO_STATUS[body.action]
     card = store.update_status(card_id, status=new_status)
     return _serialize_card(card.model_dump(mode="json"))
+
+
+# ---------------------------------------------------------------------------
+# Autopilot run-next trigger
+# ---------------------------------------------------------------------------
+
+
+@router.post("/run-next", status_code=status.HTTP_202_ACCEPTED)
+async def run_next_card(state: WebUIState = Depends(get_state)) -> dict:
+    """Spawn ``oh autopilot run-next`` as a background task.
+
+    Returns HTTP 409 when no queued cards exist (checked before spawning).
+    Returns HTTP 409 when another autopilot run is already in progress.
+    Otherwise returns HTTP 202 with the background ``task_id`` so the caller
+    can track progress via the Tasks API.
+    """
+    registry_path = state.cwd / ".openharness" / "autopilot" / "registry.json"
+    try:
+        payload = json.loads(registry_path.read_text(encoding="utf-8")) if registry_path.is_file() else {}
+        cards = RepoAutopilotRegistry.model_validate(payload).cards if payload else []
+    except (json.JSONDecodeError, OSError, ValidationError):
+        cards = []
+    queued = [c for c in cards if c.status in {"queued", "accepted"}]
+    if not queued:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": "no_queued_cards", "message": "No queued autopilot cards."},
+        )
+    active_statuses = {"preparing", "running", "verifying", "repairing", "waiting_ci", "pr_open"}
+    if any(c.status in active_statuses for c in cards):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": "already_running", "message": "An autopilot task is already active."},
+        )
+    command = f"{shlex.quote(sys.executable)} -m openharness.cli autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
+    manager = get_task_manager()
+    task = await manager.create_shell_task(
+        command=command,
+        description="autopilot run-next",
+        cwd=state.cwd,
+        task_type="local_bash",
+    )
+    return {"task_id": task.id, "status": "accepted"}
 
 
 # ---------------------------------------------------------------------------
