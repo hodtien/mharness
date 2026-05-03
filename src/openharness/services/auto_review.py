@@ -98,12 +98,13 @@ async def maybe_spawn_review(
     task_id: str,
     cwd: Path,
     base_branch: str = "main",
+    force: bool = False,
 ) -> None:
     """
-    Conditionally spawn a code-reviewer agent for a completed task.
+    Conditionally (or unconditionally with *force*) spawn a code-reviewer agent for a task.
 
     Steps:
-    1. Load settings and check ``auto_review.enabled``.
+    1. Load settings and check ``auto_review.enabled`` (skipped when *force* is True).
     2. Run ``git diff --stat <base_branch>..HEAD`` in *cwd*.
     3. If changes exist, spawn a ``code-reviewer`` agent with a diff summary + file list.
     4. Write review output to ``.openharness/autopilot/runs/{task_id}/review.md``.
@@ -115,7 +116,7 @@ async def maybe_spawn_review(
         log.warning("maybe_spawn_review: could not load settings, skipping review")
         return
 
-    if not settings.auto_review.enabled:
+    if not force and not settings.auto_review.enabled:
         return
 
     cwd_path = Path(cwd).resolve()
