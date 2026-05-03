@@ -40,6 +40,7 @@ from openharness.config.paths import (
 )
 from openharness.engine.stream_events import AssistantTextDelta, AssistantTurnComplete, ErrorEvent
 from openharness.swarm.worktree import WorktreeManager
+from openharness.utils.file_lock import exclusive_file_lock
 from openharness.utils.fs import atomic_write_text
 
 log = logging.getLogger(__name__)
@@ -308,6 +309,27 @@ class RepoAutopilotStore:
     @property
     def runs_dir(self) -> Path:
         return self._runs_dir
+
+    def _lock_path(self) -> Path:
+        return self._registry_path.parent / "registry.lock"
+
+    def pick_and_claim_card(self, worker_id: str) -> "RepoTaskCard | None":
+        """Atomically pick the highest-priority queued card and claim it for a worker.
+
+        This avoids the race condition between pick_next_card() and update_status()
+        by performing the read-modify-write under an exclusive file lock.
+        """
+        with exclusive_file_lock(self._lock_path()):
+            registry = self._load_registry()
+            queued = [card for card in registry.cards if card.status in {"queued", "accepted"}]
+            if not queued:
+                return None
+            chosen = sorted(queued, key=lambda card: (-card.score, card.created_at, card.title.lower()))[0]
+            chosen.status = "preparing"
+            chosen.updated_at = time.time()
+            chosen.metadata["worker_id"] = worker_id
+            self._save_registry(registry)
+            return chosen
 
     def list_cards(self, *, status: RepoTaskStatus | None = None) -> list[RepoTaskCard]:
         cards = self._load_registry().cards
@@ -698,7 +720,8 @@ class RepoAutopilotStore:
         max_turns: int | None = None,
         permission_mode: str | None = None,
     ) -> RepoRunResult:
-        card = self.pick_next_card()
+        worker_id = f"pid-{os.getpid()}-{uuid4().hex[:8]}"
+        card = self.pick_and_claim_card(worker_id)
         if card is None:
             raise ValueError("No queued autopilot cards.")
         return await self.run_card(
@@ -706,6 +729,7 @@ class RepoAutopilotStore:
             model=model,
             max_turns=max_turns,
             permission_mode=permission_mode,
+            _claimed_by=worker_id,
         )
 
     async def run_card(
@@ -715,12 +739,15 @@ class RepoAutopilotStore:
         model: str | None = None,
         max_turns: int | None = None,
         permission_mode: str | None = None,
+        _claimed_by: str | None = None,
     ) -> RepoRunResult:
         card = self.get_card(card_id)
         if card is None:
             raise ValueError(f"No autopilot card found with ID: {card_id}")
         if card.status in {"preparing", "running", "verifying", "waiting_ci", "repairing"}:
-            raise ValueError(f"Autopilot card {card.id} is already active.")
+            # Allow re-entry if we just claimed this card ourselves
+            if not (_claimed_by and card.metadata.get("worker_id") == _claimed_by):
+                raise ValueError(f"Autopilot card {card.id} is already active.")
 
         policies = self.load_policies()
         execution = dict(policies.get("autopilot", {}).get("execution", {}))

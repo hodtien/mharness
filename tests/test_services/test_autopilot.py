@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import MethodType, SimpleNamespace
 
@@ -108,6 +109,79 @@ def test_autopilot_pick_next_includes_accepted_cards(tmp_path: Path) -> None:
 
     assert chosen is not None
     assert chosen.id == card.id
+
+
+def test_pick_and_claim_returns_highest_score(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    low, _ = store.enqueue_card(source_kind="claude_code_candidate", title="Low priority", body="candidate")
+    high, _ = store.enqueue_card(source_kind="ohmo_request", title="High priority", body="urgent bug")
+    medium, _ = store.enqueue_card(source_kind="manual_idea", title="Medium priority", body="idea")
+
+    claimed = store.pick_and_claim_card("worker-1")
+
+    assert claimed is not None
+    assert claimed.id == high.id
+    assert claimed.id not in {low.id, medium.id}
+    assert claimed.status == "preparing"
+
+
+def test_pick_and_claim_skips_already_claimed(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    first, _ = store.enqueue_card(source_kind="ohmo_request", title="First", body="urgent bug")
+    second, _ = store.enqueue_card(source_kind="manual_idea", title="Second", body="idea")
+    store.update_status(first.id, status="preparing")
+
+    claimed = store.pick_and_claim_card("worker-1")
+
+    assert claimed is not None
+    assert claimed.id == second.id
+
+
+def test_pick_and_claim_sets_worker_id(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Work", body="body")
+
+    claimed = store.pick_and_claim_card("worker-1")
+
+    assert claimed is not None
+    assert claimed.id == card.id
+    assert claimed.metadata["worker_id"] == "worker-1"
+    reloaded = store.get_card(card.id)
+    assert reloaded is not None
+    assert reloaded.metadata["worker_id"] == "worker-1"
+
+
+def test_concurrent_claim_no_duplicate(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    first, _ = store.enqueue_card(source_kind="manual_idea", title="First", body="idea")
+    second, _ = store.enqueue_card(source_kind="manual_idea", title="Second", body="idea")
+
+    def claim(worker_id: str) -> str | None:
+        claimed = RepoAutopilotStore(repo).pick_and_claim_card(worker_id)
+        return claimed.id if claimed is not None else None
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        claimed_ids = list(executor.map(claim, ["worker-1", "worker-2"]))
+
+    assert sorted(claimed_id for claimed_id in claimed_ids if claimed_id is not None) == sorted(
+        [first.id, second.id]
+    )
+
+
+def test_pick_and_claim_none_when_empty(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    assert store.pick_and_claim_card("worker-1") is None
 
 
 def test_autopilot_scan_claude_code_candidates(tmp_path: Path) -> None:
