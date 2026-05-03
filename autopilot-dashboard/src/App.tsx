@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { HeroBackground } from "./components/HeroBackground";
 import { PipelineAnimation } from "./components/PipelineAnimation";
 import type { Snapshot, TaskCard, JournalEntry } from "./types";
-import { STATUS_LABELS, STATUS_COLORS, KANBAN_GROUPS } from "./types";
+import { STATUS_LABELS, STATUS_COLORS, KANBAN_GROUPS, ACTIVE_STATUSES } from "./types";
 
 /* ── Helpers ─────────────────────────────────── */
 
 function fmtAgo(ts?: number): string {
   if (!ts) return "-";
-  const delta = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  const delta = Math.max(0, Math.floor(Date.now() / 1000 - (ts || 0)));
   if (delta < 60) return `${delta}s ago`;
   if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
   if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
@@ -18,56 +18,134 @@ function fmtAgo(ts?: number): string {
 function statusBadgeClass(status: string): string {
   if (["running", "completed", "merged", "preparing"].includes(status)) return "badge-teal";
   if (["repairing"].includes(status)) return "badge-orange";
-  if (["accepted", "pr_open"].includes(status)) return "badge-violet";
-  if (["failed", "rejected"].includes(status)) return "badge-red";
+  if (["accepted", "pr_open", "code_review"].includes(status)) return "badge-violet";
+  if (["failed", "rejected", "killed"].includes(status)) return "badge-red";
   if (["verifying", "waiting_ci"].includes(status)) return "badge-blue";
   if (["superseded"].includes(status)) return "badge-amber";
   return "badge-gray";
 }
 
+/** Spinner SVG for active cards */
+function SpinnerIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ flexShrink: 0 }}
+    >
+      <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="8 20" />
+    </svg>
+  );
+}
+
+/** Pull request icon */
+function PRIcon() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ flexShrink: 0 }}
+    >
+      <path
+        d="M1 3h5M1 5h8M1 7h5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** Attempt badge */
+function AttemptBadge({ count, max }: { count: number; max: number }) {
+  if (!count) return null;
+  return (
+    <span className="attempt-badge">
+      #{count}{max ? `/${max}` : ""}
+    </span>
+  );
+}
+
 /* ── Card Component ──────────────────────────── */
 
 function CardView({ card }: { card: TaskCard }) {
-  const labels = [...(card.labels || []), card.source_kind].filter(Boolean);
-  const verification = (card.metadata?.verification_steps || [])
-    .map((step) => `${step.status} · ${step.command}`)
-    .slice(0, 2)
-    .join(" | ");
+  const isActive = ACTIVE_STATUSES.has(card.status);
+  const attempt_count = card.metadata?.attempt_count ?? 0;
+  const max_attempts = card.metadata?.max_attempts ?? 0;
+  const pr_url = card.metadata?.linked_pr_url;
+  const head_branch = card.metadata?.head_branch;
   const borderColor = STATUS_COLORS[card.status] || "#333";
 
   return (
     <article
-      className="card"
+      className={`card${isActive ? " card-active" : ""}`}
       style={{ "--card-accent": borderColor } as React.CSSProperties}
     >
       <div className="card-meta">
-        <span>{card.id}</span>
         <span className={`badge ${statusBadgeClass(card.status)}`}>
+          {isActive && <SpinnerIcon />}
           {STATUS_LABELS[card.status] || card.status}
         </span>
+        <div className="card-meta-right">
+          {pr_url && (
+            <a
+              href={pr_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="pr-link"
+              title={`Open PR: ${pr_url}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <PRIcon />
+              PR
+            </a>
+          )}
+          <AttemptBadge count={attempt_count} max={max_attempts} />
+        </div>
       </div>
+
       <h3>{card.title}</h3>
       {card.body && (
-        <p className="card-body">{card.body.slice(0, 260)}</p>
+        <p className="card-body">{card.body.slice(0, 200)}</p>
       )}
-      {labels.length > 0 && (
+
+      {/* branch + source */}
+      {(head_branch || card.source_ref || card.source_kind) && (
         <div className="card-tags">
-          {labels.map((tag, i) => (
-            <span key={i} className="tag">{tag}</span>
-          ))}
+          {head_branch && <span className="tag tag-branch">{head_branch}</span>}
+          {card.source_kind && (
+            <span className="tag">{card.source_kind}</span>
+          )}
+          {card.source_ref && (
+            <span className="tag tag-ref">{card.source_ref}</span>
+          )}
         </div>
       )}
+
       <div className="card-footer">
         <div>
           score {card.score} · updated {fmtAgo(card.updated_at)}
-          {card.source_ref ? ` · ref ${card.source_ref}` : ""}
         </div>
-        <div>{card.metadata?.last_note || "no status note yet"}</div>
-        {(verification || card.metadata?.last_ci_summary || card.metadata?.last_failure_summary || card.metadata?.human_gate_pending) && (
-          <div>
-            {verification || card.metadata?.last_ci_summary || card.metadata?.last_failure_summary ||
-              (card.metadata?.human_gate_pending ? "verification passed; human gate pending" : "")}
+        {card.metadata?.last_note && (
+          <div className="card-note" title={card.metadata.last_note}>
+            {card.metadata.last_note.length > 60
+              ? card.metadata.last_note.slice(0, 60) + "…"
+              : card.metadata.last_note}
           </div>
+        )}
+        {card.metadata?.last_ci_summary && (
+          <div className="card-ci">
+            {card.metadata.last_ci_summary}
+          </div>
+        )}
+        {card.metadata?.human_gate_pending && (
+          <div className="card-gate">⏳ verification passed; human gate pending</div>
         )}
       </div>
     </article>
@@ -76,10 +154,16 @@ function CardView({ card }: { card: TaskCard }) {
 
 /* ── Grouped Column Component ────────────────── */
 
-function GroupColumnView({ label, color, cards }: {
+function GroupColumnView({
+  label,
+  color,
+  cards,
+  showCount = true,
+}: {
   label: string;
   color: string;
   cards: TaskCard[];
+  showCount?: boolean;
 }) {
   return (
     <section className="column">
@@ -88,12 +172,14 @@ function GroupColumnView({ label, color, cards }: {
           <span className="column-dot" style={{ background: color }} />
           <h2>{label}</h2>
         </div>
-        <span className="column-count">{cards.length}</span>
+        {showCount && (
+          <span className="column-count">{cards.length}</span>
+        )}
       </div>
       <div className="cards">
         {cards.length > 0
           ? cards.map((card) => <CardView key={card.id} card={card} />)
-          : <div className="empty">No cards.</div>
+          : <div className="empty">—</div>
         }
       </div>
     </section>
@@ -113,7 +199,7 @@ function JournalView({ entries }: { entries: JournalEntry[] }) {
       </div>
       <div className="journal-list">
         {entries.length > 0
-          ? entries.slice().reverse().map((entry, i) => (
+          ? entries.slice().reverse().slice(0, 20).map((entry, i) => (
               <article key={i} className="journal-item">
                 <time>
                   {new Date(entry.timestamp * 1000)
@@ -135,19 +221,63 @@ function JournalView({ entries }: { entries: JournalEntry[] }) {
   );
 }
 
+/* ── Auto-refresh hook ────────────────────────── */
+
+function useAutoRefresh(
+  hasActive: boolean,
+  onRefresh: () => void,
+) {
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    const delay = hasActive ? 3_000 : 15_000;
+    intervalRef.current = setInterval(onRefresh, delay);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [hasActive, onRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
 /* ── Main App ────────────────────────────────── */
 
 export function App() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [filter, setFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<number>(Date.now());
 
-  useEffect(() => {
-    fetch("./snapshot.json", { cache: "no-store" })
-      .then((r) => r.json())
-      .then(setSnapshot)
-      .catch((e) => setError(String(e)));
+  const loadSnapshot = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch("./snapshot.json", { cache: "no-store" });
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      const data = await r.json();
+      setSnapshot(data);
+      setLastRefresh(Date.now());
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Initial load
+  useEffect(() => {
+    loadSnapshot();
+  }, [loadSnapshot]);
+
+  // Compute whether any active card exists
+  const hasActive = snapshot
+    ? snapshot.cards.some((c) => ACTIVE_STATUSES.has(c.status))
+    : false;
+
+  // Auto-refresh: 3 s when active, 15 s when idle
+  useAutoRefresh(hasActive, loadSnapshot);
 
   if (error) {
     return (
@@ -170,7 +300,7 @@ export function App() {
   const counts = snapshot.counts || {};
   const normalizedFilter = filter.trim().toLowerCase();
 
-  // Group cards into 4 kanban columns
+  // Group cards into kanban columns
   const groupedColumns = KANBAN_GROUPS.map((group) => {
     const allCards = group.statuses.flatMap((s) => snapshot.columns?.[s] || []);
     const cards = allCards.filter((card) => {
@@ -178,17 +308,22 @@ export function App() {
       const haystack = [
         card.id, card.title, card.body, card.source_kind, card.source_ref,
         ...(card.labels || []), ...(card.score_reasons || []),
+        card.metadata?.head_branch,
+        card.metadata?.last_note,
       ].join(" ").toLowerCase();
       return haystack.includes(normalizedFilter);
     });
     return { ...group, cards };
   });
 
-  const inProgress = (counts.preparing || 0) + (counts.running || 0) +
-    (counts.verifying || 0) + (counts.waiting_ci || 0) +
-    (counts.repairing || 0) + (counts.accepted || 0) + (counts.pr_open || 0);
-  const completed = (counts.completed || 0) + (counts.merged || 0);
-  const failed = (counts.failed || 0) + (counts.rejected || 0);
+  // Column counts for stats bar
+  const queue = (counts.queued || 0) + (counts.accepted || 0);
+  const running = (counts.preparing || 0) + (counts.running || 0) + (counts.verifying || 0);
+  const repairing = counts.repairing || 0;
+  const waiting_ci = (counts.waiting_ci || 0) + (counts.pr_open || 0);
+  const review = counts.code_review || 0;
+  const merged = (counts.merged || 0) + (counts.completed || 0);
+  const failed = (counts.failed || 0) + (counts.rejected || 0) + (counts.killed || 0) + (counts.superseded || 0);
 
   const generated = new Date((snapshot.generated_at || 0) * 1000)
     .toISOString().replace("T", " ").replace(".000Z", " UTC");
@@ -208,7 +343,7 @@ export function App() {
               <span className="accent">SELF-EVOLUTION</span>
             </h1>
             <p className="hero-sub">
-              Kanban for OpenHarness self-evolution.
+              Lifecycle-aware kanban for OpenHarness autopilot.
             </p>
             <div className="focus-box">
               <div className="focus-label">// CURRENT_FOCUS</div>
@@ -221,7 +356,15 @@ export function App() {
           </div>
           <div className="hero-side">
             <div className="hero-timestamp">
-              Generated from repo state at {generated}
+              Snapshot {generated}
+            </div>
+            <div className="hero-timestamp" style={{ marginTop: -4, fontSize: 9 }}>
+              {loading ? "↻ refreshing…" : `Last refresh ${fmtAgo(Math.floor((Date.now() - lastRefresh) / 1000))}`}
+              {hasActive && (
+                <span style={{ color: "var(--accent)", marginLeft: 8 }}>
+                  ● active
+                </span>
+              )}
             </div>
             <div className="pipeline-viz">
               <PipelineAnimation />
@@ -234,26 +377,39 @@ export function App() {
         {/* ── Stats Bar ──────────────────── */}
         <section className="stats-bar">
           <div className="stat">
-            <div className="stat-label" style={{ color: "#64748b" }}>TO DO</div>
-            <div className="stat-value">{counts.queued || 0}</div>
+            <div className="stat-label" style={{ color: "#64748b" }}>QUEUE</div>
+            <div className="stat-value">{queue}</div>
             <div className="stat-sub">queued + accepted</div>
           </div>
           <div className="stat">
-            <div className="stat-label teal">IN PROGRESS</div>
-            <div className="stat-value">{inProgress}</div>
-            <div className="stat-sub">active pipeline</div>
+            <div className="stat-label teal">RUNNING</div>
+            <div className="stat-value">{running}</div>
+            <div className="stat-sub">prep + run + verify</div>
           </div>
           <div className="stat">
-            <div className="stat-label" style={{ color: "#3b82f6" }}>IN REVIEW</div>
-            <div className="stat-value">
-              {(counts.verifying || 0) + (counts.pr_open || 0) + (counts.waiting_ci || 0)}
-            </div>
-            <div className="stat-sub">verify + PR + CI</div>
+            <div className="stat-label orange">REPAIRING</div>
+            <div className="stat-value">{repairing}</div>
+            <div className="stat-sub">active repair</div>
           </div>
           <div className="stat">
-            <div className="stat-label violet">DONE</div>
-            <div className="stat-value">{completed + failed}</div>
-            <div className="stat-sub">merged + completed + failed</div>
+            <div className="stat-label" style={{ color: "#3b82f6" }}>WAITING CI</div>
+            <div className="stat-value">{waiting_ci}</div>
+            <div className="stat-sub">ci polling</div>
+          </div>
+          <div className="stat">
+            <div className="stat-label" style={{ color: "#a855f7" }}>REVIEW</div>
+            <div className="stat-value">{review}</div>
+            <div className="stat-sub">code review</div>
+          </div>
+          <div className="stat">
+            <div className="stat-label teal">MERGED</div>
+            <div className="stat-value">{merged}</div>
+            <div className="stat-sub">merged + completed</div>
+          </div>
+          <div className="stat">
+            <div className="stat-label" style={{ color: "#ff4444" }}>FAILED</div>
+            <div className="stat-value">{failed}</div>
+            <div className="stat-sub">failed + rejected + killed</div>
           </div>
         </section>
 
@@ -261,17 +417,18 @@ export function App() {
         <section className="toolbar">
           <input
             type="search"
-            placeholder="Filter by title, body, source, label, or task id..."
+            placeholder="Filter by title, body, source, label, branch, or note…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
           <div className="hint">
-            Reads <code>snapshot.json</code> — no backend required
+            Reads <code>snapshot.json</code> — auto-refresh{" "}
+            <strong>{hasActive ? "3 s (active)" : "15 s (idle)"}</strong>
           </div>
         </section>
 
-        {/* ── Kanban Board ───────────────── */}
-        <section className="board">
+        {/* ── Kanban Board (7 columns) ────── */}
+        <section className="board board-7col">
           {groupedColumns.map((group) => (
             <GroupColumnView
               key={group.key}

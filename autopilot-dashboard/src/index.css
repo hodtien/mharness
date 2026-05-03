@@ -146,7 +146,7 @@ body {
 /* ─── Stats Bar ──────────────────────────────── */
 .stats-bar {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 1px;
   background: var(--line);
   border-radius: 6px;
@@ -241,10 +241,12 @@ body {
 /* ─── Board ──────────────────────────────────── */
 .board {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 24px;
 }
+
+.board-4col { grid-template-columns: repeat(4, 1fr); }
+.board-7col { grid-template-columns: repeat(7, minmax(180px, 1fr)); }
 
 /* ─── Column ─────────────────────────────────── */
 .column {
@@ -530,17 +532,153 @@ body {
   animation: fade-in 0.4s ease-out forwards;
 }
 
+/* ─── Active card glow ───────────────────────── */
+.card-active {
+  border-color: color-mix(in srgb, var(--card-accent, var(--accent)) 40%, transparent);
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+.card-active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at top left,
+    color-mix(in srgb, var(--card-accent, var(--accent)) 6%, transparent),
+    transparent 60%
+  );
+  pointer-events: none;
+}
+
+/* ─── Spinner inside badge ───────────────────── */
+.badge {
+  gap: 5px;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.badge svg {
+  animation: spin 1.2s linear infinite;
+}
+
+/* ─── Card meta row ──────────────────────────── */
+.card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.card-meta-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ─── Attempt badge ──────────────────────────── */
+.attempt-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  border-radius: 3px;
+  background: rgba(255, 107, 53, 0.12);
+  color: var(--accent-orange);
+  border: 1px solid rgba(255, 107, 53, 0.25);
+}
+
+/* ─── PR link ────────────────────────────────── */
+.pr-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-radius: 3px;
+  text-decoration: none;
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  transition: background 0.15s;
+}
+
+.pr-link:hover {
+  background: rgba(59, 130, 246, 0.22);
+}
+
+/* ─── Branch tag ─────────────────────────────── */
+.tag-branch {
+  background: rgba(0, 212, 170, 0.08);
+  color: var(--accent);
+  border-color: rgba(0, 212, 170, 0.2);
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.tag-ref {
+  color: #888;
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* ─── Card status note / CI summary ─────────── */
+.card-note {
+  color: #777;
+  font-size: 10px;
+  font-style: italic;
+  letter-spacing: 0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-ci {
+  color: #666;
+  font-size: 10px;
+  letter-spacing: 0.2px;
+}
+
+.card-gate {
+  color: var(--warning);
+  font-size: 10px;
+}
+
 /* ─── Responsive ─────────────────────────────── */
+@media (max-width: 1400px) {
+  .board-7col { grid-template-columns: repeat(4, minmax(180px, 1fr)); }
+  .stats-bar { grid-template-columns: repeat(4, 1fr); }
+}
+
 @media (max-width: 1100px) {
   .hero-content { grid-template-columns: 1fr; }
-  .stats-bar { grid-template-columns: repeat(2, 1fr); }
-  .board { grid-template-columns: repeat(2, 1fr); }
+  .stats-bar { grid-template-columns: repeat(3, 1fr); }
+  .board-7col { grid-template-columns: repeat(3, minmax(160px, 1fr)); }
+  .board-4col { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 760px) {
   .shell { padding: 0 12px 36px; }
   .hero { padding: 40px 12px 28px; margin: 0 -12px; }
-  .board { grid-template-columns: 1fr; }
-  .stats-bar { grid-template-columns: 1fr 1fr; }
+  .board-7col { grid-template-columns: repeat(2, 1fr); }
+  .board-4col { grid-template-columns: 1fr; }
+  .stats-bar { grid-template-columns: repeat(2, 1fr); }
   .toolbar input { min-width: 100%; }
 }
