@@ -10,7 +10,7 @@ from pathlib import Path
 from types import MethodType, SimpleNamespace
 
 from openharness.autopilot import RepoAutopilotStore, RepoVerificationStep
-from openharness.autopilot.service import _DEFAULT_VERIFICATION_POLICY
+from openharness.autopilot.service import _DEFAULT_AUTOPILOT_POLICY, _DEFAULT_VERIFICATION_POLICY
 from openharness.config.paths import (
     get_project_active_repo_context_path,
     get_project_autopilot_policy_path,
@@ -202,6 +202,24 @@ def test_autopilot_scan_claude_code_candidates(tmp_path: Path) -> None:
     titles = {card.title for card in cards}
     assert "Evaluate claude-code command: compact" in titles
     assert "Evaluate claude-code agent: reviewer" in titles
+
+
+def test_default_max_parallel_runs_is_2() -> None:
+    assert _DEFAULT_AUTOPILOT_POLICY["execution"]["max_parallel_runs"] == 2
+
+
+def test_policy_round_trip(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    policy_path = get_project_autopilot_policy_path(repo)
+    original = policy_path.read_text(encoding="utf-8")
+    updated = original.replace("max_parallel_runs: 2", "max_parallel_runs: 3")
+    policy_path.write_text(updated, encoding="utf-8")
+
+    loaded = store.load_policies()["autopilot"]
+    assert loaded["execution"]["max_parallel_runs"] == 3
 
 
 def test_default_verification_policy_uses_repeatable_local_tsc_command() -> None:

@@ -107,6 +107,7 @@ _DEFAULT_AUTOPILOT_POLICY = {
         "implement_agent": "",
         "review_agent": "",
         "max_turns": 12,
+        "max_parallel_runs": 2,
         "permission_mode": "full_auto",
         "host_mode": "self_hosted",
         "use_worktree": True,

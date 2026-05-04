@@ -1265,6 +1265,7 @@ decision:
   default_human_gate: true
 execution:
   default_model: oc-medium
+  max_parallel_runs: 2
 github:
   issue_comment_style: bilingual
 """
@@ -1302,7 +1303,7 @@ def test_pipeline_policy_get_returns_yaml_content_and_parsed_json(tmp_path) -> N
     assert data["parsed"] == {
         "intake": {"mode": "unified_queue"},
         "decision": {"default_human_gate": True},
-        "execution": {"default_model": "oc-medium"},
+        "execution": {"default_model": "oc-medium", "max_parallel_runs": 2},
         "github": {"issue_comment_style": "bilingual"},
         "repair": {"max_rounds": 2},
     }
@@ -1332,7 +1333,7 @@ def test_pipeline_policy_patch_validates_and_writes_policy(tmp_path) -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["parsed"]["execution"] == {"default_model": "oc-medium"}
+    assert response.json()["parsed"]["execution"] == {"default_model": "oc-medium", "max_parallel_runs": 2}
     assert (
         tmp_path / ".openharness" / "autopilot" / "autopilot_policy.yaml"
     ).read_text(encoding="utf-8") == _policy_yaml()
@@ -1364,3 +1365,39 @@ def test_pipeline_policy_patch_requires_top_level_keys(tmp_path) -> None:
         "missing": ["repair"],
         "required": ["intake", "decision", "execution", "github", "repair"],
     }
+
+
+def test_pipeline_policy_patch_rejects_max_parallel_runs_too_low(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/pipeline/policy",
+        headers={"Authorization": "Bearer test-token"},
+        json={"yaml_content": _policy_yaml().replace("max_parallel_runs: 2", "max_parallel_runs: 0")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["error"] == "invalid_max_parallel_runs"
+
+
+def test_pipeline_policy_patch_rejects_max_parallel_runs_too_high(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/pipeline/policy",
+        headers={"Authorization": "Bearer test-token"},
+        json={"yaml_content": _policy_yaml().replace("max_parallel_runs: 2", "max_parallel_runs: 11")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["error"] == "invalid_max_parallel_runs"
+
+
+def test_pipeline_policy_patch_rejects_max_parallel_runs_non_integer(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/pipeline/policy",
+        headers={"Authorization": "Bearer test-token"},
+        json={"yaml_content": _policy_yaml().replace("max_parallel_runs: 2", "max_parallel_runs: 'three'")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["error"] == "invalid_max_parallel_runs"
