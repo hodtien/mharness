@@ -346,11 +346,17 @@ async def run_next_card(state: WebUIState = Depends(get_state)) -> dict:
             status_code=status.HTTP_409_CONFLICT,
             detail={"error": "no_queued_cards", "message": "No queued autopilot cards."},
         )
-    active_statuses = {"preparing", "running", "verifying", "repairing", "waiting_ci", "pr_open"}
-    if any(c.status in active_statuses for c in cards):
+    store = RepoAutopilotStore(state.cwd)
+    policies = store.load_policies()
+    active_count = store.count_active_cards()
+    max_parallel = int(policies.get("autopilot", {}).get("execution", {}).get("max_parallel_runs", 0))
+    if not store.has_capacity(policies):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"error": "already_running", "message": "An autopilot task is already active."},
+            detail={
+                "error": "capacity_reached",
+                "message": f"Maximum parallel runs ({max_parallel}) reached. {active_count} tasks currently active.",
+            },
         )
     oh_executable = str(Path(sys.executable).with_name("oh"))
     command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"

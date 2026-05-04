@@ -186,6 +186,45 @@ def test_pick_and_claim_none_when_empty(tmp_path: Path) -> None:
     assert store.pick_and_claim_card("worker-1") is None
 
 
+def test_count_active_cards(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    first, _ = store.enqueue_card(source_kind="manual_idea", title="First", body="body")
+    second, _ = store.enqueue_card(source_kind="manual_idea", title="Second", body="body")
+    store.enqueue_card(source_kind="manual_idea", title="Third", body="body")
+    store.update_status(first.id, status="running")
+    store.update_status(second.id, status="verifying")
+
+    assert store.count_active_cards() == 2
+
+
+def test_has_capacity_true(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="First", body="body")
+    store.update_status(card.id, status="running")
+    policies = store.load_policies()
+    policies["autopilot"]["execution"]["max_parallel_runs"] = 2
+
+    assert store.has_capacity(policies) is True
+
+
+def test_has_capacity_false(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    first, _ = store.enqueue_card(source_kind="manual_idea", title="First", body="body")
+    second, _ = store.enqueue_card(source_kind="manual_idea", title="Second", body="body")
+    store.update_status(first.id, status="running")
+    store.update_status(second.id, status="verifying")
+    policies = store.load_policies()
+    policies["autopilot"]["execution"]["max_parallel_runs"] = 2
+
+    assert store.has_capacity(policies) is False
+
+
 def test_autopilot_scan_claude_code_candidates(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

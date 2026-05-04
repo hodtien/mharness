@@ -413,6 +413,21 @@ class RepoAutopilotStore:
             ),
         )
 
+    _ACTIVE_STATUSES = frozenset({"preparing", "running", "verifying", "repairing", "waiting_ci", "pr_open"})
+
+    def count_active_cards(self) -> int:
+        """Return the number of cards currently in an active execution state."""
+        return sum(1 for card in self._load_registry().cards if card.status in self._ACTIVE_STATUSES)
+
+    def has_capacity(self, policies: dict[str, Any]) -> bool:
+        """Return True when fewer active cards are running than max_parallel_runs allows."""
+        max_parallel = int(
+            policies.get("autopilot", {})
+            .get("execution", {})
+            .get("max_parallel_runs", _DEFAULT_AUTOPILOT_POLICY["execution"]["max_parallel_runs"])
+        )
+        return self.count_active_cards() < max_parallel
+
     def get_card(self, card_id: str) -> RepoTaskCard | None:
         for card in self._load_registry().cards:
             if card.id == card_id:
@@ -812,6 +827,9 @@ class RepoAutopilotStore:
         max_turns: int | None = None,
         permission_mode: str | None = None,
     ) -> RepoRunResult:
+        policies = self.load_policies()
+        if not self.has_capacity(policies):
+            raise ValueError("Maximum parallel runs reached.")
         worker_id = f"pid-{os.getpid()}-{uuid4().hex[:8]}"
         card = self.pick_and_claim_card(worker_id)
         if card is None:
@@ -823,7 +841,7 @@ class RepoAutopilotStore:
             permission_mode=permission_mode,
             _claimed_by=worker_id,
         )
-
+        
     async def run_card(
         self,
         card_id: str,
@@ -1563,8 +1581,9 @@ class RepoAutopilotStore:
     ) -> RepoRunResult | None:
         self.scan_all_sources(issue_limit=issue_limit, pr_limit=pr_limit)
         self._recover_stuck_cards()
-        if any(card.status in {"preparing", "running", "verifying", "waiting_ci", "repairing"} for card in self.list_cards()):
-            self.append_journal(kind="tick_skip", summary="Skipped run-next because another card is active")
+        policies = self.load_policies()
+        if not self.has_capacity(policies):
+            self.append_journal(kind="tick_skip", summary="Skipped run-next because maximum parallel runs capacity was reached")
             return None
         if self.pick_next_card() is None:
             self.append_journal(kind="tick_idle", summary="Tick completed with no queued work")
