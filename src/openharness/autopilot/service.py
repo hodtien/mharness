@@ -340,6 +340,8 @@ class RepoAutopilotStore:
         self._main_checkout_lock_path = self._registry_path.parent / "main-checkout.lock"
         self._repo_full_name: str | None = None
         self._ensure_layout()
+        self._startup_cleanup_task: asyncio.Task[list[str]] | None = None
+        self._start_startup_cleanup()
 
     @property
     def registry_path(self) -> Path:
@@ -894,536 +896,457 @@ class RepoAutopilotStore:
         worktree_manager = WorktreeManager()
         worktree_info = None
         working_cwd = self._cwd
-        if use_worktree:
-            worktree_info = await worktree_manager.create_worktree(
-                self._cwd,
-                self._worktree_slug(card),
-                branch=head_branch,
-            )
-            working_cwd = worktree_info.path
-        existing_attempts = int(card.metadata.get("attempt_count", 0) or 0)
-        self.update_status(
-            card.id,
-            status="preparing",
-            note="preparing isolated worktree" if use_worktree else "preparing local execution",
-            metadata_updates={
-                "run_started_at": time.time(),
-                "execution_model": effective_model or "",
-                "max_attempts": max_attempts,
-                "worktree_slug": self._worktree_slug(card),
-                "worktree_path": str(working_cwd),
-                "head_branch": head_branch,
-                "base_branch": base_branch,
-                "linked_issue_numbers": [issue_number] if issue_number is not None else [],
-                "linked_pr_number": linked_pr_number,
-            },
-        )
-
-        if issue_number is not None and existing_attempts == 0:
-            self._comment_on_issue(issue_number, self._comment_started(card, existing_attempts + 1))
-
         current_run_report = self._runs_dir / f"{card.id}-run.md"
         current_verification_report = self._runs_dir / f"{card.id}-verification.md"
-        prior_summary = _safe_text(card.metadata.get("assistant_summary_preview"))
-        prior_failure_stage = _safe_text(card.metadata.get("last_failure_stage"))
-        prior_failure_summary = _safe_text(card.metadata.get("last_failure_summary"))
-
-        stream_writer = get_or_create_writer(card.id, self._runs_dir)
+        existing_attempts = int(card.metadata.get("attempt_count", 0) or 0)
         try:
-            for attempt_count in range(existing_attempts + 1, max_attempts + 1):
-                attempt_run_report = self._runs_dir / f"{card.id}-attempt-{attempt_count:02d}-run.md"
-                attempt_verification_report = self._runs_dir / f"{card.id}-attempt-{attempt_count:02d}-verification.md"
-                is_first_attempt = attempt_count == 1 and existing_attempts == 0
-                if use_worktree:
-                    try:
-                        self._sync_worktree_to_base(
-                            working_cwd,
-                            base_branch=base_branch,
-                            head_branch=head_branch,
-                            reset=is_first_attempt,
+            if use_worktree:
+                worktree_info = await worktree_manager.create_worktree(
+                    self._cwd,
+                    self._worktree_slug(card),
+                    branch=head_branch,
+                )
+                working_cwd = worktree_info.path
+            self.update_status(
+                card.id,
+                status="preparing",
+                note="preparing isolated worktree" if use_worktree else "preparing local execution",
+                metadata_updates={
+                    "run_started_at": time.time(),
+                    "execution_model": effective_model or "",
+                    "max_attempts": max_attempts,
+                    "worktree_slug": self._worktree_slug(card),
+                    "worktree_path": str(working_cwd),
+                    "head_branch": head_branch,
+                    "base_branch": base_branch,
+                    "linked_issue_numbers": [issue_number] if issue_number is not None else [],
+                    "linked_pr_number": linked_pr_number,
+                },
+            )
+
+            if issue_number is not None and existing_attempts == 0:
+                self._comment_on_issue(issue_number, self._comment_started(card, existing_attempts + 1))
+
+            prior_summary = _safe_text(card.metadata.get("assistant_summary_preview"))
+            prior_failure_stage = _safe_text(card.metadata.get("last_failure_stage"))
+            prior_failure_summary = _safe_text(card.metadata.get("last_failure_summary"))
+            stream_writer = get_or_create_writer(card.id, self._runs_dir)
+            try:
+                for attempt_count in range(existing_attempts + 1, max_attempts + 1):
+                    attempt_run_report = self._runs_dir / f"{card.id}-attempt-{attempt_count:02d}-run.md"
+                    attempt_verification_report = self._runs_dir / f"{card.id}-attempt-{attempt_count:02d}-verification.md"
+                    is_first_attempt = attempt_count == 1 and existing_attempts == 0
+                    if use_worktree:
+                        try:
+                            self._sync_worktree_to_base(
+                                working_cwd,
+                                base_branch=base_branch,
+                                head_branch=head_branch,
+                                reset=is_first_attempt,
+                            )
+                        except Exception as exc:
+                            summary = f"Failed to prepare worktree branch: {exc}"
+                            self.update_status(
+                                card.id,
+                                status="failed",
+                                note=summary,
+                                metadata_updates={"last_failure_stage": "git_prepare_failed", "last_failure_summary": summary},
+                            )
+                            self.append_journal(kind="run_failed", summary=summary, task_id=card.id)
+                            return RepoRunResult(
+                                card_id=card.id,
+                                status="failed",
+                                run_report_path=str(current_run_report),
+                                verification_report_path=str(current_verification_report),
+                                attempt_count=attempt_count,
+                                worktree_path=str(working_cwd),
+                            )
+
+                    self.update_status(
+                        card.id,
+                        status="repairing" if attempt_count > 1 else "running",
+                        note="repairing failed run" if attempt_count > 1 else "autopilot execution started",
+                        metadata_updates={"attempt_count": attempt_count},
+                    )
+                    prompt = self._prepare_repair_prompt(
+                        card,
+                        policies,
+                        attempt_count=attempt_count,
+                        prior_summary=prior_summary,
+                        failure_stage=prior_failure_stage,
+                        failure_summary=prior_failure_summary,
+                    )
+                    resume_msgs: list[Any] | None = None
+                    resume_requested = bool(card.metadata.get("resume_requested"))
+                    if resume_requested:
+                        ckpt = load_latest_checkpoint(self._runs_dir, card.id)
+                        _resume_ttl_hours = float(
+                            (policies.get("autopilot", {}).get("execution", {}) or {}).get(
+                                "resume_ttl_hours", 24
+                            )
                         )
+                        _resume_ttl_secs = _resume_ttl_hours * 3600
+                        if (
+                            ckpt is not None
+                            and ckpt.has_pending_continuation
+                            and ckpt.phase == "implement"
+                            and (time.time() - ckpt.saved_at) < _resume_ttl_secs
+                        ):
+                            resume_msgs = restore_messages(ckpt)
+                            stream_writer.emit(
+                                "resume_started",
+                                {"phase": ckpt.phase, "attempt": attempt_count, "saved_at": ckpt.saved_at},
+                            )
+                    stream_writer.emit(
+                        "phase_start",
+                        {"phase": "implement", "attempt": attempt_count, "resumed": resume_msgs is not None},
+                    )
+                    try:
+                        assistant_summary = await self._run_agent_prompt(
+                            prompt,
+                            model=effective_model,
+                            max_turns=effective_max_turns,
+                            permission_mode=effective_permission_mode,
+                            cwd=working_cwd,
+                            stream=stream_writer,
+                            phase="implement",
+                            checkpoint_card_id=card.id,
+                            checkpoint_phase="implement",
+                            checkpoint_attempt=attempt_count,
+                            resume_messages=resume_msgs,
+                        )
+                        if resume_requested:
+                            self.update_status(
+                                card.id,
+                                status=card.status,
+                                metadata_updates={
+                                    "resume_requested": False,
+                                    "resume_available": False,
+                                    "resume_phase": "",
+                                },
+                            )
                     except Exception as exc:
-                        summary = f"Failed to prepare worktree branch: {exc}"
+                        stream_writer.emit("phase_end", {"phase": "implement", "attempt": attempt_count, "ok": False})
+                        import traceback as _tb
+                        tb_text = _tb.format_exc()
+                        failure_text = self._render_run_report(
+                            card,
+                            agent_summary=f"Autopilot execution failed: {exc}\n\nTraceback:\n```\n{tb_text}\n```",
+                            verification_steps=[],
+                            verification_status="not_started",
+                        )
+                        for path in (attempt_run_report, current_run_report):
+                            atomic_write_text(path, failure_text)
+                        summary = f"agent execution failed: {exc}"
+                        ckpt_after_fail = load_latest_checkpoint(self._runs_dir, card.id)
+                        resume_meta: dict[str, Any] = {
+                            "execution_error": str(exc),
+                            "last_failure_stage": "agent_runtime_error",
+                            "last_failure_summary": summary,
+                        }
+                        if ckpt_after_fail and ckpt_after_fail.has_pending_continuation:
+                            resume_meta["resume_available"] = True
+                            resume_meta["resume_phase"] = ckpt_after_fail.phase
                         self.update_status(
                             card.id,
                             status="failed",
                             note=summary,
-                            metadata_updates={"last_failure_stage": "git_prepare_failed", "last_failure_summary": summary},
+                            metadata_updates=resume_meta,
                         )
-                        self.append_journal(kind="run_failed", summary=summary, task_id=card.id)
+                        self.append_journal(
+                            kind="run_failed",
+                            summary=f"{card.title}: agent execution failed",
+                            task_id=card.id,
+                            metadata={"error": str(exc), "attempt_count": attempt_count},
+                        )
+                        if issue_number is not None:
+                            self._comment_on_issue(issue_number, self._comment_terminal_failure(summary))
                         return RepoRunResult(
                             card_id=card.id,
                             status="failed",
+                            assistant_summary=failure_text.strip(),
                             run_report_path=str(current_run_report),
                             verification_report_path=str(current_verification_report),
+                            verification_steps=[],
                             attempt_count=attempt_count,
                             worktree_path=str(working_cwd),
                         )
 
-                self.update_status(
-                    card.id,
-                    status="repairing" if attempt_count > 1 else "running",
-                    note="repairing failed run" if attempt_count > 1 else "autopilot execution started",
-                    metadata_updates={"attempt_count": attempt_count},
-                )
-                prompt = self._prepare_repair_prompt(
-                    card,
-                    policies,
-                    attempt_count=attempt_count,
-                    prior_summary=prior_summary,
-                    failure_stage=prior_failure_stage,
-                    failure_summary=prior_failure_summary,
-                )
-                resume_msgs: list[Any] | None = None
-                resume_requested = bool(card.metadata.get("resume_requested"))
-                if resume_requested:
-                    ckpt = load_latest_checkpoint(self._runs_dir, card.id)
-                    _resume_ttl_hours = float(
-                        (policies.get("autopilot", {}).get("execution", {}) or {}).get(
-                            "resume_ttl_hours", 24
-                        )
-                    )
-                    _resume_ttl_secs = _resume_ttl_hours * 3600
-                    if (
-                        ckpt is not None
-                        and ckpt.has_pending_continuation
-                        and ckpt.phase == "implement"
-                        and (time.time() - ckpt.saved_at) < _resume_ttl_secs
-                    ):
-                        resume_msgs = restore_messages(ckpt)
-                        stream_writer.emit(
-                            "resume_started",
-                            {"phase": ckpt.phase, "attempt": attempt_count, "saved_at": ckpt.saved_at},
-                        )
-                stream_writer.emit(
-                    "phase_start",
-                    {"phase": "implement", "attempt": attempt_count, "resumed": resume_msgs is not None},
-                )
-                try:
-                    assistant_summary = await self._run_agent_prompt(
-                        prompt,
-                        model=effective_model,
-                        max_turns=effective_max_turns,
-                        permission_mode=effective_permission_mode,
-                        cwd=working_cwd,
-                        stream=stream_writer,
-                        phase="implement",
-                        checkpoint_card_id=card.id,
-                        checkpoint_phase="implement",
-                        checkpoint_attempt=attempt_count,
-                        resume_messages=resume_msgs,
-                    )
-                    if resume_requested:
-                        self.update_status(
-                            card.id,
-                            status=card.status,
-                            metadata_updates={
-                                "resume_requested": False,
-                                "resume_available": False,
-                                "resume_phase": "",
-                            },
-                        )
-                except Exception as exc:
-                    stream_writer.emit("phase_end", {"phase": "implement", "attempt": attempt_count, "ok": False})
-                    import traceback as _tb
-                    tb_text = _tb.format_exc()
-                    failure_text = self._render_run_report(
+                    stream_writer.emit("phase_end", {"phase": "implement", "attempt": attempt_count, "ok": True})
+
+                    pending_report = self._render_run_report(
                         card,
-                        agent_summary=f"Autopilot execution failed: {exc}\n\nTraceback:\n```\n{tb_text}\n```",
+                        agent_summary=assistant_summary,
                         verification_steps=[],
-                        verification_status="not_started",
+                        verification_status="pending",
                     )
                     for path in (attempt_run_report, current_run_report):
-                        atomic_write_text(path, failure_text)
-                    summary = f"agent execution failed: {exc}"
-                    ckpt_after_fail = load_latest_checkpoint(self._runs_dir, card.id)
-                    resume_meta: dict[str, Any] = {
-                        "execution_error": str(exc),
-                        "last_failure_stage": "agent_runtime_error",
-                        "last_failure_summary": summary,
-                    }
-                    if ckpt_after_fail and ckpt_after_fail.has_pending_continuation:
-                        resume_meta["resume_available"] = True
-                        resume_meta["resume_phase"] = ckpt_after_fail.phase
-                    self.update_status(
-                        card.id,
-                        status="failed",
-                        note=summary,
-                        metadata_updates=resume_meta,
-                    )
+                        atomic_write_text(path, pending_report)
                     self.append_journal(
-                        kind="run_failed",
-                        summary=f"{card.title}: agent execution failed",
+                        kind="run_finished",
+                        summary=f"Agent run finished for {card.title}",
                         task_id=card.id,
-                        metadata={"error": str(exc), "attempt_count": attempt_count},
+                        metadata={"run_report_path": str(attempt_run_report), "attempt_count": attempt_count},
                     )
-                    if issue_number is not None:
-                        self._comment_on_issue(issue_number, self._comment_terminal_failure(summary))
-                    return RepoRunResult(
-                        card_id=card.id,
-                        status="failed",
-                        assistant_summary=failure_text.strip(),
-                        run_report_path=str(current_run_report),
-                        verification_report_path=str(current_verification_report),
-                        verification_steps=[],
-                        attempt_count=attempt_count,
-                        worktree_path=str(working_cwd),
-                    )
-
-                stream_writer.emit("phase_end", {"phase": "implement", "attempt": attempt_count, "ok": True})
-
-                pending_report = self._render_run_report(
-                    card,
-                    agent_summary=assistant_summary,
-                    verification_steps=[],
-                    verification_status="pending",
-                )
-                for path in (attempt_run_report, current_run_report):
-                    atomic_write_text(path, pending_report)
-                self.append_journal(
-                    kind="run_finished",
-                    summary=f"Agent run finished for {card.title}",
-                    task_id=card.id,
-                    metadata={"run_report_path": str(attempt_run_report), "attempt_count": attempt_count},
-                )
-
-                self.update_status(
-                    card.id,
-                    status="verifying",
-                    note="running verification gates",
-                    metadata_updates={"assistant_summary_preview": _shorten(assistant_summary, limit=300)},
-                )
-                stream_writer.emit("phase_start", {"phase": "verify", "attempt": attempt_count})
-                verification_steps = self._run_verification_steps(policies, cwd=working_cwd)
-                review_cfg = (policies.get("verification") or {}).get("code_review") or {}
-                if review_cfg.get("enabled", True):
-                    stream_writer.emit("phase_start", {"phase": "local_review", "attempt": attempt_count})
-                    review_step = await self._run_code_review_step(
-                        card,
-                        cwd=working_cwd,
-                        base_branch=base_branch,
-                        policies=policies,
-                        model=effective_review_model,
-                        stream=stream_writer,
-                        checkpoint_attempt=attempt_count,
-                    )
-                    verification_steps.append(review_step)
-                    stream_writer.emit("phase_end", {"phase": "local_review", "attempt": attempt_count, "ok": review_step.status not in {"failed", "error"}})
-                stream_writer.emit("phase_end", {"phase": "verify", "attempt": attempt_count, "ok": not any(s.status in {"failed", "error"} for s in verification_steps)})
-                verification_text = self._render_verification_report(card, verification_steps)
-                for path in (attempt_verification_report, current_verification_report):
-                    atomic_write_text(path, verification_text)
-
-                failing = [step for step in verification_steps if step.status in {"failed", "error"}]
-                final_local_report = self._render_run_report(
-                    card,
-                    agent_summary=assistant_summary,
-                    verification_steps=verification_steps,
-                    verification_status="failed" if failing else "passed",
-                )
-                for path in (attempt_run_report, current_run_report):
-                    atomic_write_text(path, final_local_report)
-                prior_summary = assistant_summary
-
-                if failing:
-                    summary = "; ".join(f"{step.command} rc={step.returncode}" for step in failing[:3])
-                    metadata_updates = {
-                        "verification_failed": True,
-                        "verification_steps": [step.model_dump(mode="json") for step in verification_steps],
-                        "last_failure_stage": "local_verification_failed",
-                        "last_failure_summary": summary,
-                    }
-                    if attempt_count < max_attempts:
-                        self.update_status(
-                            card.id,
-                            status="repairing",
-                            note="local verification failed; retrying",
-                            metadata_updates=metadata_updates,
-                        )
-                        self.append_journal(
-                            kind="verification_failed",
-                            summary=f"{card.title}: local verification failed, retrying",
-                            task_id=card.id,
-                            metadata={"attempt_count": attempt_count},
-                        )
-                        if issue_number is not None:
-                            self._comment_on_issue(issue_number, self._comment_local_failed(attempt_count, summary))
-                        prior_failure_stage = "local_verification_failed"
-                        prior_failure_summary = summary
-                        continue
 
                     self.update_status(
                         card.id,
-                        status="failed",
-                        note=f"{len(failing)} verification gate(s) failed",
-                        metadata_updates=metadata_updates,
+                        status="verifying",
+                        note="running verification gates",
+                        metadata_updates={"assistant_summary_preview": _shorten(assistant_summary, limit=300)},
                     )
-                    self.append_journal(
-                        kind="verification_failed",
-                        summary=f"{card.title}: {len(failing)} verification gate(s) failed",
-                        task_id=card.id,
-                    )
-                    if issue_number is not None:
-                        self._comment_on_issue(issue_number, self._comment_terminal_failure(summary))
-                    return RepoRunResult(
-                        card_id=card.id,
-                        status="failed",
-                        assistant_summary=assistant_summary,
-                        run_report_path=str(current_run_report),
-                        verification_report_path=str(current_verification_report),
-                        verification_steps=verification_steps,
-                        attempt_count=attempt_count,
-                        worktree_path=str(working_cwd),
-                    )
-
-                if not self._is_git_repo(working_cwd):
-                    self.update_status(
-                        card.id,
-                        status="completed",
-                        note="local verification passed; repository is not a git repo so GitHub automation was skipped",
-                        metadata_updates={
-                            "verification_failed": False,
-                            "verification_steps": [step.model_dump(mode="json") for step in verification_steps],
-                            "human_gate_pending": True,
-                        },
-                    )
-                    return RepoRunResult(
-                        card_id=card.id,
-                        status="completed",
-                        assistant_summary=assistant_summary,
-                        run_report_path=str(current_run_report),
-                        verification_report_path=str(current_verification_report),
-                        verification_steps=verification_steps,
-                        attempt_count=attempt_count,
-                        worktree_path=str(working_cwd),
-                    )
-
-                commit_created = self._git_commit_all(
-                    working_cwd,
-                    f"autopilot({card.id}): {card.title}",
-                )
-                branch_has_progress = commit_created or self._git_branch_has_progress(
-                    working_cwd,
-                    base_branch=base_branch,
-                )
-                if not branch_has_progress:
-                    no_changes_summary = "Agent produced no code changes to commit."
-                    if attempt_count < max_attempts:
-                        self.update_status(
-                            card.id,
-                            status="repairing",
-                            note="agent produced no changes; retrying",
-                            metadata_updates={
-                                "last_failure_stage": "no_changes",
-                                "last_failure_summary": no_changes_summary,
-                            },
+                    stream_writer.emit("phase_start", {"phase": "verify", "attempt": attempt_count})
+                    verification_steps = self._run_verification_steps(policies, cwd=working_cwd)
+                    review_cfg = (policies.get("verification") or {}).get("code_review") or {}
+                    if review_cfg.get("enabled", True):
+                        stream_writer.emit("phase_start", {"phase": "local_review", "attempt": attempt_count})
+                        review_step = await self._run_code_review_step(
+                            card,
+                            cwd=working_cwd,
+                            base_branch=base_branch,
+                            policies=policies,
+                            model=effective_review_model,
+                            stream=stream_writer,
+                            checkpoint_attempt=attempt_count,
                         )
-                        prior_failure_stage = "no_changes"
-                        prior_failure_summary = no_changes_summary
-                        continue
-                    self.update_status(
-                        card.id,
-                        status="failed",
-                        note=no_changes_summary,
-                        metadata_updates={
-                            "last_failure_stage": "no_changes",
-                            "last_failure_summary": no_changes_summary,
-                        },
-                    )
-                    return RepoRunResult(
-                        card_id=card.id,
-                        status="failed",
-                        assistant_summary=assistant_summary,
-                        run_report_path=str(current_run_report),
-                        verification_report_path=str(current_verification_report),
-                        verification_steps=verification_steps,
-                        attempt_count=attempt_count,
-                        worktree_path=str(working_cwd),
-                    )
-                if not commit_created:
-                    self.append_journal(
-                        kind="existing_progress_detected",
-                        summary=f"{card.title}: reusing existing local branch progress",
-                        task_id=card.id,
-                        metadata={"attempt_count": attempt_count, "head_branch": head_branch},
-                    )
-
-                try:
-                    self._git_push_branch(working_cwd, head_branch)
-                    pr_info = self._upsert_pull_request(
-                        card,
-                        head_branch=head_branch,
-                        base_branch=base_branch,
-                        run_report_path=current_run_report,
-                        verification_report_path=current_verification_report,
-                    )
-                except Exception as exc:
-                    summary = f"Failed to push branch or upsert PR: {exc}"
-                    self.update_status(
-                        card.id,
-                        status="failed",
-                        note=summary,
-                        metadata_updates={"last_failure_stage": "github_pr_open_failed", "last_failure_summary": summary},
-                    )
-                    if issue_number is not None:
-                        self._comment_on_issue(issue_number, self._comment_terminal_failure(summary))
-                    return RepoRunResult(
-                        card_id=card.id,
-                        status="failed",
-                        assistant_summary=assistant_summary,
-                        run_report_path=str(current_run_report),
-                        verification_report_path=str(current_verification_report),
-                        verification_steps=verification_steps,
-                        attempt_count=attempt_count,
-                        worktree_path=str(worktree_info.path),
-                    )
-
-                linked_pr_number = int(pr_info.get("number"))
-                pr_url = _safe_text(pr_info.get("url"))
-                self.update_status(
-                    card.id,
-                    status="waiting_ci",
-                    note=f"waiting for remote CI on PR #{linked_pr_number}",
-                    metadata_updates={
-                        "linked_pr_number": linked_pr_number,
-                        "linked_pr_url": pr_url,
-                        "linked_issue_numbers": [issue_number] if issue_number is not None else [],
-                        "autopilot_managed": True,
-                        "verification_failed": False,
-                        "verification_steps": [step.model_dump(mode="json") for step in verification_steps],
-                    },
-                )
-                self._comment_on_pr(linked_pr_number, self._comment_pr_opened(linked_pr_number, pr_url))
-
-                ci_state, ci_summary, pr_snapshot, checks = await self._wait_for_pr_ci(linked_pr_number, policies)
-                self.update_status(
-                    card.id,
-                    status="waiting_ci" if ci_state == "pending" else "waiting_ci",
-                    note=f"remote CI status: {ci_state}",
-                    metadata_updates={
-                        "last_ci_conclusion": ci_state,
-                        "last_ci_summary": ci_summary,
-                        "last_ci_checks": checks,
-                        "linked_pr_number": linked_pr_number,
-                        "linked_pr_url": _safe_text(pr_snapshot.get("url")) or pr_url,
-                    },
-                )
-                if ci_state == "failed":
-                    if attempt_count < max_attempts:
-                        self.update_status(
-                            card.id,
-                            status="repairing",
-                            note="remote CI failed; retrying",
-                            metadata_updates={
-                                "last_failure_stage": "remote_ci_failed",
-                                "last_failure_summary": ci_summary,
-                            },
-                        )
-                        self.append_journal(
-                            kind="ci_failed_retry",
-                            summary=f"{card.title}: remote CI failed, retrying",
-                            task_id=card.id,
-                            metadata={"pr_number": linked_pr_number, "attempt_count": attempt_count},
-                        )
-                        self._comment_on_pr(linked_pr_number, self._comment_ci_failed(attempt_count, ci_summary))
-                        prior_failure_stage = "remote_ci_failed"
-                        prior_failure_summary = ci_summary
-                        continue
-
-                    self.update_status(
-                        card.id,
-                        status="failed",
-                        note=f"remote CI failed: {ci_summary}",
-                        metadata_updates={
-                            "last_failure_stage": "remote_ci_failed",
-                            "last_failure_summary": ci_summary,
-                        },
-                    )
-                    self._comment_on_pr(linked_pr_number, self._comment_terminal_failure(ci_summary))
-                    if issue_number is not None:
-                        self._comment_on_issue(issue_number, self._comment_terminal_failure(ci_summary))
-                    return RepoRunResult(
-                        card_id=card.id,
-                        status="failed",
-                        assistant_summary=assistant_summary,
-                        run_report_path=str(current_run_report),
-                        verification_report_path=str(current_verification_report),
-                        verification_steps=verification_steps,
-                        attempt_count=attempt_count,
-                        worktree_path=str(working_cwd),
-                        pr_number=linked_pr_number,
-                        pr_url=pr_url,
-                    )
-
-                if self._automerge_eligible(pr_snapshot, policies):
-                    remote_review_step = await self._run_remote_code_review_step(
-                        card,
-                        linked_pr_number,
-                        policies=policies,
-                        model=effective_review_model,
-                        base_branch=base_branch,
-                        stream=stream_writer,
-                        checkpoint_attempt=attempt_count,
-                    )
-                    verification_steps.append(remote_review_step)
+                        verification_steps.append(review_step)
+                        stream_writer.emit("phase_end", {"phase": "local_review", "attempt": attempt_count, "ok": review_step.status not in {"failed", "error"}})
+                    stream_writer.emit("phase_end", {"phase": "verify", "attempt": attempt_count, "ok": not any(s.status in {"failed", "error"} for s in verification_steps)})
                     verification_text = self._render_verification_report(card, verification_steps)
                     for path in (attempt_verification_report, current_verification_report):
                         atomic_write_text(path, verification_text)
-                    if remote_review_step.status in {"failed", "error"}:
-                        summary = (
-                            remote_review_step.stderr
-                            or remote_review_step.stdout
-                            or "remote code review blocked merge"
-                        )
-                        remote_review_meta = {
-                            "human_gate_pending": False,
-                            "linked_pr_number": linked_pr_number,
-                            "linked_pr_url": pr_url,
-                            "remote_review_status": remote_review_step.status,
-                            "last_failure_stage": "remote_review_failed",
+
+                    failing = [step for step in verification_steps if step.status in {"failed", "error"}]
+                    final_local_report = self._render_run_report(
+                        card,
+                        agent_summary=assistant_summary,
+                        verification_steps=verification_steps,
+                        verification_status="failed" if failing else "passed",
+                    )
+                    for path in (attempt_run_report, current_run_report):
+                        atomic_write_text(path, final_local_report)
+                    prior_summary = assistant_summary
+
+                    if failing:
+                        summary = "; ".join(f"{step.command} rc={step.returncode}" for step in failing[:3])
+                        metadata_updates = {
+                            "verification_failed": True,
+                            "verification_steps": [step.model_dump(mode="json") for step in verification_steps],
+                            "last_failure_stage": "local_verification_failed",
                             "last_failure_summary": summary,
                         }
                         if attempt_count < max_attempts:
                             self.update_status(
                                 card.id,
                                 status="repairing",
-                                note="remote code review failed; retrying",
-                                metadata_updates=remote_review_meta,
+                                note="local verification failed; retrying",
+                                metadata_updates=metadata_updates,
                             )
                             self.append_journal(
-                                kind="remote_review_failed_retry",
-                                summary=f"{card.title}: remote review failed, retrying",
+                                kind="verification_failed",
+                                summary=f"{card.title}: local verification failed, retrying",
                                 task_id=card.id,
-                                metadata={"pr_number": linked_pr_number, "attempt_count": attempt_count},
+                                metadata={"attempt_count": attempt_count},
                             )
-                            self._comment_on_pr(linked_pr_number, self._comment_ci_failed(attempt_count, summary))
-                            prior_failure_stage = "remote_review_failed"
+                            if issue_number is not None:
+                                self._comment_on_issue(issue_number, self._comment_local_failed(attempt_count, summary))
+                            prior_failure_stage = "local_verification_failed"
                             prior_failure_summary = summary
                             continue
 
                         self.update_status(
                             card.id,
+                            status="failed",
+                            note=f"{len(failing)} verification gate(s) failed",
+                            metadata_updates=metadata_updates,
+                        )
+                        self.append_journal(
+                            kind="verification_failed",
+                            summary=f"{card.title}: {len(failing)} verification gate(s) failed",
+                            task_id=card.id,
+                        )
+                        if issue_number is not None:
+                            self._comment_on_issue(issue_number, self._comment_terminal_failure(summary))
+                        return RepoRunResult(
+                            card_id=card.id,
+                            status="failed",
+                            assistant_summary=assistant_summary,
+                            run_report_path=str(current_run_report),
+                            verification_report_path=str(current_verification_report),
+                            verification_steps=verification_steps,
+                            attempt_count=attempt_count,
+                            worktree_path=str(working_cwd),
+                        )
+
+                    if not self._is_git_repo(working_cwd):
+                        self.update_status(
+                            card.id,
                             status="completed",
-                            note=f"PR #{linked_pr_number} requires human gate after remote review",
+                            note="local verification passed; repository is not a git repo so GitHub automation was skipped",
                             metadata_updates={
-                                **remote_review_meta,
+                                "verification_failed": False,
+                                "verification_steps": [step.model_dump(mode="json") for step in verification_steps],
                                 "human_gate_pending": True,
                             },
                         )
-                        self.append_journal(
-                            kind="human_gate_pending",
-                            summary=f"{card.title}: remote review requires human gate for PR #{linked_pr_number}",
-                            task_id=card.id,
-                            metadata={"pr_number": linked_pr_number, "remote_review_status": remote_review_step.status},
-                        )
-                        self._comment_on_pr(linked_pr_number, self._comment_terminal_failure(summary))
-                        if issue_number is not None:
-                            self._comment_on_issue(issue_number, self._comment_terminal_failure(summary))
-                        if use_worktree:
-                            await worktree_manager.remove_worktree(self._worktree_slug(card))
                         return RepoRunResult(
                             card_id=card.id,
                             status="completed",
+                            assistant_summary=assistant_summary,
+                            run_report_path=str(current_run_report),
+                            verification_report_path=str(current_verification_report),
+                            verification_steps=verification_steps,
+                            attempt_count=attempt_count,
+                            worktree_path=str(working_cwd),
+                        )
+
+                    commit_created = self._git_commit_all(
+                        working_cwd,
+                        f"autopilot({card.id}): {card.title}",
+                    )
+                    branch_has_progress = commit_created or self._git_branch_has_progress(
+                        working_cwd,
+                        base_branch=base_branch,
+                    )
+                    if not branch_has_progress:
+                        no_changes_summary = "Agent produced no code changes to commit."
+                        if attempt_count < max_attempts:
+                            self.update_status(
+                                card.id,
+                                status="repairing",
+                                note="agent produced no changes; retrying",
+                                metadata_updates={
+                                    "last_failure_stage": "no_changes",
+                                    "last_failure_summary": no_changes_summary,
+                                },
+                            )
+                            prior_failure_stage = "no_changes"
+                            prior_failure_summary = no_changes_summary
+                            continue
+                        self.update_status(
+                            card.id,
+                            status="failed",
+                            note=no_changes_summary,
+                            metadata_updates={
+                                "last_failure_stage": "no_changes",
+                                "last_failure_summary": no_changes_summary,
+                            },
+                        )
+                        return RepoRunResult(
+                            card_id=card.id,
+                            status="failed",
+                            assistant_summary=assistant_summary,
+                            run_report_path=str(current_run_report),
+                            verification_report_path=str(current_verification_report),
+                            verification_steps=verification_steps,
+                            attempt_count=attempt_count,
+                            worktree_path=str(working_cwd),
+                        )
+                    if not commit_created:
+                        self.append_journal(
+                            kind="existing_progress_detected",
+                            summary=f"{card.title}: reusing existing local branch progress",
+                            task_id=card.id,
+                            metadata={"attempt_count": attempt_count, "head_branch": head_branch},
+                        )
+
+                    try:
+                        self._git_push_branch(working_cwd, head_branch)
+                        pr_info = self._upsert_pull_request(
+                            card,
+                            head_branch=head_branch,
+                            base_branch=base_branch,
+                            run_report_path=current_run_report,
+                            verification_report_path=current_verification_report,
+                        )
+                    except Exception as exc:
+                        summary = f"Failed to push branch or upsert PR: {exc}"
+                        self.update_status(
+                            card.id,
+                            status="failed",
+                            note=summary,
+                            metadata_updates={"last_failure_stage": "github_pr_open_failed", "last_failure_summary": summary},
+                        )
+                        if issue_number is not None:
+                            self._comment_on_issue(issue_number, self._comment_terminal_failure(summary))
+                        return RepoRunResult(
+                            card_id=card.id,
+                            status="failed",
+                            assistant_summary=assistant_summary,
+                            run_report_path=str(current_run_report),
+                            verification_report_path=str(current_verification_report),
+                            verification_steps=verification_steps,
+                            attempt_count=attempt_count,
+                            worktree_path=str(worktree_info.path),
+                        )
+
+                    linked_pr_number = int(pr_info.get("number"))
+                    pr_url = _safe_text(pr_info.get("url"))
+                    self.update_status(
+                        card.id,
+                        status="waiting_ci",
+                        note=f"waiting for remote CI on PR #{linked_pr_number}",
+                        metadata_updates={
+                            "linked_pr_number": linked_pr_number,
+                            "linked_pr_url": pr_url,
+                            "linked_issue_numbers": [issue_number] if issue_number is not None else [],
+                            "autopilot_managed": True,
+                            "verification_failed": False,
+                            "verification_steps": [step.model_dump(mode="json") for step in verification_steps],
+                        },
+                    )
+                    self._comment_on_pr(linked_pr_number, self._comment_pr_opened(linked_pr_number, pr_url))
+
+                    ci_state, ci_summary, pr_snapshot, checks = await self._wait_for_pr_ci(linked_pr_number, policies)
+                    self.update_status(
+                        card.id,
+                        status="waiting_ci" if ci_state == "pending" else "waiting_ci",
+                        note=f"remote CI status: {ci_state}",
+                        metadata_updates={
+                            "last_ci_conclusion": ci_state,
+                            "last_ci_summary": ci_summary,
+                            "last_ci_checks": checks,
+                            "linked_pr_number": linked_pr_number,
+                            "linked_pr_url": _safe_text(pr_snapshot.get("url")) or pr_url,
+                        },
+                    )
+                    if ci_state == "failed":
+                        if attempt_count < max_attempts:
+                            self.update_status(
+                                card.id,
+                                status="repairing",
+                                note="remote CI failed; retrying",
+                                metadata_updates={
+                                    "last_failure_stage": "remote_ci_failed",
+                                    "last_failure_summary": ci_summary,
+                                },
+                            )
+                            self.append_journal(
+                                kind="ci_failed_retry",
+                                summary=f"{card.title}: remote CI failed, retrying",
+                                task_id=card.id,
+                                metadata={"pr_number": linked_pr_number, "attempt_count": attempt_count},
+                            )
+                            self._comment_on_pr(linked_pr_number, self._comment_ci_failed(attempt_count, ci_summary))
+                            prior_failure_stage = "remote_ci_failed"
+                            prior_failure_summary = ci_summary
+                            continue
+
+                        self.update_status(
+                            card.id,
+                            status="failed",
+                            note=f"remote CI failed: {ci_summary}",
+                            metadata_updates={
+                                "last_failure_stage": "remote_ci_failed",
+                                "last_failure_summary": ci_summary,
+                            },
+                        )
+                        self._comment_on_pr(linked_pr_number, self._comment_terminal_failure(ci_summary))
+                        if issue_number is not None:
+                            self._comment_on_issue(issue_number, self._comment_terminal_failure(ci_summary))
+                        return RepoRunResult(
+                            card_id=card.id,
+                            status="failed",
                             assistant_summary=assistant_summary,
                             run_report_path=str(current_run_report),
                             verification_report_path=str(current_verification_report),
@@ -1434,48 +1357,155 @@ class RepoAutopilotStore:
                             pr_url=pr_url,
                         )
 
-                    self._merge_pull_request(linked_pr_number)
-                    self.update_status(
-                        card.id,
-                        status="merged",
-                        note=f"PR #{linked_pr_number} merged automatically",
-                        metadata_updates={"human_gate_pending": False},
-                    )
-                    self.append_journal(
-                        kind="merged",
-                        summary=f"{card.title}: PR #{linked_pr_number} merged",
-                        task_id=card.id,
-                        metadata={"pr_number": linked_pr_number},
-                    )
-                    self._comment_on_pr(linked_pr_number, self._comment_merged(linked_pr_number))
-                    if issue_number is not None:
-                        self._comment_on_issue(issue_number, self._comment_merged(linked_pr_number))
-                    if use_worktree:
-                        await worktree_manager.remove_worktree(self._worktree_slug(card))
-                    try:
-                        with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
-                            self._pull_base_branch(base_branch=base_branch)
-                    except Exception as exc:
+                    if self._automerge_eligible(pr_snapshot, policies):
+                        remote_review_step = await self._run_remote_code_review_step(
+                            card,
+                            linked_pr_number,
+                            policies=policies,
+                            model=effective_review_model,
+                            base_branch=base_branch,
+                            stream=stream_writer,
+                            checkpoint_attempt=attempt_count,
+                        )
+                        verification_steps.append(remote_review_step)
+                        verification_text = self._render_verification_report(card, verification_steps)
+                        for path in (attempt_verification_report, current_verification_report):
+                            atomic_write_text(path, verification_text)
+                        if remote_review_step.status in {"failed", "error"}:
+                            summary = (
+                                remote_review_step.stderr
+                                or remote_review_step.stdout
+                                or "remote code review blocked merge"
+                            )
+                            remote_review_meta = {
+                                "human_gate_pending": False,
+                                "linked_pr_number": linked_pr_number,
+                                "linked_pr_url": pr_url,
+                                "remote_review_status": remote_review_step.status,
+                                "last_failure_stage": "remote_review_failed",
+                                "last_failure_summary": summary,
+                            }
+                            if attempt_count < max_attempts:
+                                self.update_status(
+                                    card.id,
+                                    status="repairing",
+                                    note="remote code review failed; retrying",
+                                    metadata_updates=remote_review_meta,
+                                )
+                                self.append_journal(
+                                    kind="remote_review_failed_retry",
+                                    summary=f"{card.title}: remote review failed, retrying",
+                                    task_id=card.id,
+                                    metadata={"pr_number": linked_pr_number, "attempt_count": attempt_count},
+                                )
+                                self._comment_on_pr(linked_pr_number, self._comment_ci_failed(attempt_count, summary))
+                                prior_failure_stage = "remote_review_failed"
+                                prior_failure_summary = summary
+                                continue
+
+                            self.update_status(
+                                card.id,
+                                status="completed",
+                                note=f"PR #{linked_pr_number} requires human gate after remote review",
+                                metadata_updates={
+                                    **remote_review_meta,
+                                    "human_gate_pending": True,
+                                },
+                            )
+                            self.append_journal(
+                                kind="human_gate_pending",
+                                summary=f"{card.title}: remote review requires human gate for PR #{linked_pr_number}",
+                                task_id=card.id,
+                                metadata={"pr_number": linked_pr_number, "remote_review_status": remote_review_step.status},
+                            )
+                            self._comment_on_pr(linked_pr_number, self._comment_terminal_failure(summary))
+                            if issue_number is not None:
+                                self._comment_on_issue(issue_number, self._comment_terminal_failure(summary))
+                            return RepoRunResult(
+                                card_id=card.id,
+                                status="completed",
+                                assistant_summary=assistant_summary,
+                                run_report_path=str(current_run_report),
+                                verification_report_path=str(current_verification_report),
+                                verification_steps=verification_steps,
+                                attempt_count=attempt_count,
+                                worktree_path=str(working_cwd),
+                                pr_number=linked_pr_number,
+                                pr_url=pr_url,
+                            )
+
+                        self._merge_pull_request(linked_pr_number)
+                        self.update_status(
+                            card.id,
+                            status="merged",
+                            note=f"PR #{linked_pr_number} merged automatically",
+                            metadata_updates={"human_gate_pending": False},
+                        )
                         self.append_journal(
-                            kind="merge_warning",
-                            summary=f"post-merge pull failed: {exc}",
+                            kind="merged",
+                            summary=f"{card.title}: PR #{linked_pr_number} merged",
                             task_id=card.id,
                             metadata={"pr_number": linked_pr_number},
                         )
-                    else:
+                        self._comment_on_pr(linked_pr_number, self._comment_merged(linked_pr_number))
+                        if issue_number is not None:
+                            self._comment_on_issue(issue_number, self._comment_merged(linked_pr_number))
                         try:
                             with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
-                                self._install_editable()
+                                self._pull_base_branch(base_branch=base_branch)
                         except Exception as exc:
                             self.append_journal(
                                 kind="merge_warning",
-                                summary=f"post-merge install failed: {exc}",
+                                summary=f"post-merge pull failed: {exc}",
                                 task_id=card.id,
                                 metadata={"pr_number": linked_pr_number},
                             )
+                        else:
+                            try:
+                                with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
+                                    self._install_editable()
+                            except Exception as exc:
+                                self.append_journal(
+                                    kind="merge_warning",
+                                    summary=f"post-merge install failed: {exc}",
+                                    task_id=card.id,
+                                    metadata={"pr_number": linked_pr_number},
+                                )
+                        return RepoRunResult(
+                            card_id=card.id,
+                            status="merged",
+                            assistant_summary=assistant_summary,
+                            run_report_path=str(current_run_report),
+                            verification_report_path=str(current_verification_report),
+                            verification_steps=verification_steps,
+                            attempt_count=attempt_count,
+                            worktree_path=str(working_cwd),
+                            pr_number=linked_pr_number,
+                            pr_url=pr_url,
+                        )
+
+                    self.update_status(
+                        card.id,
+                        status="completed",
+                        note=f"PR #{linked_pr_number} is green; human gate pending",
+                        metadata_updates={
+                            "human_gate_pending": True,
+                            "linked_pr_number": linked_pr_number,
+                            "linked_pr_url": pr_url,
+                        },
+                    )
+                    self.append_journal(
+                        kind="human_gate_pending",
+                        summary=f"{card.title}: PR #{linked_pr_number} is ready for human gate",
+                        task_id=card.id,
+                        metadata={"pr_number": linked_pr_number},
+                    )
+                    self._comment_on_pr(linked_pr_number, self._comment_human_gate(linked_pr_number))
+                    if issue_number is not None:
+                        self._comment_on_issue(issue_number, self._comment_human_gate(linked_pr_number))
                     return RepoRunResult(
                         card_id=card.id,
-                        status="merged",
+                        status="completed",
                         assistant_summary=assistant_summary,
                         run_report_path=str(current_run_report),
                         verification_report_path=str(current_verification_report),
@@ -1486,56 +1516,59 @@ class RepoAutopilotStore:
                         pr_url=pr_url,
                     )
 
+                exhausted = "repair rounds exhausted"
                 self.update_status(
                     card.id,
-                    status="completed",
-                    note=f"PR #{linked_pr_number} is green; human gate pending",
-                    metadata_updates={
-                        "human_gate_pending": True,
-                        "linked_pr_number": linked_pr_number,
-                        "linked_pr_url": pr_url,
-                    },
+                    status="failed",
+                    note=exhausted,
+                    metadata_updates={"last_failure_stage": "repair_exhausted", "last_failure_summary": exhausted},
                 )
-                self.append_journal(
-                    kind="human_gate_pending",
-                    summary=f"{card.title}: PR #{linked_pr_number} is ready for human gate",
-                    task_id=card.id,
-                    metadata={"pr_number": linked_pr_number},
-                )
-                self._comment_on_pr(linked_pr_number, self._comment_human_gate(linked_pr_number))
-                if issue_number is not None:
-                    self._comment_on_issue(issue_number, self._comment_human_gate(linked_pr_number))
-                if use_worktree:
-                    await worktree_manager.remove_worktree(self._worktree_slug(card))
                 return RepoRunResult(
                     card_id=card.id,
-                    status="completed",
-                    assistant_summary=assistant_summary,
+                    status="failed",
                     run_report_path=str(current_run_report),
                     verification_report_path=str(current_verification_report),
-                    verification_steps=verification_steps,
-                    attempt_count=attempt_count,
+                    attempt_count=max_attempts,
                     worktree_path=str(working_cwd),
-                    pr_number=linked_pr_number,
-                    pr_url=pr_url,
                 )
+            finally:
+                pass
 
-            exhausted = "repair rounds exhausted"
+        except Exception as exc:
+            summary = f"unexpected autopilot failure: {exc}"
             self.update_status(
                 card.id,
                 status="failed",
-                note=exhausted,
-                metadata_updates={"last_failure_stage": "repair_exhausted", "last_failure_summary": exhausted},
+                note=summary,
+                metadata_updates={"last_failure_stage": "unexpected_error", "last_failure_summary": summary},
             )
+            self.append_journal(
+                kind="run_failed",
+                summary=f"{card.title}: unexpected autopilot failure",
+                task_id=card.id,
+                metadata={"error": str(exc)},
+            )
+            if issue_number is not None:
+                self._comment_on_issue(issue_number, self._comment_terminal_failure(summary))
             return RepoRunResult(
                 card_id=card.id,
                 status="failed",
                 run_report_path=str(current_run_report),
                 verification_report_path=str(current_verification_report),
-                attempt_count=max_attempts,
+                attempt_count=existing_attempts + 1,
                 worktree_path=str(working_cwd),
             )
         finally:
+            if use_worktree and worktree_info is not None:
+                try:
+                    await worktree_manager.remove_worktree(self._worktree_slug(card))
+                except Exception as cleanup_exc:  # pragma: no cover - defensive
+                    self.append_journal(
+                        kind="cleanup_warning",
+                        summary=f"Failed to remove worktree {self._worktree_slug(card)}: {cleanup_exc}",
+                        task_id=card.id,
+                        metadata={"worktree_slug": self._worktree_slug(card)},
+                    )
             release_writer(card.id)
             _stream_retention_days = float(
                 (policies.get("autopilot", {}).get("execution", {}) or {}).get(
@@ -1603,6 +1636,42 @@ class RepoAutopilotStore:
                 )
         return recovered
 
+    async def _cleanup_stale_worktrees(self) -> list[str]:
+        worktree_manager = WorktreeManager()
+        terminal_statuses = {"completed", "merged", "failed", "rejected", "superseded"}
+        removed: list[str] = []
+        try:
+            worktrees = await worktree_manager.list_worktrees()
+        except Exception as exc:  # pragma: no cover - defensive
+            self.append_journal(kind="cleanup_warning", summary=f"Failed to list worktrees: {exc}")
+            return removed
+
+        for info in worktrees:
+            slug = info.slug
+            if not slug.startswith("autopilot/"):
+                continue
+            card_id = slug.split("/", 1)[1]
+            card = self.get_card(card_id)
+            if card is None or card.status not in terminal_statuses:
+                continue
+            try:
+                await worktree_manager.remove_worktree(slug)
+                removed.append(slug)
+                self.append_journal(
+                    kind="worktree_cleanup",
+                    summary=f"Removed stale worktree for terminal card {card_id}",
+                    task_id=card_id,
+                    metadata={"worktree_slug": slug},
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                self.append_journal(
+                    kind="cleanup_warning",
+                    summary=f"Failed to remove stale worktree {slug}: {exc}",
+                    task_id=card_id,
+                    metadata={"worktree_slug": slug},
+                )
+        return removed
+
     async def tick(
         self,
         *,
@@ -1614,6 +1683,7 @@ class RepoAutopilotStore:
     ) -> RepoRunResult | None:
         self.scan_all_sources(issue_limit=issue_limit, pr_limit=pr_limit)
         self._recover_stuck_cards()
+        await self._cleanup_stale_worktrees()
         policies = self.load_policies()
         if not self.has_capacity(policies):
             self.append_journal(kind="tick_skip", summary="Skipped run-next because maximum parallel runs capacity was reached")
@@ -2602,6 +2672,14 @@ class RepoAutopilotStore:
             self._save_registry(RepoAutopilotRegistry(updated_at=time.time(), cards=[]))
         if not self._context_path.exists():
             self.rebuild_active_context()
+
+    def _start_startup_cleanup(self) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(self._cleanup_stale_worktrees())
+            return
+        self._startup_cleanup_task = loop.create_task(self._cleanup_stale_worktrees())
 
     def _load_registry(self) -> RepoAutopilotRegistry:
         with RepoFileLock(self._registry_lock_path):
