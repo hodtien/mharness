@@ -1,11 +1,11 @@
 {
-  "generated_at": 1777857483.124469,
+  "generated_at": 1777880566.664254,
   "repo_name": "my-harness",
   "repo_path": "/Users/hodtien/harness/my-harness",
   "focus": {
-    "id": "ap-7849e16f",
-    "title": "[P9.4] Per-card model field trong RepoTaskCard",
-    "body": "## Mục tiêu\nCho phép chỉ định model cho từng autopilot card thay vì dùng chung model mặc định từ policy.\n\n## Phân tích hiện tại\n- RepoTaskCard (types.py line 47) có metadata: dict[str, Any] nhưng KHÔNG có model field\n- run_card() (service.py line 711) xác định effective_model = explicit param hoặc policy default\n- Không có cách nào user chọn model cho 1 card cụ thể\n\n## Giải pháp đề xuất\n1. Thêm field model: str | None = None vào RepoTaskCard (types.py)\n2. Trong run_card(): effective_model = card.model or policy_default\n3. enqueue_card() chấp nhận optional model param\n4. update_card_model(card_id, model) method mới trong RepoAutopilotStore\n5. Migration: registry.json cũ không có model field → Pydantic default None xử lý tự động\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/types.py — thêm model field\n- MODIFY: src/openharness/autopilot/service.py — effective_model logic, update_card_model()\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu\n- test_card_model_default_none: card mới model=None\n- test_card_model_overrides_policy: card.model='claude-haiku-4-5' → effective dùng haiku\n- test_card_model_none_falls_back_to_policy: card.model=None → dùng policy default\n- test_update_card_model: gọi update → model đổi đúng\n- test_registry_backward_compat: load registry cũ không có model field → OK\n\nSpawn agents: tdd-guide (viết tests trước) → code-reviewer.",
+    "id": "ap-e8d98ed7",
+    "title": "[P9.6] Frontend: Card detail + model dropdown",
+    "body": "## Mục tiêu\nTrong Autopilot board, click card mở detail drawer hiển thị model mặc định, user có thể chọn model khác qua dropdown.\n\n## Giải pháp đề xuất\n1. Card detail drawer (mở khi click card trên Kanban board):\n   - Header: card title, status badge, source_kind badge\n   - Section 'Model': hiển thị current model (policy default nếu null)\n     - Dropdown lấy danh sách từ GET /api/models (flatten)\n     - Default option: 'Policy default ({policy_model})' \n     - Khi chọn → PATCH /api/pipeline/cards/{id}/model\n     - Optimistic update + toast success/error\n   - Section 'Details': body, labels, attempt_count, linked_pr_url\n   - Section 'Activity': journal entries (reuse P7.7)\n   - Section 'Actions': Accept/Reject/Retry/Reset buttons\n2. Model dropdown disabled khi card đang active (running/repairing/etc)\n3. Responsive: drawer full-width trên mobile\n\n## Files cần sửa\n- MODIFY hoặc NEW: frontend/webui/src/components/CardDetailDrawer.tsx\n- MODIFY: frontend/webui/src/pages/AutopilotPage.tsx (hoặc PipelinePage.tsx tùy P8.2)\n\n## Tests yêu cầu\n- Visual: drawer mở đúng, model dropdown hiển thị\n- test_model_dropdown_calls_patch: chọn model → API called\n- test_model_dropdown_disabled_when_active: card running → dropdown disabled\n\nSpawn agents: planner (thiết kế drawer layout) → tdd-guide → code-reviewer → a11y-architect.\nDepends on: P9.5, P8.1 (Kanban board).",
     "status": "queued",
     "source_kind": "manual_idea",
     "source_ref": "",
@@ -16,32 +16,54 @@
       "recently updated"
     ],
     "labels": [
-      "backend",
-      "parallel"
+      "frontend",
+      "parallel",
+      "ui"
     ],
-    "created_at": 1777831756.1642811,
-    "updated_at": 1777839104.89841,
+    "created_at": 1777831799.091248,
+    "updated_at": 1777880566.638268,
     "metadata": {
-      "last_note": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+      "last_note": "remote CI status: success",
       "url": "",
-      "execution_model": "oc-medium",
-      "assistant_summary_preview": "I'll implement the per-card model field for RepoTaskCard. Let me start by reading the relevant files to understand the current structure. Need find methods.Now I have enough understanding. Let me make the changes:Now update the `existing` and `new card` branches to handle model:Add method after u...",
+      "execution_model": "oclaude-coder",
+      "assistant_summary_preview": "I'll analyze the current state and fix the git authentication issue, then complete P9.6. I found the P9.6 implementation already in the branch; I’m checking the frontend drawer/tests and the model patch route to verify it’s complete and then I’ll run the required checks. Now let me check the back...",
       "human_gate_pending": false,
       "verification_failed": false,
-      "attempt_count": 1,
+      "attempt_count": 3,
       "max_attempts": 5,
-      "linked_pr_number": null,
-      "linked_pr_url": "",
-      "head_branch": "autopilot/ap-7849e16f",
-      "last_ci_conclusion": "",
-      "last_ci_summary": "",
+      "linked_pr_number": 68,
+      "linked_pr_url": "https://github.com/hodtien/mharness/pull/68",
+      "head_branch": "autopilot/ap-e8d98ed7",
+      "last_ci_conclusion": "success",
+      "last_ci_summary": "No remote checks were reported after the grace period.",
       "last_failure_stage": "github_pr_open_failed",
       "last_failure_summary": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
-      "verification_steps": []
+      "verification_steps": [
+        {
+          "command": "uv run pytest -q",
+          "status": "success",
+          "returncode": 0
+        },
+        {
+          "command": "uv run ruff check src tests scripts",
+          "status": "success",
+          "returncode": 0
+        },
+        {
+          "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+          "status": "success",
+          "returncode": 0
+        },
+        {
+          "command": "agent:code-reviewer (diff vs main)",
+          "status": "success",
+          "returncode": 0
+        }
+      ]
     }
   },
   "counts": {
-    "queued": 8,
+    "queued": 6,
     "accepted": 0,
     "preparing": 0,
     "running": 0,
@@ -49,9 +71,9 @@
     "pr_open": 0,
     "waiting_ci": 0,
     "repairing": 0,
-    "completed": 12,
-    "merged": 53,
-    "failed": 1,
+    "completed": 14,
+    "merged": 54,
+    "failed": 0,
     "rejected": 18,
     "superseded": 0
   },
@@ -73,83 +95,6 @@
   "columns": {
     "queued": [
       {
-        "id": "ap-7849e16f",
-        "title": "[P9.4] Per-card model field trong RepoTaskCard",
-        "body": "## Mục tiêu\nCho phép chỉ định model cho từng autopilot card thay vì dùng chung model mặc định từ policy.\n\n## Phân tích hiện tại\n- RepoTaskCard (types.py line 47) có metadata: dict[str, Any] nhưng KHÔNG có model field\n- run_card() (service.py line 711) xác định effective_model = explicit param hoặc policy default\n- Không có cách nào user chọn model cho 1 card cụ thể\n\n## Giải pháp đề xuất\n1. Thêm field model: str | None = None vào RepoTaskCard (types.py)\n2. Trong run_card(): effective_model = card.model or policy_default\n3. enqueue_card() chấp nhận optional model param\n4. update_card_model(card_id, model) method mới trong RepoAutopilotStore\n5. Migration: registry.json cũ không có model field → Pydantic default None xử lý tự động\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/types.py — thêm model field\n- MODIFY: src/openharness/autopilot/service.py — effective_model logic, update_card_model()\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu\n- test_card_model_default_none: card mới model=None\n- test_card_model_overrides_policy: card.model='claude-haiku-4-5' → effective dùng haiku\n- test_card_model_none_falls_back_to_policy: card.model=None → dùng policy default\n- test_update_card_model: gọi update → model đổi đúng\n- test_registry_backward_compat: load registry cũ không có model field → OK\n\nSpawn agents: tdd-guide (viết tests trước) → code-reviewer.",
-        "status": "queued",
-        "source_kind": "manual_idea",
-        "source_ref": "",
-        "score": 100,
-        "score_reasons": [
-          "source=manual_idea",
-          "direct user-driven input",
-          "recently updated"
-        ],
-        "labels": [
-          "backend",
-          "parallel"
-        ],
-        "created_at": 1777831756.1642811,
-        "updated_at": 1777839104.89841,
-        "metadata": {
-          "last_note": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
-          "url": "",
-          "execution_model": "oc-medium",
-          "assistant_summary_preview": "I'll implement the per-card model field for RepoTaskCard. Let me start by reading the relevant files to understand the current structure. Need find methods.Now I have enough understanding. Let me make the changes:Now update the `existing` and `new card` branches to handle model:Add method after u...",
-          "human_gate_pending": false,
-          "verification_failed": false,
-          "attempt_count": 1,
-          "max_attempts": 5,
-          "linked_pr_number": null,
-          "linked_pr_url": "",
-          "head_branch": "autopilot/ap-7849e16f",
-          "last_ci_conclusion": "",
-          "last_ci_summary": "",
-          "last_failure_stage": "github_pr_open_failed",
-          "last_failure_summary": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
-          "verification_steps": []
-        }
-      },
-      {
-        "id": "ap-960d5957",
-        "title": "[P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model",
-        "body": "## Mục tiêu\nAPI endpoint cho phép WebUI gửi model override cho 1 autopilot card.\n\n## Giải pháp đề xuất\n1. Thêm endpoint PATCH /api/pipeline/cards/{id}/model trong routes/pipeline.py\n   - Body: {model: string | null} — null để reset về default\n   - Validate model tồn tại trong allowed models (optional, warn only)\n   - Gọi store.update_card_model(card_id, model)\n   - Return updated card\n   - 404 nếu card không tồn tại\n2. Thêm GET /api/pipeline/cards/{id} endpoint trả full card detail\n   - Include model field, metadata, body, linked_pr_url, attempt_count\n   - Include available_models list (từ provider profiles)\n3. Cập nhật _serialize_card() thêm model field\n\n## Files cần sửa\n- MODIFY: src/openharness/webui/server/routes/pipeline.py\n- MODIFY: tests/test_webui/test_server.py hoặc test_pipeline_routes.py\n\n## Tests yêu cầu\n- test_patch_card_model: set model → 200, card.model updated\n- test_patch_card_model_null_resets: set null → model=None\n- test_patch_card_model_404: unknown card → 404\n- test_get_card_detail: trả full card bao gồm model\n- test_serialize_card_includes_model: model field có trong response\n\nSpawn agents: tdd-guide → code-reviewer.\nDepends on: P9.4 (cần model field trên RepoTaskCard).",
-        "status": "queued",
-        "source_kind": "manual_idea",
-        "source_ref": "",
-        "score": 100,
-        "score_reasons": [
-          "source=manual_idea",
-          "direct user-driven input",
-          "recently updated"
-        ],
-        "labels": [
-          "api",
-          "backend",
-          "parallel"
-        ],
-        "created_at": 1777831777.845567,
-        "updated_at": 1777839106.3096929,
-        "metadata": {
-          "last_note": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
-          "url": "",
-          "execution_model": "oc-medium",
-          "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase before implementing the changes.Need more file maybe store methods.The `RepoTaskCard` doesn't have a `model` field! The task says \"Depends on: P9.4 (cần model field trên RepoTaskCard)\" — so P9.4 should have added it. Let ...",
-          "human_gate_pending": false,
-          "verification_failed": false,
-          "attempt_count": 1,
-          "max_attempts": 5,
-          "linked_pr_number": null,
-          "linked_pr_url": "",
-          "head_branch": "autopilot/ap-960d5957",
-          "last_ci_conclusion": "",
-          "last_ci_summary": "",
-          "last_failure_stage": "github_pr_open_failed",
-          "last_failure_summary": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
-          "verification_steps": []
-        }
-      },
-      {
         "id": "ap-e8d98ed7",
         "title": "[P9.6] Frontend: Card detail + model dropdown",
         "body": "## Mục tiêu\nTrong Autopilot board, click card mở detail drawer hiển thị model mặc định, user có thể chọn model khác qua dropdown.\n\n## Giải pháp đề xuất\n1. Card detail drawer (mở khi click card trên Kanban board):\n   - Header: card title, status badge, source_kind badge\n   - Section 'Model': hiển thị current model (policy default nếu null)\n     - Dropdown lấy danh sách từ GET /api/models (flatten)\n     - Default option: 'Policy default ({policy_model})' \n     - Khi chọn → PATCH /api/pipeline/cards/{id}/model\n     - Optimistic update + toast success/error\n   - Section 'Details': body, labels, attempt_count, linked_pr_url\n   - Section 'Activity': journal entries (reuse P7.7)\n   - Section 'Actions': Accept/Reject/Retry/Reset buttons\n2. Model dropdown disabled khi card đang active (running/repairing/etc)\n3. Responsive: drawer full-width trên mobile\n\n## Files cần sửa\n- MODIFY hoặc NEW: frontend/webui/src/components/CardDetailDrawer.tsx\n- MODIFY: frontend/webui/src/pages/AutopilotPage.tsx (hoặc PipelinePage.tsx tùy P8.2)\n\n## Tests yêu cầu\n- Visual: drawer mở đúng, model dropdown hiển thị\n- test_model_dropdown_calls_patch: chọn model → API called\n- test_model_dropdown_disabled_when_active: card running → dropdown disabled\n\nSpawn agents: planner (thiết kế drawer layout) → tdd-guide → code-reviewer → a11y-architect.\nDepends on: P9.5, P8.1 (Kanban board).",
@@ -168,24 +113,45 @@
           "ui"
         ],
         "created_at": 1777831799.091248,
-        "updated_at": 1777855922.7210429,
+        "updated_at": 1777880566.638268,
         "metadata": {
-          "last_note": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+          "last_note": "remote CI status: success",
           "url": "",
-          "execution_model": "oc-medium",
-          "assistant_summary_preview": "I'll analyze the current state and implement P9.6 - the card detail drawer with model dropdown. Let me start by examining the existing code. PipelinePage is large; need relevant sections. Now I have a complete picture. Let me implement P9.6: 1. **Backend**: Add `PATCH /api/pipeline/cards/{id}/mod...",
+          "execution_model": "oclaude-coder",
+          "assistant_summary_preview": "I'll analyze the current state and fix the git authentication issue, then complete P9.6. I found the P9.6 implementation already in the branch; I’m checking the frontend drawer/tests and the model patch route to verify it’s complete and then I’ll run the required checks. Now let me check the back...",
           "human_gate_pending": false,
           "verification_failed": false,
-          "attempt_count": 2,
+          "attempt_count": 3,
           "max_attempts": 5,
-          "linked_pr_number": null,
-          "linked_pr_url": "",
+          "linked_pr_number": 68,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/68",
           "head_branch": "autopilot/ap-e8d98ed7",
-          "last_ci_conclusion": "",
-          "last_ci_summary": "",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "No remote checks were reported after the grace period.",
           "last_failure_stage": "github_pr_open_failed",
           "last_failure_summary": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
-          "verification_steps": []
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "success",
+              "returncode": 0
+            }
+          ]
         }
       },
       {
@@ -1044,6 +1010,124 @@
             {
               "command": "agent:code-reviewer (diff vs main)",
               "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-99e5077a",
+        "title": "[P9.3] Main checkout lock cho _pull_base_branch + _install_editable",
+        "body": "## Mục tiêu\nBảo vệ shared main checkout (self._cwd) khi nhiều autopilot process cùng gọi _pull_base_branch() hoặc _install_editable() sau merge.\n\n## Phân tích rủi ro hiện tại\n- _pull_base_branch() (line 1436) chạy git fetch + git pull --ff-only trên self._cwd\n- _install_editable() chạy pip install -e . trên self._cwd\n- 2 process merge xong cùng lúc → concurrent git pull → corrupt index\n- 2 process cùng install_editable → dependency conflict\n\n## Giải pháp đề xuất\n1. Thêm RepoFileLock('main-checkout.lock') [reuse P9.1]\n2. Wrap _pull_base_branch() call site trong lock\n3. Wrap _install_editable() call site trong lock\n4. Timeout 60s (pull + install có thể chậm)\n5. Lock scope chỉ ở call site, không lock toàn bộ method\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/service.py — wrap _pull_base_branch, _install_editable calls\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu\n- test_pull_base_branch_acquires_lock: mock lock, verify acquire called\n- test_pull_base_branch_releases_lock_on_error: pull fails → lock released\n- test_concurrent_pull_serialized: 2 threads pull → serialized execution\n\nSpawn agents: tdd-guide → code-reviewer.\nDepends on: P9.1.",
+        "status": "completed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [
+          "backend",
+          "parallel"
+        ],
+        "created_at": 1777831737.384298,
+        "updated_at": 1777872213.772641,
+        "metadata": {
+          "last_note": "Failed to push branch or upsert PR: To https://github.com/hodtien/mharness.git\n ! [rejected]        autopilot/ap-99e5077a -> autopilot/ap-99e5077a (non-fast-forward)\nerror: failed to push some refs to 'https://github.com/hodtien/mharness.git'\nhint: Updates were rejected because the tip of your current branch is behind\nhint: its remote counterpart. If you want to integrate the remote changes,\nhint: use 'git pull' before pushing again.\nhint: See the 'Note about fast-forwards' in 'git push --help' for details.",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "I'll start by exploring the repo structure and understanding the existing code.I’ll also spawn the requested guide/reviewer agents while I implement the focused change.Now let me see the `_main_checkout_lock_path` setup and the `__init__` of `RepoAutopilotStore`: Now I have enough context. Let me...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 5,
+          "linked_pr_number": 65,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/65",
+          "head_branch": "autopilot/ap-99e5077a",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "No remote checks were reported after the grace period.",
+          "last_failure_stage": "github_pr_open_failed",
+          "last_failure_summary": "Failed to push branch or upsert PR: To https://github.com/hodtien/mharness.git\n ! [rejected]        autopilot/ap-99e5077a -> autopilot/ap-99e5077a (non-fast-forward)\nerror: failed to push some refs to 'https://github.com/hodtien/mharness.git'\nhint: Updates were rejected because the tip of your current branch is behind\nhint: its remote counterpart. If you want to integrate the remote changes,\nhint: use 'git pull' before pushing again.\nhint: See the 'Note about fast-forwards' in 'git push --help' for details.",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "success",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-7849e16f",
+        "title": "[P9.4] Per-card model field trong RepoTaskCard",
+        "body": "## Mục tiêu\nCho phép chỉ định model cho từng autopilot card thay vì dùng chung model mặc định từ policy.\n\n## Phân tích hiện tại\n- RepoTaskCard (types.py line 47) có metadata: dict[str, Any] nhưng KHÔNG có model field\n- run_card() (service.py line 711) xác định effective_model = explicit param hoặc policy default\n- Không có cách nào user chọn model cho 1 card cụ thể\n\n## Giải pháp đề xuất\n1. Thêm field model: str | None = None vào RepoTaskCard (types.py)\n2. Trong run_card(): effective_model = card.model or policy_default\n3. enqueue_card() chấp nhận optional model param\n4. update_card_model(card_id, model) method mới trong RepoAutopilotStore\n5. Migration: registry.json cũ không có model field → Pydantic default None xử lý tự động\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/types.py — thêm model field\n- MODIFY: src/openharness/autopilot/service.py — effective_model logic, update_card_model()\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu\n- test_card_model_default_none: card mới model=None\n- test_card_model_overrides_policy: card.model='claude-haiku-4-5' → effective dùng haiku\n- test_card_model_none_falls_back_to_policy: card.model=None → dùng policy default\n- test_update_card_model: gọi update → model đổi đúng\n- test_registry_backward_compat: load registry cũ không có model field → OK\n\nSpawn agents: tdd-guide (viết tests trước) → code-reviewer.",
+        "status": "completed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [
+          "backend",
+          "parallel"
+        ],
+        "created_at": 1777831756.1642811,
+        "updated_at": 1777872213.772641,
+        "metadata": {
+          "last_note": "remote CI status: success",
+          "url": "",
+          "execution_model": "oc-medium",
+          "assistant_summary_preview": "Let me inspect the current state of the branch to see what was already implemented in the previous attempt.Good - the implementation is already in place. Let me run the tests to verify everything works:Python checks passed. Running the frontend TypeScript gate now.All three gates pass. The branch...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 2,
+          "max_attempts": 5,
+          "linked_pr_number": 66,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/66",
+          "head_branch": "autopilot/ap-7849e16f",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "No remote checks were reported after the grace period.",
+          "last_failure_stage": "github_pr_open_failed",
+          "last_failure_summary": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "success",
               "returncode": 0
             }
           ]
@@ -3952,14 +4036,12 @@
             }
           ]
         }
-      }
-    ],
-    "failed": [
+      },
       {
-        "id": "ap-99e5077a",
-        "title": "[P9.3] Main checkout lock cho _pull_base_branch + _install_editable",
-        "body": "## Mục tiêu\nBảo vệ shared main checkout (self._cwd) khi nhiều autopilot process cùng gọi _pull_base_branch() hoặc _install_editable() sau merge.\n\n## Phân tích rủi ro hiện tại\n- _pull_base_branch() (line 1436) chạy git fetch + git pull --ff-only trên self._cwd\n- _install_editable() chạy pip install -e . trên self._cwd\n- 2 process merge xong cùng lúc → concurrent git pull → corrupt index\n- 2 process cùng install_editable → dependency conflict\n\n## Giải pháp đề xuất\n1. Thêm RepoFileLock('main-checkout.lock') [reuse P9.1]\n2. Wrap _pull_base_branch() call site trong lock\n3. Wrap _install_editable() call site trong lock\n4. Timeout 60s (pull + install có thể chậm)\n5. Lock scope chỉ ở call site, không lock toàn bộ method\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/service.py — wrap _pull_base_branch, _install_editable calls\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu\n- test_pull_base_branch_acquires_lock: mock lock, verify acquire called\n- test_pull_base_branch_releases_lock_on_error: pull fails → lock released\n- test_concurrent_pull_serialized: 2 threads pull → serialized execution\n\nSpawn agents: tdd-guide → code-reviewer.\nDepends on: P9.1.",
-        "status": "failed",
+        "id": "ap-960d5957",
+        "title": "[P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model",
+        "body": "## Mục tiêu\nAPI endpoint cho phép WebUI gửi model override cho 1 autopilot card.\n\n## Giải pháp đề xuất\n1. Thêm endpoint PATCH /api/pipeline/cards/{id}/model trong routes/pipeline.py\n   - Body: {model: string | null} — null để reset về default\n   - Validate model tồn tại trong allowed models (optional, warn only)\n   - Gọi store.update_card_model(card_id, model)\n   - Return updated card\n   - 404 nếu card không tồn tại\n2. Thêm GET /api/pipeline/cards/{id} endpoint trả full card detail\n   - Include model field, metadata, body, linked_pr_url, attempt_count\n   - Include available_models list (từ provider profiles)\n3. Cập nhật _serialize_card() thêm model field\n\n## Files cần sửa\n- MODIFY: src/openharness/webui/server/routes/pipeline.py\n- MODIFY: tests/test_webui/test_server.py hoặc test_pipeline_routes.py\n\n## Tests yêu cầu\n- test_patch_card_model: set model → 200, card.model updated\n- test_patch_card_model_null_resets: set null → model=None\n- test_patch_card_model_404: unknown card → 404\n- test_get_card_detail: trả full card bao gồm model\n- test_serialize_card_includes_model: model field có trong response\n\nSpawn agents: tdd-guide → code-reviewer.\nDepends on: P9.4 (cần model field trên RepoTaskCard).",
+        "status": "merged",
         "source_kind": "manual_idea",
         "source_ref": "",
         "score": 100,
@@ -3969,27 +4051,28 @@
           "recently updated"
         ],
         "labels": [
+          "api",
           "backend",
           "parallel"
         ],
-        "created_at": 1777831737.384298,
-        "updated_at": 1777857483.106345,
+        "created_at": 1777831777.845567,
+        "updated_at": 1777876532.64214,
         "metadata": {
-          "last_note": "Failed to push branch or upsert PR: To https://github.com/hodtien/mharness.git\n ! [rejected]        autopilot/ap-99e5077a -> autopilot/ap-99e5077a (non-fast-forward)\nerror: failed to push some refs to 'https://github.com/hodtien/mharness.git'\nhint: Updates were rejected because the tip of your current branch is behind\nhint: its remote counterpart. If you want to integrate the remote changes,\nhint: use 'git pull' before pushing again.\nhint: See the 'Note about fast-forwards' in 'git push --help' for details.",
+          "last_note": "remote CI status: success",
           "url": "",
-          "execution_model": "oc-medium",
-          "assistant_summary_preview": "I'll start by exploring the repo structure and understanding the existing code.I’ll also spawn the requested guide/reviewer agents while I implement the focused change.Now let me see the `_main_checkout_lock_path` setup and the `__init__` of `RepoAutopilotStore`: Now I have enough context. Let me...",
+          "execution_model": "oclaude-coder",
+          "assistant_summary_preview": "I'll analyze the current state and implement the fix. Let me start by exploring the codebase to understand what's been done and what needs to be completed. I found `routes/pipeline.py` already has card serialization and detail helpers. Next I’m checking the remaining route handlers and the tests ...",
           "human_gate_pending": false,
           "verification_failed": false,
-          "attempt_count": 1,
+          "attempt_count": 2,
           "max_attempts": 5,
-          "linked_pr_number": 65,
-          "linked_pr_url": "https://github.com/hodtien/mharness/pull/65",
-          "head_branch": "autopilot/ap-99e5077a",
+          "linked_pr_number": 67,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/67",
+          "head_branch": "autopilot/ap-960d5957",
           "last_ci_conclusion": "success",
           "last_ci_summary": "No remote checks were reported after the grace period.",
           "last_failure_stage": "github_pr_open_failed",
-          "last_failure_summary": "Failed to push branch or upsert PR: To https://github.com/hodtien/mharness.git\n ! [rejected]        autopilot/ap-99e5077a -> autopilot/ap-99e5077a (non-fast-forward)\nerror: failed to push some refs to 'https://github.com/hodtien/mharness.git'\nhint: Updates were rejected because the tip of your current branch is behind\nhint: its remote counterpart. If you want to integrate the remote changes,\nhint: use 'git pull' before pushing again.\nhint: See the 'Note about fast-forwards' in 'git push --help' for details.",
+          "last_failure_summary": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
           "verification_steps": [
             {
               "command": "uv run pytest -q",
@@ -4015,6 +4098,7 @@
         }
       }
     ],
+    "failed": [],
     "rejected": [
       {
         "id": "ap-000584f0",
@@ -4653,83 +4737,6 @@
   },
   "cards": [
     {
-      "id": "ap-7849e16f",
-      "title": "[P9.4] Per-card model field trong RepoTaskCard",
-      "body": "## Mục tiêu\nCho phép chỉ định model cho từng autopilot card thay vì dùng chung model mặc định từ policy.\n\n## Phân tích hiện tại\n- RepoTaskCard (types.py line 47) có metadata: dict[str, Any] nhưng KHÔNG có model field\n- run_card() (service.py line 711) xác định effective_model = explicit param hoặc policy default\n- Không có cách nào user chọn model cho 1 card cụ thể\n\n## Giải pháp đề xuất\n1. Thêm field model: str | None = None vào RepoTaskCard (types.py)\n2. Trong run_card(): effective_model = card.model or policy_default\n3. enqueue_card() chấp nhận optional model param\n4. update_card_model(card_id, model) method mới trong RepoAutopilotStore\n5. Migration: registry.json cũ không có model field → Pydantic default None xử lý tự động\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/types.py — thêm model field\n- MODIFY: src/openharness/autopilot/service.py — effective_model logic, update_card_model()\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu\n- test_card_model_default_none: card mới model=None\n- test_card_model_overrides_policy: card.model='claude-haiku-4-5' → effective dùng haiku\n- test_card_model_none_falls_back_to_policy: card.model=None → dùng policy default\n- test_update_card_model: gọi update → model đổi đúng\n- test_registry_backward_compat: load registry cũ không có model field → OK\n\nSpawn agents: tdd-guide (viết tests trước) → code-reviewer.",
-      "status": "queued",
-      "source_kind": "manual_idea",
-      "source_ref": "",
-      "score": 100,
-      "score_reasons": [
-        "source=manual_idea",
-        "direct user-driven input",
-        "recently updated"
-      ],
-      "labels": [
-        "backend",
-        "parallel"
-      ],
-      "created_at": 1777831756.1642811,
-      "updated_at": 1777839104.89841,
-      "metadata": {
-        "last_note": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
-        "url": "",
-        "execution_model": "oc-medium",
-        "assistant_summary_preview": "I'll implement the per-card model field for RepoTaskCard. Let me start by reading the relevant files to understand the current structure. Need find methods.Now I have enough understanding. Let me make the changes:Now update the `existing` and `new card` branches to handle model:Add method after u...",
-        "human_gate_pending": false,
-        "verification_failed": false,
-        "attempt_count": 1,
-        "max_attempts": 5,
-        "linked_pr_number": null,
-        "linked_pr_url": "",
-        "head_branch": "autopilot/ap-7849e16f",
-        "last_ci_conclusion": "",
-        "last_ci_summary": "",
-        "last_failure_stage": "github_pr_open_failed",
-        "last_failure_summary": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
-        "verification_steps": []
-      }
-    },
-    {
-      "id": "ap-960d5957",
-      "title": "[P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model",
-      "body": "## Mục tiêu\nAPI endpoint cho phép WebUI gửi model override cho 1 autopilot card.\n\n## Giải pháp đề xuất\n1. Thêm endpoint PATCH /api/pipeline/cards/{id}/model trong routes/pipeline.py\n   - Body: {model: string | null} — null để reset về default\n   - Validate model tồn tại trong allowed models (optional, warn only)\n   - Gọi store.update_card_model(card_id, model)\n   - Return updated card\n   - 404 nếu card không tồn tại\n2. Thêm GET /api/pipeline/cards/{id} endpoint trả full card detail\n   - Include model field, metadata, body, linked_pr_url, attempt_count\n   - Include available_models list (từ provider profiles)\n3. Cập nhật _serialize_card() thêm model field\n\n## Files cần sửa\n- MODIFY: src/openharness/webui/server/routes/pipeline.py\n- MODIFY: tests/test_webui/test_server.py hoặc test_pipeline_routes.py\n\n## Tests yêu cầu\n- test_patch_card_model: set model → 200, card.model updated\n- test_patch_card_model_null_resets: set null → model=None\n- test_patch_card_model_404: unknown card → 404\n- test_get_card_detail: trả full card bao gồm model\n- test_serialize_card_includes_model: model field có trong response\n\nSpawn agents: tdd-guide → code-reviewer.\nDepends on: P9.4 (cần model field trên RepoTaskCard).",
-      "status": "queued",
-      "source_kind": "manual_idea",
-      "source_ref": "",
-      "score": 100,
-      "score_reasons": [
-        "source=manual_idea",
-        "direct user-driven input",
-        "recently updated"
-      ],
-      "labels": [
-        "api",
-        "backend",
-        "parallel"
-      ],
-      "created_at": 1777831777.845567,
-      "updated_at": 1777839106.3096929,
-      "metadata": {
-        "last_note": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
-        "url": "",
-        "execution_model": "oc-medium",
-        "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase before implementing the changes.Need more file maybe store methods.The `RepoTaskCard` doesn't have a `model` field! The task says \"Depends on: P9.4 (cần model field trên RepoTaskCard)\" — so P9.4 should have added it. Let ...",
-        "human_gate_pending": false,
-        "verification_failed": false,
-        "attempt_count": 1,
-        "max_attempts": 5,
-        "linked_pr_number": null,
-        "linked_pr_url": "",
-        "head_branch": "autopilot/ap-960d5957",
-        "last_ci_conclusion": "",
-        "last_ci_summary": "",
-        "last_failure_stage": "github_pr_open_failed",
-        "last_failure_summary": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
-        "verification_steps": []
-      }
-    },
-    {
       "id": "ap-e8d98ed7",
       "title": "[P9.6] Frontend: Card detail + model dropdown",
       "body": "## Mục tiêu\nTrong Autopilot board, click card mở detail drawer hiển thị model mặc định, user có thể chọn model khác qua dropdown.\n\n## Giải pháp đề xuất\n1. Card detail drawer (mở khi click card trên Kanban board):\n   - Header: card title, status badge, source_kind badge\n   - Section 'Model': hiển thị current model (policy default nếu null)\n     - Dropdown lấy danh sách từ GET /api/models (flatten)\n     - Default option: 'Policy default ({policy_model})' \n     - Khi chọn → PATCH /api/pipeline/cards/{id}/model\n     - Optimistic update + toast success/error\n   - Section 'Details': body, labels, attempt_count, linked_pr_url\n   - Section 'Activity': journal entries (reuse P7.7)\n   - Section 'Actions': Accept/Reject/Retry/Reset buttons\n2. Model dropdown disabled khi card đang active (running/repairing/etc)\n3. Responsive: drawer full-width trên mobile\n\n## Files cần sửa\n- MODIFY hoặc NEW: frontend/webui/src/components/CardDetailDrawer.tsx\n- MODIFY: frontend/webui/src/pages/AutopilotPage.tsx (hoặc PipelinePage.tsx tùy P8.2)\n\n## Tests yêu cầu\n- Visual: drawer mở đúng, model dropdown hiển thị\n- test_model_dropdown_calls_patch: chọn model → API called\n- test_model_dropdown_disabled_when_active: card running → dropdown disabled\n\nSpawn agents: planner (thiết kế drawer layout) → tdd-guide → code-reviewer → a11y-architect.\nDepends on: P9.5, P8.1 (Kanban board).",
@@ -4748,24 +4755,45 @@
         "ui"
       ],
       "created_at": 1777831799.091248,
-      "updated_at": 1777855922.7210429,
+      "updated_at": 1777880566.638268,
       "metadata": {
-        "last_note": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+        "last_note": "remote CI status: success",
         "url": "",
-        "execution_model": "oc-medium",
-        "assistant_summary_preview": "I'll analyze the current state and implement P9.6 - the card detail drawer with model dropdown. Let me start by examining the existing code. PipelinePage is large; need relevant sections. Now I have a complete picture. Let me implement P9.6: 1. **Backend**: Add `PATCH /api/pipeline/cards/{id}/mod...",
+        "execution_model": "oclaude-coder",
+        "assistant_summary_preview": "I'll analyze the current state and fix the git authentication issue, then complete P9.6. I found the P9.6 implementation already in the branch; I’m checking the frontend drawer/tests and the model patch route to verify it’s complete and then I’ll run the required checks. Now let me check the back...",
         "human_gate_pending": false,
         "verification_failed": false,
-        "attempt_count": 2,
+        "attempt_count": 3,
         "max_attempts": 5,
-        "linked_pr_number": null,
-        "linked_pr_url": "",
+        "linked_pr_number": 68,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/68",
         "head_branch": "autopilot/ap-e8d98ed7",
-        "last_ci_conclusion": "",
-        "last_ci_summary": "",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "No remote checks were reported after the grace period.",
         "last_failure_stage": "github_pr_open_failed",
         "last_failure_summary": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
-        "verification_steps": []
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "success",
+            "returncode": 0
+          }
+        ]
       }
     },
     {
@@ -5615,6 +5643,124 @@
           {
             "command": "agent:code-reviewer (diff vs main)",
             "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-99e5077a",
+      "title": "[P9.3] Main checkout lock cho _pull_base_branch + _install_editable",
+      "body": "## Mục tiêu\nBảo vệ shared main checkout (self._cwd) khi nhiều autopilot process cùng gọi _pull_base_branch() hoặc _install_editable() sau merge.\n\n## Phân tích rủi ro hiện tại\n- _pull_base_branch() (line 1436) chạy git fetch + git pull --ff-only trên self._cwd\n- _install_editable() chạy pip install -e . trên self._cwd\n- 2 process merge xong cùng lúc → concurrent git pull → corrupt index\n- 2 process cùng install_editable → dependency conflict\n\n## Giải pháp đề xuất\n1. Thêm RepoFileLock('main-checkout.lock') [reuse P9.1]\n2. Wrap _pull_base_branch() call site trong lock\n3. Wrap _install_editable() call site trong lock\n4. Timeout 60s (pull + install có thể chậm)\n5. Lock scope chỉ ở call site, không lock toàn bộ method\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/service.py — wrap _pull_base_branch, _install_editable calls\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu\n- test_pull_base_branch_acquires_lock: mock lock, verify acquire called\n- test_pull_base_branch_releases_lock_on_error: pull fails → lock released\n- test_concurrent_pull_serialized: 2 threads pull → serialized execution\n\nSpawn agents: tdd-guide → code-reviewer.\nDepends on: P9.1.",
+      "status": "completed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [
+        "backend",
+        "parallel"
+      ],
+      "created_at": 1777831737.384298,
+      "updated_at": 1777872213.772641,
+      "metadata": {
+        "last_note": "Failed to push branch or upsert PR: To https://github.com/hodtien/mharness.git\n ! [rejected]        autopilot/ap-99e5077a -> autopilot/ap-99e5077a (non-fast-forward)\nerror: failed to push some refs to 'https://github.com/hodtien/mharness.git'\nhint: Updates were rejected because the tip of your current branch is behind\nhint: its remote counterpart. If you want to integrate the remote changes,\nhint: use 'git pull' before pushing again.\nhint: See the 'Note about fast-forwards' in 'git push --help' for details.",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "I'll start by exploring the repo structure and understanding the existing code.I’ll also spawn the requested guide/reviewer agents while I implement the focused change.Now let me see the `_main_checkout_lock_path` setup and the `__init__` of `RepoAutopilotStore`: Now I have enough context. Let me...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 5,
+        "linked_pr_number": 65,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/65",
+        "head_branch": "autopilot/ap-99e5077a",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "No remote checks were reported after the grace period.",
+        "last_failure_stage": "github_pr_open_failed",
+        "last_failure_summary": "Failed to push branch or upsert PR: To https://github.com/hodtien/mharness.git\n ! [rejected]        autopilot/ap-99e5077a -> autopilot/ap-99e5077a (non-fast-forward)\nerror: failed to push some refs to 'https://github.com/hodtien/mharness.git'\nhint: Updates were rejected because the tip of your current branch is behind\nhint: its remote counterpart. If you want to integrate the remote changes,\nhint: use 'git pull' before pushing again.\nhint: See the 'Note about fast-forwards' in 'git push --help' for details.",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "success",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-7849e16f",
+      "title": "[P9.4] Per-card model field trong RepoTaskCard",
+      "body": "## Mục tiêu\nCho phép chỉ định model cho từng autopilot card thay vì dùng chung model mặc định từ policy.\n\n## Phân tích hiện tại\n- RepoTaskCard (types.py line 47) có metadata: dict[str, Any] nhưng KHÔNG có model field\n- run_card() (service.py line 711) xác định effective_model = explicit param hoặc policy default\n- Không có cách nào user chọn model cho 1 card cụ thể\n\n## Giải pháp đề xuất\n1. Thêm field model: str | None = None vào RepoTaskCard (types.py)\n2. Trong run_card(): effective_model = card.model or policy_default\n3. enqueue_card() chấp nhận optional model param\n4. update_card_model(card_id, model) method mới trong RepoAutopilotStore\n5. Migration: registry.json cũ không có model field → Pydantic default None xử lý tự động\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/types.py — thêm model field\n- MODIFY: src/openharness/autopilot/service.py — effective_model logic, update_card_model()\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu\n- test_card_model_default_none: card mới model=None\n- test_card_model_overrides_policy: card.model='claude-haiku-4-5' → effective dùng haiku\n- test_card_model_none_falls_back_to_policy: card.model=None → dùng policy default\n- test_update_card_model: gọi update → model đổi đúng\n- test_registry_backward_compat: load registry cũ không có model field → OK\n\nSpawn agents: tdd-guide (viết tests trước) → code-reviewer.",
+      "status": "completed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [
+        "backend",
+        "parallel"
+      ],
+      "created_at": 1777831756.1642811,
+      "updated_at": 1777872213.772641,
+      "metadata": {
+        "last_note": "remote CI status: success",
+        "url": "",
+        "execution_model": "oc-medium",
+        "assistant_summary_preview": "Let me inspect the current state of the branch to see what was already implemented in the previous attempt.Good - the implementation is already in place. Let me run the tests to verify everything works:Python checks passed. Running the frontend TypeScript gate now.All three gates pass. The branch...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 2,
+        "max_attempts": 5,
+        "linked_pr_number": 66,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/66",
+        "head_branch": "autopilot/ap-7849e16f",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "No remote checks were reported after the grace period.",
+        "last_failure_stage": "github_pr_open_failed",
+        "last_failure_summary": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "success",
             "returncode": 0
           }
         ]
@@ -8523,10 +8669,10 @@
       }
     },
     {
-      "id": "ap-99e5077a",
-      "title": "[P9.3] Main checkout lock cho _pull_base_branch + _install_editable",
-      "body": "## Mục tiêu\nBảo vệ shared main checkout (self._cwd) khi nhiều autopilot process cùng gọi _pull_base_branch() hoặc _install_editable() sau merge.\n\n## Phân tích rủi ro hiện tại\n- _pull_base_branch() (line 1436) chạy git fetch + git pull --ff-only trên self._cwd\n- _install_editable() chạy pip install -e . trên self._cwd\n- 2 process merge xong cùng lúc → concurrent git pull → corrupt index\n- 2 process cùng install_editable → dependency conflict\n\n## Giải pháp đề xuất\n1. Thêm RepoFileLock('main-checkout.lock') [reuse P9.1]\n2. Wrap _pull_base_branch() call site trong lock\n3. Wrap _install_editable() call site trong lock\n4. Timeout 60s (pull + install có thể chậm)\n5. Lock scope chỉ ở call site, không lock toàn bộ method\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/service.py — wrap _pull_base_branch, _install_editable calls\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu\n- test_pull_base_branch_acquires_lock: mock lock, verify acquire called\n- test_pull_base_branch_releases_lock_on_error: pull fails → lock released\n- test_concurrent_pull_serialized: 2 threads pull → serialized execution\n\nSpawn agents: tdd-guide → code-reviewer.\nDepends on: P9.1.",
-      "status": "failed",
+      "id": "ap-960d5957",
+      "title": "[P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model",
+      "body": "## Mục tiêu\nAPI endpoint cho phép WebUI gửi model override cho 1 autopilot card.\n\n## Giải pháp đề xuất\n1. Thêm endpoint PATCH /api/pipeline/cards/{id}/model trong routes/pipeline.py\n   - Body: {model: string | null} — null để reset về default\n   - Validate model tồn tại trong allowed models (optional, warn only)\n   - Gọi store.update_card_model(card_id, model)\n   - Return updated card\n   - 404 nếu card không tồn tại\n2. Thêm GET /api/pipeline/cards/{id} endpoint trả full card detail\n   - Include model field, metadata, body, linked_pr_url, attempt_count\n   - Include available_models list (từ provider profiles)\n3. Cập nhật _serialize_card() thêm model field\n\n## Files cần sửa\n- MODIFY: src/openharness/webui/server/routes/pipeline.py\n- MODIFY: tests/test_webui/test_server.py hoặc test_pipeline_routes.py\n\n## Tests yêu cầu\n- test_patch_card_model: set model → 200, card.model updated\n- test_patch_card_model_null_resets: set null → model=None\n- test_patch_card_model_404: unknown card → 404\n- test_get_card_detail: trả full card bao gồm model\n- test_serialize_card_includes_model: model field có trong response\n\nSpawn agents: tdd-guide → code-reviewer.\nDepends on: P9.4 (cần model field trên RepoTaskCard).",
+      "status": "merged",
       "source_kind": "manual_idea",
       "source_ref": "",
       "score": 100,
@@ -8536,27 +8682,28 @@
         "recently updated"
       ],
       "labels": [
+        "api",
         "backend",
         "parallel"
       ],
-      "created_at": 1777831737.384298,
-      "updated_at": 1777857483.106345,
+      "created_at": 1777831777.845567,
+      "updated_at": 1777876532.64214,
       "metadata": {
-        "last_note": "Failed to push branch or upsert PR: To https://github.com/hodtien/mharness.git\n ! [rejected]        autopilot/ap-99e5077a -> autopilot/ap-99e5077a (non-fast-forward)\nerror: failed to push some refs to 'https://github.com/hodtien/mharness.git'\nhint: Updates were rejected because the tip of your current branch is behind\nhint: its remote counterpart. If you want to integrate the remote changes,\nhint: use 'git pull' before pushing again.\nhint: See the 'Note about fast-forwards' in 'git push --help' for details.",
+        "last_note": "remote CI status: success",
         "url": "",
-        "execution_model": "oc-medium",
-        "assistant_summary_preview": "I'll start by exploring the repo structure and understanding the existing code.I’ll also spawn the requested guide/reviewer agents while I implement the focused change.Now let me see the `_main_checkout_lock_path` setup and the `__init__` of `RepoAutopilotStore`: Now I have enough context. Let me...",
+        "execution_model": "oclaude-coder",
+        "assistant_summary_preview": "I'll analyze the current state and implement the fix. Let me start by exploring the codebase to understand what's been done and what needs to be completed. I found `routes/pipeline.py` already has card serialization and detail helpers. Next I’m checking the remaining route handlers and the tests ...",
         "human_gate_pending": false,
         "verification_failed": false,
-        "attempt_count": 1,
+        "attempt_count": 2,
         "max_attempts": 5,
-        "linked_pr_number": 65,
-        "linked_pr_url": "https://github.com/hodtien/mharness/pull/65",
-        "head_branch": "autopilot/ap-99e5077a",
+        "linked_pr_number": 67,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/67",
+        "head_branch": "autopilot/ap-960d5957",
         "last_ci_conclusion": "success",
         "last_ci_summary": "No remote checks were reported after the grace period.",
         "last_failure_stage": "github_pr_open_failed",
-        "last_failure_summary": "Failed to push branch or upsert PR: To https://github.com/hodtien/mharness.git\n ! [rejected]        autopilot/ap-99e5077a -> autopilot/ap-99e5077a (non-fast-forward)\nerror: failed to push some refs to 'https://github.com/hodtien/mharness.git'\nhint: Updates were rejected because the tip of your current branch is behind\nhint: its remote counterpart. If you want to integrate the remote changes,\nhint: use 'git pull' before pushing again.\nhint: See the 'Note about fast-forwards' in 'git push --help' for details.",
+        "last_failure_summary": "Failed to push branch or upsert PR: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
         "verification_steps": [
           {
             "command": "uv run pytest -q",
@@ -9216,199 +9363,6 @@
   ],
   "journal": [
     {
-      "timestamp": 1777839900.3088021,
-      "kind": "status_verifying",
-      "summary": "verifying: [P9.6] Frontend: Card detail + model dropdown (running verification gates)",
-      "task_id": "ap-e8d98ed7",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777839924.587206,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (local verification failed; retrying)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777839924.609267,
-      "kind": "verification_failed",
-      "summary": "[P9.3] Main checkout lock cho _pull_base_branch + _install_editable: local verification failed, retrying",
-      "task_id": "ap-99e5077a",
-      "metadata": {
-        "attempt_count": 2
-      }
-    },
-    {
-      "timestamp": 1777839925.312767,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (repairing failed run)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777839930.161356,
-      "kind": "status_failed",
-      "summary": "failed: [P9.6] Frontend: Card detail + model dropdown (Failed to push branch or upsert PR: fatal: could not read Username for 'https...)",
-      "task_id": "ap-e8d98ed7",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777840072.805491,
-      "kind": "run_finished",
-      "summary": "Agent run finished for [P9.3] Main checkout lock cho _pull_base_branch + _install_editable",
-      "task_id": "ap-99e5077a",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-99e5077a-attempt-03-run.md",
-        "attempt_count": 3
-      }
-    },
-    {
-      "timestamp": 1777840072.81841,
-      "kind": "status_verifying",
-      "summary": "verifying: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (running verification gates)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777840168.4170492,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (local verification failed; retrying)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777840168.43397,
-      "kind": "verification_failed",
-      "summary": "[P9.3] Main checkout lock cho _pull_base_branch + _install_editable: local verification failed, retrying",
-      "task_id": "ap-99e5077a",
-      "metadata": {
-        "attempt_count": 3
-      }
-    },
-    {
-      "timestamp": 1777840169.2299259,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (repairing failed run)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777840263.6023932,
-      "kind": "run_finished",
-      "summary": "Agent run finished for [P9.3] Main checkout lock cho _pull_base_branch + _install_editable",
-      "task_id": "ap-99e5077a",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-99e5077a-attempt-04-run.md",
-        "attempt_count": 4
-      }
-    },
-    {
-      "timestamp": 1777840263.615318,
-      "kind": "status_verifying",
-      "summary": "verifying: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (running verification gates)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777840432.684214,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (local verification failed; retrying)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777840432.701111,
-      "kind": "verification_failed",
-      "summary": "[P9.3] Main checkout lock cho _pull_base_branch + _install_editable: local verification failed, retrying",
-      "task_id": "ap-99e5077a",
-      "metadata": {
-        "attempt_count": 4
-      }
-    },
-    {
-      "timestamp": 1777840433.466232,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (repairing failed run)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777840527.674314,
-      "kind": "run_finished",
-      "summary": "Agent run finished for [P9.3] Main checkout lock cho _pull_base_branch + _install_editable",
-      "task_id": "ap-99e5077a",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-99e5077a-attempt-05-run.md",
-        "attempt_count": 5
-      }
-    },
-    {
-      "timestamp": 1777840527.686249,
-      "kind": "status_verifying",
-      "summary": "verifying: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (running verification gates)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777840581.367785,
-      "kind": "existing_progress_detected",
-      "summary": "[P9.3] Main checkout lock cho _pull_base_branch + _install_editable: reusing existing local branch progress",
-      "task_id": "ap-99e5077a",
-      "metadata": {
-        "attempt_count": 5,
-        "head_branch": "autopilot/ap-99e5077a"
-      }
-    },
-    {
-      "timestamp": 1777840590.257836,
-      "kind": "status_waiting_ci",
-      "summary": "waiting_ci: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (waiting for remote CI on PR #65)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777840654.932844,
-      "kind": "status_waiting_ci",
-      "summary": "waiting_ci: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (remote CI status: success)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777855922.731488,
-      "kind": "status_queued",
-      "summary": "queued: [P9.6] Frontend: Card detail + model dropdown",
-      "task_id": "ap-e8d98ed7",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777856527.316056,
-      "kind": "status_queued",
-      "summary": "queued: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777856537.193621,
-      "kind": "status_preparing",
-      "summary": "preparing: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (preparing isolated worktree)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777856537.226641,
-      "kind": "status_failed",
-      "summary": "failed: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (repair rounds exhausted)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777856912.192269,
-      "kind": "status_preparing",
-      "summary": "preparing: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (preparing isolated worktree)",
-      "task_id": "ap-99e5077a",
-      "metadata": {}
-    },
-    {
       "timestamp": 1777856912.976584,
       "kind": "status_running",
       "summary": "running: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (autopilot execution started)",
@@ -9448,6 +9402,199 @@
       "summary": "failed: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (Failed to push branch or upsert PR: To https://github.com/hodtien/mharness.gi...)",
       "task_id": "ap-99e5077a",
       "metadata": {}
+    },
+    {
+      "timestamp": 1777870659.086976,
+      "kind": "status_preparing",
+      "summary": "preparing: [P9.4] Per-card model field trong RepoTaskCard (preparing isolated worktree)",
+      "task_id": "ap-7849e16f",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777870659.753147,
+      "kind": "status_repairing",
+      "summary": "repairing: [P9.4] Per-card model field trong RepoTaskCard (repairing failed run)",
+      "task_id": "ap-7849e16f",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777870757.831981,
+      "kind": "run_finished",
+      "summary": "Agent run finished for [P9.4] Per-card model field trong RepoTaskCard",
+      "task_id": "ap-7849e16f",
+      "metadata": {
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-7849e16f-attempt-02-run.md",
+        "attempt_count": 2
+      }
+    },
+    {
+      "timestamp": 1777870757.844095,
+      "kind": "status_verifying",
+      "summary": "verifying: [P9.4] Per-card model field trong RepoTaskCard (running verification gates)",
+      "task_id": "ap-7849e16f",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777870794.606248,
+      "kind": "existing_progress_detected",
+      "summary": "[P9.4] Per-card model field trong RepoTaskCard: reusing existing local branch progress",
+      "task_id": "ap-7849e16f",
+      "metadata": {
+        "attempt_count": 2,
+        "head_branch": "autopilot/ap-7849e16f"
+      }
+    },
+    {
+      "timestamp": 1777870802.4387279,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P9.4] Per-card model field trong RepoTaskCard (waiting for remote CI on PR #66)",
+      "task_id": "ap-7849e16f",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777870869.13908,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P9.4] Per-card model field trong RepoTaskCard (remote CI status: success)",
+      "task_id": "ap-7849e16f",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777872815.850441,
+      "kind": "status_preparing",
+      "summary": "preparing: [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model (preparing isolated worktree)",
+      "task_id": "ap-960d5957",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777872816.570507,
+      "kind": "status_repairing",
+      "summary": "repairing: [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model (repairing failed run)",
+      "task_id": "ap-960d5957",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777872880.166305,
+      "kind": "run_finished",
+      "summary": "Agent run finished for [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model",
+      "task_id": "ap-960d5957",
+      "metadata": {
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-960d5957-attempt-02-run.md",
+        "attempt_count": 2
+      }
+    },
+    {
+      "timestamp": 1777872880.182844,
+      "kind": "status_verifying",
+      "summary": "verifying: [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model (running verification gates)",
+      "task_id": "ap-960d5957",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777872930.1602318,
+      "kind": "existing_progress_detected",
+      "summary": "[P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model: reusing existing local branch progress",
+      "task_id": "ap-960d5957",
+      "metadata": {
+        "attempt_count": 2,
+        "head_branch": "autopilot/ap-960d5957"
+      }
+    },
+    {
+      "timestamp": 1777872939.3270311,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model (waiting for remote CI on PR #67)",
+      "task_id": "ap-960d5957",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777873006.196714,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model (remote CI status: success)",
+      "task_id": "ap-960d5957",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777875596.772913,
+      "kind": "status_queued",
+      "summary": "queued: [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model",
+      "task_id": "ap-960d5957",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777875683.236041,
+      "kind": "status_accepted",
+      "summary": "accepted: [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model",
+      "task_id": "ap-960d5957",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777875699.7333171,
+      "kind": "status_accepted",
+      "summary": "accepted: [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model",
+      "task_id": "ap-960d5957",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777877194.838872,
+      "kind": "status_preparing",
+      "summary": "preparing: [P9.6] Frontend: Card detail + model dropdown (preparing isolated worktree)",
+      "task_id": "ap-e8d98ed7",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777877195.484954,
+      "kind": "status_repairing",
+      "summary": "repairing: [P9.6] Frontend: Card detail + model dropdown (repairing failed run)",
+      "task_id": "ap-e8d98ed7",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777877345.382269,
+      "kind": "run_finished",
+      "summary": "Agent run finished for [P9.6] Frontend: Card detail + model dropdown",
+      "task_id": "ap-e8d98ed7",
+      "metadata": {
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-e8d98ed7-attempt-03-run.md",
+        "attempt_count": 3
+      }
+    },
+    {
+      "timestamp": 1777877345.392454,
+      "kind": "status_verifying",
+      "summary": "verifying: [P9.6] Frontend: Card detail + model dropdown (running verification gates)",
+      "task_id": "ap-e8d98ed7",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777877406.247757,
+      "kind": "existing_progress_detected",
+      "summary": "[P9.6] Frontend: Card detail + model dropdown: reusing existing local branch progress",
+      "task_id": "ap-e8d98ed7",
+      "metadata": {
+        "attempt_count": 3,
+        "head_branch": "autopilot/ap-e8d98ed7"
+      }
+    },
+    {
+      "timestamp": 1777877414.183382,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P9.6] Frontend: Card detail + model dropdown (waiting for remote CI on PR #68)",
+      "task_id": "ap-e8d98ed7",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777877478.2239401,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P9.6] Frontend: Card detail + model dropdown (remote CI status: success)",
+      "task_id": "ap-e8d98ed7",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777880566.648042,
+      "kind": "status_queued",
+      "summary": "queued: [P9.6] Frontend: Card detail + model dropdown",
+      "task_id": "ap-e8d98ed7",
+      "metadata": {}
     }
   ],
   "policies": {
@@ -9455,5 +9602,5 @@
     "verification": "/Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml",
     "release": "/Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
   },
-  "active_context": "# Active Repo Context\n\nGenerated at: 2026-05-04 01:18:03 UTC\n\n## Current Task Focus\n- [queued] [P9.4] Per-card model field trong RepoTaskCard (manual_idea, score=100)\n- Detail: ## Mục tiêu Cho phép chỉ định model cho từng autopilot card thay vì dùng chung model mặc định từ policy. ## Phân tích hiện tại - RepoTaskCard (types.py line 47) có metadata: dict[str, Any] nhưng KHÔNG có model field -...\n\n## In Progress\n- None.\n\n## Next Up\n- [100] ap-7849e16f [P9.4] Per-card model field trong RepoTaskCard (manual_idea)\n- [100] ap-960d5957 [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model (manual_idea)\n- [100] ap-e8d98ed7 [P9.6] Frontend: Card detail + model dropdown (manual_idea)\n- [100] ap-a0665b96 [P9.7] Configurable max_parallel_runs policy (manual_idea)\n- [100] ap-bd344eb2 [P9.8] Capacity-based concurrency gate thay already_running (manual_idea)\n- [100] ap-b6a2705c [P9.9] Worktree cleanup finally block (manual_idea)\n- [100] ap-93f7fa1a [P9.10] Rebase strategy cho in-flight worktrees (manual_idea)\n- [100] ap-5d3976a2 [P9.11] Integration test: 2 cards chạy song song end-to-end (manual_idea)\n\n## Recently Completed\n- ap-8e302095 [P9.2] Atomic card claim — pick_and_claim_card()\n- ap-7b9cadf9 [P9.1] Interprocess lock cho registry + journal\n- ap-37cd651b [P8.5] Activity item — truncate message + expand on click\n- ap-5de66fe2 [P8.4] Activity drawer có thể scroll + chiều cao đúng viewport\n- ap-05522373 [P8.3] Làm rõ Tasks tab — đổi tên thành Jobs và thêm subtitle\n\n## Recent Failures\n- [failed] ap-99e5077a [P9.3] Main checkout lock cho _pull_base_branch + _install_editable\n- [rejected] ap-000584f0 GitHub PR #8: Claude/review repo code m vtiq\n- [rejected] ap-0cca6f22 GitHub PR #34: Windows startup fails with ModuleNotFoundError: No module named 'fcnt…\n- [rejected] ap-c6657d82 GitHub PR #61: feat(tools): add structured GitTool with schema-enforced safety\n- [rejected] ap-87a69305 GitHub PR #62: feat(skills): add runtime skill activation\n\n## Recent Repo Journal\n- 05-04 01:02 status_preparing: preparing: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (preparing isolated worktree)\n- 05-04 01:02 status_failed: failed: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (repair rounds exhausted)\n- 05-04 01:08 status_preparing: preparing: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (preparing isolated worktree)\n- 05-04 01:08 status_running: running: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (autopilot execution started)\n- 05-04 01:15 run_finished: Agent run finished for [P9.3] Main checkout lock cho _pull_base_branch + _install_editable\n- 05-04 01:15 status_verifying: verifying: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (running verification gates)\n- 05-04 01:17 existing_progress_detected: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable: reusing existing local branch progress\n- 05-04 01:18 status_failed: failed: [P9.3] Main checkout lock cho _pull_base_branch + _install_editable (Failed to push branch or upsert PR: To https://github.com/hodtien/mharness.gi...)\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
+  "active_context": "# Active Repo Context\n\nGenerated at: 2026-05-04 07:42:46 UTC\n\n## Current Task Focus\n- [queued] [P9.6] Frontend: Card detail + model dropdown (manual_idea, score=100)\n- Detail: ## Mục tiêu Trong Autopilot board, click card mở detail drawer hiển thị model mặc định, user có thể chọn model khác qua dropdown. ## Giải pháp đề xuất 1. Card detail drawer (mở khi click card trên Kanban board): - Hea...\n\n## In Progress\n- None.\n\n## Next Up\n- [100] ap-e8d98ed7 [P9.6] Frontend: Card detail + model dropdown (manual_idea)\n- [100] ap-a0665b96 [P9.7] Configurable max_parallel_runs policy (manual_idea)\n- [100] ap-bd344eb2 [P9.8] Capacity-based concurrency gate thay already_running (manual_idea)\n- [100] ap-b6a2705c [P9.9] Worktree cleanup finally block (manual_idea)\n- [100] ap-93f7fa1a [P9.10] Rebase strategy cho in-flight worktrees (manual_idea)\n- [100] ap-5d3976a2 [P9.11] Integration test: 2 cards chạy song song end-to-end (manual_idea)\n\n## Recently Completed\n- ap-960d5957 [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model\n- ap-99e5077a [P9.3] Main checkout lock cho _pull_base_branch + _install_editable\n- ap-7849e16f [P9.4] Per-card model field trong RepoTaskCard\n- ap-8e302095 [P9.2] Atomic card claim — pick_and_claim_card()\n- ap-7b9cadf9 [P9.1] Interprocess lock cho registry + journal\n\n## Recent Failures\n- [rejected] ap-000584f0 GitHub PR #8: Claude/review repo code m vtiq\n- [rejected] ap-0cca6f22 GitHub PR #34: Windows startup fails with ModuleNotFoundError: No module named 'fcnt…\n- [rejected] ap-c6657d82 GitHub PR #61: feat(tools): add structured GitTool with schema-enforced safety\n- [rejected] ap-87a69305 GitHub PR #62: feat(skills): add runtime skill activation\n- [rejected] ap-2a747fb4 GitHub PR #68: feat(memory): integrate optional PowerMem retrieval into system prompt\n\n## Recent Repo Journal\n- 05-04 06:46 status_preparing: preparing: [P9.6] Frontend: Card detail + model dropdown (preparing isolated worktree)\n- 05-04 06:46 status_repairing: repairing: [P9.6] Frontend: Card detail + model dropdown (repairing failed run)\n- 05-04 06:49 run_finished: Agent run finished for [P9.6] Frontend: Card detail + model dropdown\n- 05-04 06:49 status_verifying: verifying: [P9.6] Frontend: Card detail + model dropdown (running verification gates)\n- 05-04 06:50 existing_progress_detected: [P9.6] Frontend: Card detail + model dropdown: reusing existing local branch progress\n- 05-04 06:50 status_waiting_ci: waiting_ci: [P9.6] Frontend: Card detail + model dropdown (waiting for remote CI on PR #68)\n- 05-04 06:51 status_waiting_ci: waiting_ci: [P9.6] Frontend: Card detail + model dropdown (remote CI status: success)\n- 05-04 07:42 status_queued: queued: [P9.6] Frontend: Card detail + model dropdown\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
 }

@@ -212,14 +212,6 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
-  patchCardModel: (cardId: string, model: string | null) =>
-    apiFetch<{ model: string | null }>(
-      `/api/pipeline/cards/${encodeURIComponent(cardId)}/model`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ model }),
-      },
-    ),
 };
 
 // ---------------- WebSocket session ----------------

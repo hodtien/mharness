@@ -519,7 +519,7 @@ class RepoAutopilotStore:
         self,
         card_id: str,
         *,
-        status: RepoTaskStatus | None = None,
+        status: RepoTaskStatus,
         note: str | None = None,
         metadata_updates: dict[str, Any] | None = None,
     ) -> RepoTaskCard:
@@ -527,29 +527,20 @@ class RepoAutopilotStore:
         card = next((item for item in registry.cards if item.id == card_id), None)
         if card is None:
             raise ValueError(f"No autopilot card found with ID: {card_id}")
-        if status is not None:
-            card.status = status
+        card.status = status
         card.updated_at = time.time()
         if note:
             card.metadata["last_note"] = note.strip()
         if metadata_updates:
-            if "model_override" in metadata_updates and metadata_updates["model_override"] is None:
-                card.metadata.pop("model_override", None)
-            else:
-                card.metadata.update(metadata_updates)
+            card.metadata.update(metadata_updates)
         card.score, card.score_reasons = self._score_card(card)
         self._save_registry(registry)
-        if status is not None:
-            summary = f"{status}: {card.title}"
-            if note:
-                summary = f"{summary} ({_shorten(note, limit=80)})"
-            self.append_journal(kind=f"status_{status}", summary=summary, task_id=card.id)
-        elif metadata_updates:
-            self.append_journal(kind="metadata_updated", summary=f"metadata updated: {card.title}", task_id=card.id)
+        summary = f"{status}: {card.title}"
+        if note:
+            summary = f"{summary} ({_shorten(note, limit=80)})"
+        self.append_journal(kind=f"status_{status}", summary=summary, task_id=card.id)
         self.rebuild_active_context()
         return card
-
-
 
     def load_journal(self, *, limit: int = 12) -> list[RepoJournalEntry]:
         if not self._journal_path.exists():
