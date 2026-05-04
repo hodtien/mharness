@@ -549,22 +549,7 @@ class RepoAutopilotStore:
         self.rebuild_active_context()
         return card
 
-    def update_card_model(self, card_id: str, model: str | None) -> RepoTaskCard:
-        """Set (or clear) the model override on a card."""
-        registry = self._load_registry()
-        card = next((item for item in registry.cards if item.id == card_id), None)
-        if card is None:
-            raise ValueError(f"No autopilot card found with ID: {card_id}")
-        card.model = model
-        card.updated_at = time.time()
-        self._save_registry(registry)
-        self.append_journal(
-            kind="model_override",
-            summary=f"Model override set to {model!r} for {card.title}",
-            task_id=card.id,
-            metadata={"model": model},
-        )
-        return card
+
 
     def load_journal(self, *, limit: int = 12) -> list[RepoJournalEntry]:
         if not self._journal_path.exists():
