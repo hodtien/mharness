@@ -1087,10 +1087,10 @@ def test_pipeline_cards_model_patch_updates_execution_model(tmp_path) -> None:
     assert response.status_code == 200
     assert response.json()["model"] == "gpt-4.1"
     saved = json.loads((tmp_path / ".openharness" / "autopilot" / "registry.json").read_text())
-    assert saved["cards"][0]["metadata"]["execution_model"] == "gpt-4.1"
+    assert saved["cards"][0]["model"] == "gpt-4.1"
 
 
-def test_pipeline_cards_model_patch_rejects_active_card(tmp_path) -> None:
+def test_pipeline_cards_model_patch_allows_active_card(tmp_path) -> None:
     registry = {
         "version": 1,
         "updated_at": 1000.0,
@@ -1122,7 +1122,8 @@ def test_pipeline_cards_model_patch_rejects_active_card(tmp_path) -> None:
         headers={"Authorization": "Bearer test-token"},
         json={"model": "gpt-4.1"},
     )
-    assert response.status_code == 409
+    assert response.status_code == 200
+    assert response.json()["model"] == "gpt-4.1"
 
 
 # ----------------------------------------------------------------------
