@@ -183,7 +183,7 @@ cd ~/projects/my-app
 
 # 1. Set agent models cost-aware
 oh model agent set planner       "claude-opus-4-7,claude-sonnet-4-6"
-oh model agent set worker        "claude-haiku-4-5,claude-architect-backup"
+oh model agent set worker        "claude-haiku-4-5,claude-architect"
 oh model agent set code-reviewer "claude-sonnet-4-6"
 
 # 2. Install cron
@@ -306,7 +306,7 @@ oh model agent set tdd-guide        "claude-sonnet-4-6"
 oh model agent set security-reviewer "claude-opus-4-7,claude-sonnet-4-6"
 
 # Cost-efficient: high-frequency workers
-oh model agent set worker           "claude-haiku-4-5,claude-architect-backup"
+oh model agent set worker           "claude-haiku-4-5,claude-architect"
 oh model agent set Explore          "claude-haiku-4-5"
 
 # Fallback chain đảm bảo: nếu Opus rate-limited → tự rớt về Sonnet

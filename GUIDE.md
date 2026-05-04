@@ -53,7 +53,7 @@ oh profile list
 oh model list
 
 # Switch model active
-oh model use claude-architect-backup
+oh model use claude-architect
 
 # Spawn agent test
 oh run "Hello, who are you?"
@@ -158,14 +158,14 @@ Map agent (planner, code-reviewer, worker…) sang model cụ thể.
 oh model agent set planner claude-architect
 
 # Set fallback chain (comma-separated, no spaces)
-oh model agent set planner "claude-architect,claude-architect-backup,claude-review"
+oh model agent set planner "claude-architect,claude-architect,claude-review"
 
 # List
 oh model agent list
 
 # Get
 oh model agent get planner
-# → planner → claude-architect (fallbacks: claude-architect-backup, claude-review)
+# → planner → claude-architect (fallbacks: claude-architect, claude-review)
 
 # Delete
 oh model agent delete planner
@@ -183,7 +183,7 @@ Multi chain → list:
 
 ```json
 "agent_models": {
-  "planner": ["claude-architect", "claude-architect-backup", "claude-review"]
+  "planner": ["claude-architect", "claude-review"]
 }
 ```
 
@@ -250,7 +250,7 @@ Chain cho main session lấy từ `agent_models["main"]` trong
 
 ```bash
 # Production agent: stable + backup + budget
-oh model agent set worker "claude-haiku,claude-architect-backup"
+oh model agent set worker "claude-haiku,claude-architect"
 
 # Critical agent: opus + sonnet + haiku
 oh model agent set planner "claude-opus-4-7,claude-sonnet-4-6,claude-haiku-4-5"
@@ -384,15 +384,11 @@ oh webui [--host 127.0.0.1] [--port 8765] [--token <fixed>] [--cwd <path>] \
     "ANTHROPIC_AUTH_TOKEN": "sk-...",
     "API_TIMEOUT_MS": "60000"
   },
-  "model": "claude-architect-backup",
+  "model": "claude-architect",
   "models": {
     "claude-architect": {
       "model": "claude-architect",
       "description": "Primary architect"
-    },
-    "claude-architect-backup": {
-      "model": "claude-architect-backup",
-      "description": "Backup architect"
     },
     "claude-review": {
       "model": "claude-review",
@@ -400,9 +396,9 @@ oh webui [--host 127.0.0.1] [--port 8765] [--token <fixed>] [--cwd <path>] \
     }
   },
   "agent_models": {
-    "planner": ["claude-architect", "claude-architect-backup"],
+    "planner": ["claude-architect"],
     "code-reviewer": "claude-review",
-    "worker": ["claude-haiku", "claude-architect-backup"]
+    "worker": ["claude-haiku", "claude-architect"]
   }
 }
 ```
@@ -636,7 +632,7 @@ oh
 
 Set agent model phù hợp:
 ```bash
-oh model agent set worker "claude-haiku,claude-architect-backup"
+oh model agent set worker "claude-haiku,claude-architect"
 ```
 
 ### Workflow #2 — Feature mới (TDD)
@@ -654,7 +650,7 @@ Map từng vai:
 oh model agent set planner       "claude-opus-4-7,claude-architect"
 oh model agent set tdd-guide     "claude-sonnet-4-6"
 oh model agent set code-reviewer "claude-review,claude-sonnet-4-6"
-oh model agent set worker        "claude-haiku,claude-architect-backup"
+oh model agent set worker        "claude-haiku,claude-architect"
 ```
 
 ### Workflow #3 — Refactor lớn (Plan mode + worktree)
@@ -793,7 +789,7 @@ oh model agent set tdd-guide        "claude-sonnet-4-6"
 oh model agent set python-reviewer  "claude-sonnet-4-6,claude-haiku-4-5"
 oh model agent set code-reviewer    "claude-sonnet-4-6"
 oh model agent set security-reviewer "claude-opus-4-7,claude-sonnet-4-6"
-oh model agent set worker           "claude-haiku-4-5,claude-architect-backup"
+oh model agent set worker           "claude-haiku-4-5,claude-architect"
 oh model agent set Explore          "claude-haiku-4-5"
 ```
 

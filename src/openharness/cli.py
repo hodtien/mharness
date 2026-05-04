@@ -918,7 +918,7 @@ def model_agent_set(
     model: str = typer.Argument(
         ...,
         help="Model name, or comma-separated fallback chain (primary first). "
-             "Example: 'claude-opus-4-7,claude-architect-backup,claude-sonnet-4-6'",
+             "Example: 'claude-opus-4-7,claude-architect,claude-sonnet-4-6'",
     ),
 ) -> None:
     """Bind ``agent`` to a model (or fallback chain) in ``agent_models``."""

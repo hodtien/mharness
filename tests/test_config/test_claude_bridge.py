@@ -32,11 +32,11 @@ def _fixture_payload() -> dict:
             "ANTHROPIC_AUTH_TOKEN": "redacted-token",
             "API_TIMEOUT_MS": "60000",
         },
-        "model": "claude-architect-backup",
+        "model": "claude-architect",
         "models": {
-            "claude-architect-backup": {
-                "model": "claude-architect-backup",
-                "description": "Architect backup",
+            "claude-architect": {
+                "model": "claude-architect",
+                "description": "Architect — high-capacity, general-purpose",
             },
             "claude-sonnet-4-6": {
                 "model": "claude-sonnet-4-6",
@@ -64,8 +64,8 @@ class TestReadClaudeSettings:
         assert c.base_url == "http://localhost:20128/v1"
         assert c.auth_token == "redacted-token"
         assert c.timeout_ms == 60000
-        assert c.active_model == "claude-architect-backup"
-        assert set(c.models) == {"claude-architect-backup", "claude-sonnet-4-6"}
+        assert c.active_model == "claude-architect"
+        assert set(c.models) == {"claude-architect", "claude-sonnet-4-6"}
 
     def test_returns_none_on_malformed_json(self, tmp_path: Path):
         target = tmp_path / "bad.json"
@@ -84,7 +84,7 @@ class TestBuildRouterProfile:
         profile = build_router_profile(c)
         assert profile is not None
         assert profile.base_url == "http://localhost:20128/v1"
-        assert profile.default_model == "claude-architect-backup"
+        assert profile.default_model == "claude-architect"
         assert "claude-sonnet-4-6" in profile.allowed_models
         assert profile.credential_slot == CLAUDE_BRIDGE_PROFILE
 
@@ -166,12 +166,12 @@ class TestResolveAgentModel:
         binding = resolve_agent_model(
             Settings(),
             "planner",
-            overrides={"planner": ["claude-opus-4-7", "claude-architect-backup"]},
+            overrides={"planner": ["claude-opus-4-7", "claude-architect"]},
         )
         assert binding.model == "claude-opus-4-7"
-        assert binding.fallbacks == ("claude-architect-backup",)
+        assert binding.fallbacks == ("claude-architect",)
         assert binding.source == "agent_override"
-        assert binding.chain == ("claude-opus-4-7", "claude-architect-backup")
+        assert binding.chain == ("claude-opus-4-7", "claude-architect")
 
     def test_agent_map_takes_precedence(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         payload = _fixture_payload()
@@ -192,14 +192,14 @@ class TestResolveAgentModel:
     ):
         payload = _fixture_payload()
         payload["agent_models"] = {
-            "planner": ["claude-opus-4-7", "claude-architect-backup", "claude-sonnet-4-6"]
+            "planner": ["claude-opus-4-7", "claude-architect", "claude-sonnet-4-6"]
         }
         target = tmp_path / "settings.json"
         target.write_text(json.dumps(payload), encoding="utf-8")
         monkeypatch.setattr(claude_bridge, "CLAUDE_SETTINGS_PATH", target)
         binding = resolve_agent_model(Settings(), "planner")
         assert binding.model == "claude-opus-4-7"
-        assert binding.fallbacks == ("claude-architect-backup", "claude-sonnet-4-6")
+        assert binding.fallbacks == ("claude-architect", "claude-sonnet-4-6")
         assert binding.source == "agent_map"
 
     def test_falls_back_to_profile_default(self, claude_file: Path):
@@ -231,7 +231,7 @@ class TestAgentModelWriteDelete:
         assert c.agent_models["worker"] == ["oclaude-coder"]
 
     def test_write_chain_persists_as_list(self, claude_file: Path):
-        chain = ["claude-opus-4-7", "claude-architect-backup", "claude-sonnet-4-6"]
+        chain = ["claude-opus-4-7", "claude-architect", "claude-sonnet-4-6"]
         assert write_agent_model("planner", chain, claude_file) is True
         payload = json.loads(claude_file.read_text(encoding="utf-8"))
         assert payload["agent_models"]["planner"] == chain
