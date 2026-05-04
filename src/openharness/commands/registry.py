@@ -1449,7 +1449,6 @@ def create_default_command_registry(
                 f"Current version: {version}\n"
                 "Upgrade instructions:\n"
                 "- uv sync --extra dev\n"
-                "- uv pip install -e .\n"
                 "- npm --prefix frontend/terminal install"
             )
         )

@@ -20,17 +20,18 @@ hỗ trợ **per-agent model mapping** và **fallback chain** khi model lỗi.
 # Clone (nếu chưa có)
 cd ~/harness/my-harness
 
-# Tạo venv & cài
-python3.12 -m venv .venv
-source .venv/bin/activate
-~/.local/bin/uv pip install -e .
+# Tạo venv & cài dependency từ uv.lock
+uv sync
 
-# Thêm vào PATH (one-time)
+# Chạy không cần activate
+uv run oh --help
+
+# Nếu muốn dùng trực tiếp `oh`, thêm venv vào PATH (one-time)
 echo 'export PATH="$HOME/harness/my-harness/.venv/bin:$PATH"' >> ~/.zshrc
 exec zsh
 
 # Verify
-oh --help
+uv run oh --help
 ```
 
 ### File cấu hình chính
