@@ -225,10 +225,10 @@ class TestAgentModelWriteDelete:
         assert "planner" not in c.agent_models
 
     def test_write_creates_block_if_missing(self, claude_file: Path):
-        assert write_agent_model("worker", "gh-code", claude_file) is True
+        assert write_agent_model("worker", "oclaude-coder", claude_file) is True
         c = read_claude_settings()
         assert c is not None
-        assert c.agent_models["worker"] == ["gh-code"]
+        assert c.agent_models["worker"] == ["oclaude-coder"]
 
     def test_write_chain_persists_as_list(self, claude_file: Path):
         chain = ["claude-opus-4-7", "claude-architect-backup", "claude-sonnet-4-6"]

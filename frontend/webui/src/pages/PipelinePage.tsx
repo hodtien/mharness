@@ -766,6 +766,10 @@ interface StreamEvent {
   payload: Record<string, unknown>;
 }
 
+const _SSE_BACKOFF_INITIAL_MS = 1_000;
+const _SSE_BACKOFF_MAX_MS = 30_000;
+const _SSE_MAX_RETRIES = 6;
+
 function LogsTab({ cardId, isActive }: LogsTabProps) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [streamState, setStreamState] = useState<"connecting" | "open" | "closed">("connecting");
@@ -773,33 +777,66 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
   const sourceRef = useRef<EventSource | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef<boolean>(true);
+  // Track how many events we've successfully received for the `after=` resume param.
+  const seenCountRef = useRef<number>(0);
 
   useEffect(() => {
     if (!isActive) return;
     setEvents([]);
     setError(null);
     setStreamState("connecting");
+    seenCountRef.current = 0;
 
-    const token = getToken();
-    const url = `/api/pipeline/cards/${encodeURIComponent(cardId)}/stream${token ? `?token=${encodeURIComponent(token)}` : ""}`;
-    const es = new EventSource(url);
-    sourceRef.current = es;
+    let attempt = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
 
-    es.onopen = () => setStreamState("open");
-    es.onerror = () => {
-      setStreamState("closed");
-    };
-    es.onmessage = (ev) => {
-      try {
-        const data = JSON.parse(ev.data) as StreamEvent;
-        setEvents((prev) => [...prev, data]);
-      } catch {
-        // ignore malformed lines
-      }
-    };
+    function connect() {
+      if (cancelled) return;
+      const token = getToken();
+      const after = seenCountRef.current;
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
+      const url = `/api/pipeline/cards/${encodeURIComponent(cardId)}/stream?after=${after}${tokenParam}`;
+      const es = new EventSource(url);
+      sourceRef.current = es;
+
+      es.onopen = () => {
+        attempt = 0;
+        setStreamState("open");
+      };
+
+      es.onerror = () => {
+        es.close();
+        sourceRef.current = null;
+        if (cancelled) return;
+        attempt += 1;
+        if (attempt > _SSE_MAX_RETRIES) {
+          setStreamState("closed");
+          setError("Stream disconnected after multiple retries.");
+          return;
+        }
+        const delay = Math.min(_SSE_BACKOFF_INITIAL_MS * 2 ** (attempt - 1), _SSE_BACKOFF_MAX_MS);
+        setStreamState("connecting");
+        retryTimer = setTimeout(connect, delay);
+      };
+
+      es.onmessage = (ev) => {
+        try {
+          const data = JSON.parse(ev.data) as StreamEvent;
+          setEvents((prev) => [...prev, data]);
+          seenCountRef.current += 1;
+        } catch {
+          // ignore malformed lines
+        }
+      };
+    }
+
+    connect();
 
     return () => {
-      es.close();
+      cancelled = true;
+      if (retryTimer !== null) clearTimeout(retryTimer);
+      sourceRef.current?.close();
       sourceRef.current = null;
       setStreamState("closed");
     };

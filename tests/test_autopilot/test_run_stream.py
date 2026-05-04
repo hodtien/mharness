@@ -4,16 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 
 from openharness.autopilot.run_stream import (
     RunStreamWriter,
+    STREAM_REGISTRY,
+    _truncate,
+    collect_old_stream_files,
     get_or_create_writer,
     get_writer,
     read_stream_file,
+    read_stream_file_chunk,
     release_writer,
+    set_registry_stale_seconds,
     stream_file_line_count,
-    STREAM_REGISTRY,
+    stream_file_mtime,
 )
 
 
@@ -147,3 +153,97 @@ def test_registry_get_or_create_and_release(tmp_path: Path) -> None:
     assert w1.closed
     assert get_writer(card_id) is None
     assert card_id not in STREAM_REGISTRY
+
+
+def test_run_stream_writer_seq_increments(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    writer = RunStreamWriter("card-seq", runs_dir)
+    writer.emit("phase_start", {"phase": "implement", "attempt": 1})
+    writer.emit("text_delta", {"text": "a"})
+    writer.emit("text_delta", {"text": "b"})
+
+    lines = writer.path.read_text(encoding="utf-8").strip().splitlines()
+    seqs = [json.loads(line)["seq"] for line in lines]
+    assert seqs == [1, 2, 3]
+
+
+def test_read_stream_file_chunk_limits(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    writer = RunStreamWriter("card-chunk", runs_dir)
+    for i in range(10):
+        writer.emit("text_delta", {"text": str(i)})
+    writer.close()
+
+    chunk, next_offset = read_stream_file_chunk(runs_dir, "card-chunk", limit=4)
+    assert len(chunk) == 4
+    assert next_offset == 4
+    chunk2, next_offset2 = read_stream_file_chunk(runs_dir, "card-chunk", after=next_offset, limit=4)
+    assert len(chunk2) == 4
+    assert next_offset2 == 8
+
+
+def test_read_stream_file_chunk_missing(tmp_path: Path) -> None:
+    events, offset = read_stream_file_chunk(tmp_path / "runs", "no-card")
+    assert events == []
+    assert offset == 0
+
+
+def test_collect_old_stream_files(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    runs_dir.mkdir()
+    old_file = runs_dir / "old-stream.jsonl"
+    new_file = runs_dir / "new-stream.jsonl"
+    old_file.write_text("{}\n")
+    new_file.write_text("{}\n")
+    import os
+    old_mtime = time.time() - 200
+    os.utime(old_file, (old_mtime, old_mtime))
+
+    removed = collect_old_stream_files(runs_dir, max_age_seconds=100)
+    assert removed == 1
+    assert not old_file.exists()
+    assert new_file.exists()
+
+
+def test_stream_file_mtime_missing(tmp_path: Path) -> None:
+    assert stream_file_mtime(tmp_path / "runs", "nonexistent") == 0.0
+
+
+def test_stream_file_mtime_returns_float(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    writer = RunStreamWriter("card-mtime", runs_dir)
+    writer.emit("phase_start", {"phase": "implement", "attempt": 1})
+    mtime = stream_file_mtime(runs_dir, "card-mtime")
+    assert isinstance(mtime, float)
+    assert mtime > 0.0
+
+
+def test_set_registry_stale_seconds(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    card_id = "card-stale-test"
+    STREAM_REGISTRY.pop(card_id, None)
+
+    set_registry_stale_seconds(0.01)
+    writer = get_or_create_writer(card_id, runs_dir)
+    writer.emit("phase_start", {"phase": "implement", "attempt": 1})
+
+    # Pretend the writer has been idle for 1 second
+    writer._last_emit_at = time.time() - 10
+
+    get_writer(card_id)  # triggers sweep
+    assert card_id not in STREAM_REGISTRY or STREAM_REGISTRY.get(card_id) is None or STREAM_REGISTRY.get(card_id).closed
+
+    set_registry_stale_seconds(60 * 60)  # restore default
+
+
+def test_truncate_ascii(tmp_path: Path) -> None:
+    assert _truncate("hello", 10) == "hello"
+    assert _truncate("hello world", 5) == "hello…(+6 chars)"
+
+
+def test_truncate_cjk(tmp_path: Path) -> None:
+    # Each CJK character is width 2
+    cjk = "你好世界"  # 4 chars, display width 8
+    result = _truncate(cjk, 4)
+    # Should truncate to 2 CJK chars (width 4) with suffix
+    assert result.startswith("你好")

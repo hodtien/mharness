@@ -41,8 +41,10 @@ from openharness.config.paths import (
 )
 from openharness.autopilot.run_stream import (
     RunStreamWriter,
+    collect_old_stream_files,
     get_or_create_writer,
     release_writer,
+    set_registry_stale_seconds,
     summarize_tool_input,
     summarize_tool_output,
 )
@@ -798,6 +800,8 @@ class RepoAutopilotStore:
 
         policies = self.load_policies()
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
+        _stale_ttl_hours = float(execution.get("stream_registry_stale_hours", 1))
+        set_registry_stale_seconds(_stale_ttl_hours * 3600)
         effective_model = model or _safe_text(execution.get("default_model")) or None
         if max_turns is not None:
             effective_max_turns = max_turns
@@ -904,10 +908,17 @@ class RepoAutopilotStore:
                 resume_requested = bool(card.metadata.get("resume_requested"))
                 if resume_requested:
                     ckpt = load_latest_checkpoint(self._runs_dir, card.id)
+                    _resume_ttl_hours = float(
+                        (policies.get("autopilot", {}).get("execution", {}) or {}).get(
+                            "resume_ttl_hours", 24
+                        )
+                    )
+                    _resume_ttl_secs = _resume_ttl_hours * 3600
                     if (
                         ckpt is not None
                         and ckpt.has_pending_continuation
                         and ckpt.phase == "implement"
+                        and (time.time() - ckpt.saved_at) < _resume_ttl_secs
                     ):
                         resume_msgs = restore_messages(ckpt)
                         stream_writer.emit(
@@ -1023,6 +1034,8 @@ class RepoAutopilotStore:
                         base_branch=base_branch,
                         policies=policies,
                         model=effective_model,
+                        stream=stream_writer,
+                        checkpoint_attempt=attempt_count,
                     )
                     verification_steps.append(review_step)
                     stream_writer.emit("phase_end", {"phase": "local_review", "attempt": attempt_count, "ok": review_step.status not in {"failed", "error"}})
@@ -1279,6 +1292,8 @@ class RepoAutopilotStore:
                         policies=policies,
                         model=effective_model,
                         base_branch=base_branch,
+                        stream=stream_writer,
+                        checkpoint_attempt=attempt_count,
                     )
                     verification_steps.append(remote_review_step)
                     verification_text = self._render_verification_report(card, verification_steps)
@@ -1428,6 +1443,14 @@ class RepoAutopilotStore:
             )
         finally:
             release_writer(card.id)
+            _stream_retention_days = float(
+                (policies.get("autopilot", {}).get("execution", {}) or {}).get(
+                    "stream_retention_days", 7
+                )
+            )
+            collect_old_stream_files(
+                self._runs_dir, max_age_seconds=_stream_retention_days * 86400
+            )
 
     STUCK_CARD_STALE_SECONDS = 1800
     """Active cards untouched longer than this are considered stuck and reset to queued."""
@@ -2069,6 +2092,40 @@ class RepoAutopilotStore:
     ) -> RepoRunResult:
         current_run_report = self._runs_dir / f"{card.id}-run.md"
         current_verification_report = self._runs_dir / f"{card.id}-verification.md"
+        stream_writer = get_or_create_writer(card.id, self._runs_dir)
+        attempt_count = int(card.metadata.get("attempt_count", 1) or 1)
+        try:
+            return await self._process_existing_pr_card_with_stream(
+                card,
+                pr_number,
+                policies,
+                current_run_report=current_run_report,
+                current_verification_report=current_verification_report,
+                stream_writer=stream_writer,
+                attempt_count=attempt_count,
+            )
+        finally:
+            release_writer(card.id)
+            _stream_retention_days = float(
+                (policies.get("autopilot", {}).get("execution", {}) or {}).get(
+                    "stream_retention_days", 7
+                )
+            )
+            collect_old_stream_files(
+                self._runs_dir, max_age_seconds=_stream_retention_days * 86400
+            )
+
+    async def _process_existing_pr_card_with_stream(
+        self,
+        card: RepoTaskCard,
+        pr_number: int,
+        policies: dict[str, Any],
+        *,
+        current_run_report: Path,
+        current_verification_report: Path,
+        stream_writer: RunStreamWriter,
+        attempt_count: int,
+    ) -> RepoRunResult:
         self.update_status(
             card.id,
             status="waiting_ci",
@@ -2099,13 +2156,17 @@ class RepoAutopilotStore:
                 pr_url=pr_url,
             )
         if self._automerge_eligible(pr_snapshot, policies):
+            stream_writer.emit("phase_start", {"phase": "remote_review", "attempt": attempt_count})
             remote_review_step = await self._run_remote_code_review_step(
                 card,
                 pr_number,
                 policies=policies,
                 model=None,
                 base_branch=self._base_branch(policies),
+                stream=stream_writer,
+                checkpoint_attempt=attempt_count,
             )
+            stream_writer.emit("phase_end", {"phase": "remote_review", "attempt": attempt_count, "ok": remote_review_step.status not in {"failed", "error"}})
             atomic_write_text(
                 current_verification_report,
                 self._render_verification_report(card, [remote_review_step]),
@@ -2649,7 +2710,7 @@ class RepoAutopilotStore:
                         if stream is not None:
                             stream.emit(
                                 "checkpoint_saved",
-                                {"phase": checkpoint_phase, "path": str(ckpt_path)},
+                                {"phase": checkpoint_phase, "file": ckpt_path.name},
                             )
                     elif not agent_failed:
                         clear_checkpoints(self._runs_dir, checkpoint_card_id)
@@ -2670,6 +2731,8 @@ class RepoAutopilotStore:
         policies: dict[str, Any],
         model: str | None,
         base_branch: str = "main",
+        stream: RunStreamWriter | None = None,
+        checkpoint_attempt: int = 1,
     ) -> RepoVerificationStep:
         review_cfg = (policies.get("autopilot", {}).get("github", {}) or {}).get("remote_code_review", {}) or {}
         if not review_cfg.get("enabled", True):
@@ -2734,6 +2797,10 @@ class RepoAutopilotStore:
                 max_turns=max_turns,
                 permission_mode="full_auto",
                 cwd=self._cwd,
+                stream=stream,
+                checkpoint_card_id=card.id,
+                checkpoint_phase="remote_review",
+                checkpoint_attempt=checkpoint_attempt,
             )
         except Exception as exc:
             return RepoVerificationStep(
@@ -2762,6 +2829,8 @@ class RepoAutopilotStore:
         base_branch: str,
         policies: dict[str, Any],
         model: str | None,
+        stream: RunStreamWriter | None = None,
+        checkpoint_attempt: int = 1,
     ) -> RepoVerificationStep:
         """Spawn the code-reviewer agent on the worktree diff and turn its severity into a step."""
         review_cfg = (policies.get("verification") or {}).get("code_review") or {}
@@ -2817,6 +2886,10 @@ class RepoAutopilotStore:
                 max_turns=max_turns,
                 permission_mode="full_auto",
                 cwd=cwd,
+                stream=stream,
+                checkpoint_card_id=card.id,
+                checkpoint_phase="local_review",
+                checkpoint_attempt=checkpoint_attempt,
             )
         except Exception as exc:
             return RepoVerificationStep(

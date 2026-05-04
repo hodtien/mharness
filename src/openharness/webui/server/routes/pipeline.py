@@ -18,8 +18,9 @@ from pydantic import BaseModel, Field, ValidationError
 
 from openharness.autopilot.run_stream import (
     get_writer,
-    read_stream_file,
+    read_stream_file_chunk,
     stream_file_line_count,
+    stream_file_mtime,
 )
 from openharness.autopilot.service import RepoAutopilotStore
 from openharness.autopilot.session_store import (
@@ -398,6 +399,10 @@ def _sse_format(event: dict[str, Any]) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
 
 
+_SSE_HEARTBEAT_INTERVAL = 15.0
+_SSE_STALE_FILE_SECONDS = 300.0  # no mtime change for 5 min → treat stream as ended
+
+
 @router.get("/cards/{card_id}/stream")
 async def stream_card_events(
     card_id: str,
@@ -409,6 +414,12 @@ async def stream_card_events(
     Replays ``{runs_dir}/{card_id}-stream.jsonl`` from offset ``after``, then
     if the card is currently running, subscribes to the live writer and
     tails subsequent events. Sends a heartbeat comment every 15s.
+
+    File I/O is offloaded to a thread pool so the ASGI event loop is never
+    blocked (H3). Dedup uses the ``seq`` field that each :class:`RunStreamWriter`
+    stamps on every event (H4). Stale writers (process died without calling
+    ``close()``) are detected via the stream file's mtime not advancing for
+    five minutes (H5).
     """
     _ensure_safe_card_id(card_id)
     runs_dir = state.cwd / ".openharness" / "autopilot" / "runs"
@@ -416,9 +427,6 @@ async def stream_card_events(
     async def _generator() -> AsyncIterator[bytes]:
         offset = max(0, int(after))
 
-        # Subscribe BEFORE reading the file so that any events emitted during
-        # replay are buffered into the queue (no replay-to-subscribe gap). If
-        # the writer is not live, fall back to a pure on-disk replay.
         writer = get_writer(card_id)
         queue: asyncio.Queue[dict[str, Any]] | None = None
         if writer is not None:
@@ -426,50 +434,63 @@ async def stream_card_events(
             queue = writer.subscribe(loop=loop)
 
         try:
-            replay = read_stream_file(runs_dir, card_id, after=offset)
-            for event in replay:
-                yield _sse_format(event).encode("utf-8")
-            offset += len(replay)
+            # Replay in 500-event chunks so we never hold the full file in memory.
+            while True:
+                chunk, next_offset = await asyncio.to_thread(
+                    read_stream_file_chunk, runs_dir, card_id, after=offset
+                )
+                for event in chunk:
+                    yield _sse_format(event).encode("utf-8")
+                if not chunk or next_offset == offset:
+                    break
+                offset = next_offset
 
             if writer is None or queue is None:
-                current_total = stream_file_line_count(runs_dir, card_id)
+                current_total = await asyncio.to_thread(stream_file_line_count, runs_dir, card_id)
                 if current_total > offset:
-                    tail = read_stream_file(runs_dir, card_id, after=offset)
-                    for event in tail:
-                        yield _sse_format(event).encode("utf-8")
+                    while True:
+                        chunk, next_offset = await asyncio.to_thread(
+                            read_stream_file_chunk, runs_dir, card_id, after=offset
+                        )
+                        for event in chunk:
+                            yield _sse_format(event).encode("utf-8")
+                        if not chunk or next_offset == offset:
+                            break
+                        offset = next_offset
                 yield b": stream-ended\n\n"
                 return
 
-            # Catch any lines that were appended between replay-read and
-            # subscribe-time (the file is the durable source; any such line
-            # is also queued, so we dedup using ts+kind+payload comparison).
-            seen_keys: set[tuple[float, str, str]] = set()
-            tail_after_subscribe = read_stream_file(runs_dir, card_id, after=offset)
-            for event in tail_after_subscribe:
-                key = (
-                    float(event.get("ts", 0.0)),
-                    str(event.get("kind", "")),
-                    json.dumps(event.get("payload", {}), sort_keys=True, default=str),
+            # Dedup bridge: read lines emitted between the file-replay and
+            # subscribe instant. Use seq for deterministic dedup (H4).
+            seen_seqs: set[int] = set()
+            while True:
+                chunk, next_offset = await asyncio.to_thread(
+                    read_stream_file_chunk, runs_dir, card_id, after=offset
                 )
-                seen_keys.add(key)
-                yield _sse_format(event).encode("utf-8")
-            offset += len(tail_after_subscribe)
+                for event in chunk:
+                    seq = event.get("seq")
+                    if seq is not None:
+                        seen_seqs.add(int(seq))
+                    yield _sse_format(event).encode("utf-8")
+                if not chunk or next_offset == offset:
+                    break
+                offset = next_offset
 
             while True:
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    event = await asyncio.wait_for(queue.get(), timeout=_SSE_HEARTBEAT_INTERVAL)
                 except asyncio.TimeoutError:
-                    yield f": heartbeat {time.time():.0f}\n\n".encode("utf-8")
+                    yield f": heartbeat {int(time.time())}\n\n".encode("utf-8")
                     if writer.closed:
                         break
+                    mtime = await asyncio.to_thread(stream_file_mtime, runs_dir, card_id)
+                    if mtime and (time.time() - mtime) > _SSE_STALE_FILE_SECONDS:
+                        yield b": stream-stale\n\n"
+                        break
                     continue
-                key = (
-                    float(event.get("ts", 0.0)),
-                    str(event.get("kind", "")),
-                    json.dumps(event.get("payload", {}), sort_keys=True, default=str),
-                )
-                if key in seen_keys:
-                    seen_keys.discard(key)
+                seq = event.get("seq")
+                if seq is not None and int(seq) in seen_seqs:
+                    seen_seqs.discard(int(seq))
                     if writer.closed and queue.empty():
                         break
                     continue

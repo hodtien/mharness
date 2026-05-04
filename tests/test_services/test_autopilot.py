@@ -569,7 +569,7 @@ def test_autopilot_run_card_repairs_after_local_verification_failure(tmp_path: P
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return "success", "All reported remote checks passed.", {"url": "https://example/pr/23", "labels": ["autopilot:merge"], "isDraft": False}, []
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=0,
@@ -692,7 +692,7 @@ def test_autopilot_existing_pr_card_can_auto_merge(tmp_path: Path, monkeypatch) 
         assert pr_number == 88
         return "success", "All reported remote checks passed.", {"url": "https://example/pr/88", "labels": ["autopilot:merge"], "isDraft": False}, []
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=0,
@@ -1218,7 +1218,7 @@ def test_remote_code_review_step_blocks_on_critical(tmp_path: Path, monkeypatch)
         ),
     )
 
-    async def fake_run_agent_prompt(prompt, *, model, max_turns, permission_mode, cwd=None):
+    async def fake_run_agent_prompt(prompt, *, model, max_turns, permission_mode, cwd=None, stream=None, checkpoint_card_id=None, checkpoint_phase=None, checkpoint_attempt=1, resume_messages=None, phase=None):
         assert "Review GitHub PR #12" in prompt
         return "Severity: CRITICAL\nFindings:\n  - a.py:1 bug broken\nSummary: blocked"
 
@@ -1254,7 +1254,7 @@ def test_remote_code_review_blocks_merge_and_sets_human_gate(tmp_path: Path, mon
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=1,
@@ -1310,7 +1310,7 @@ def test_remote_code_review_error_routes_to_human_gate(tmp_path: Path, monkeypat
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=2,
@@ -1366,7 +1366,7 @@ def test_pull_base_branch_called_after_merge(tmp_path: Path, monkeypatch) -> Non
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=0,
@@ -1428,7 +1428,7 @@ def test_pull_base_branch_failure_is_non_fatal(tmp_path: Path, monkeypatch) -> N
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=0,
@@ -1492,7 +1492,7 @@ def test_install_editable_failure_is_non_fatal(tmp_path: Path, monkeypatch) -> N
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=0,
@@ -1619,7 +1619,7 @@ def _run_card_with_locked_pull(
     async def fake_wait_for_pr_ci(self, pr_number, policies):
         return _green_pr_snapshot(pr_number)
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main"):
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=0,
