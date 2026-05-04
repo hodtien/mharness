@@ -460,6 +460,7 @@ class RepoAutopilotStore:
         existing = next((card for card in registry.cards if card.fingerprint == fingerprint), None)
         merged_labels = self._normalize_labels(labels)
         merged_metadata = dict(metadata or {})
+        normalized_model = _safe_text(model) or None
         if existing is not None:
             if normalized_title:
                 existing.title = normalized_title
