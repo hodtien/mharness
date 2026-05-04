@@ -41,7 +41,6 @@ from openharness.config.paths import (
 )
 from openharness.engine.stream_events import AssistantTextDelta, AssistantTurnComplete, ErrorEvent
 from openharness.swarm.worktree import WorktreeManager
-from openharness.utils.file_lock import exclusive_file_lock
 from openharness.utils.fs import atomic_write_text
 
 log = logging.getLogger(__name__)
@@ -296,6 +295,7 @@ class RepoAutopilotStore:
         # autopilot directory mkdir already provisions them.
         self._registry_lock_path = self._registry_path.parent / "registry.lock"
         self._journal_lock_path = self._journal_path.parent / "journal.lock"
+        self._main_checkout_lock_path = self._registry_path.parent / "main-checkout.lock"
         self._repo_full_name: str | None = None
         self._ensure_layout()
 
@@ -323,9 +323,20 @@ class RepoAutopilotStore:
 
         This avoids the race condition between pick_next_card() and update_status()
         by performing the read-modify-write under an exclusive file lock.
+
+        Uses :class:`RepoFileLock` directly (the same primitive that
+        ``_load_registry``/``_save_registry`` use internally) so the outer and
+        inner critical sections share one open-file-description and don't
+        deadlock against each other via two independent ``flock`` holders.
         """
-        with exclusive_file_lock(self._lock_path()):
-            registry = self._load_registry()
+        with RepoFileLock(self._registry_lock_path):
+            if not self._registry_path.exists():
+                return None
+            try:
+                payload = json.loads(self._registry_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                return None
+            registry = RepoAutopilotRegistry.model_validate(payload)
             queued = [card for card in registry.cards if card.status in {"queued", "accepted"}]
             if not queued:
                 return None
@@ -333,7 +344,17 @@ class RepoAutopilotStore:
             chosen.status = "preparing"
             chosen.updated_at = time.time()
             chosen.metadata["worker_id"] = worker_id
-            self._save_registry(registry)
+            registry.updated_at = time.time()
+            atomic_write_text(
+                self._registry_path,
+                json.dumps(
+                    registry.model_dump(mode="json"),
+                    ensure_ascii=False,
+                    indent=2,
+                    default=_json_default,
+                )
+                + "\n",
+            )
             return chosen
 
     def list_cards(self, *, status: RepoTaskStatus | None = None) -> list[RepoTaskCard]:
@@ -1255,7 +1276,8 @@ class RepoAutopilotStore:
                 if use_worktree:
                     await worktree_manager.remove_worktree(self._worktree_slug(card))
                 try:
-                    self._pull_base_branch(base_branch=base_branch)
+                    with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
+                        self._pull_base_branch(base_branch=base_branch)
                 except Exception as exc:
                     self.append_journal(
                         kind="merge_warning",
@@ -1265,7 +1287,8 @@ class RepoAutopilotStore:
                     )
                 else:
                     try:
-                        self._install_editable()
+                        with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
+                            self._install_editable()
                     except Exception as exc:
                         self.append_journal(
                             kind="merge_warning",
@@ -2005,7 +2028,8 @@ class RepoAutopilotStore:
             )
             self._comment_on_pr(pr_number, self._comment_merged(pr_number))
             try:
-                self._pull_base_branch(base_branch=self._base_branch(policies))
+                with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
+                    self._pull_base_branch(base_branch=self._base_branch(policies))
             except Exception as exc:
                 self.append_journal(
                     kind="merge_warning",
@@ -2015,7 +2039,8 @@ class RepoAutopilotStore:
                 )
             else:
                 try:
-                    self._install_editable()
+                    with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
+                        self._install_editable()
                 except Exception as exc:
                     self.append_journal(
                         kind="merge_warning",
