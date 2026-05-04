@@ -447,6 +447,28 @@ def update_pipeline_policy(
                 "required": list(_POLICY_REQUIRED_KEYS),
             },
         )
+    # Validate max_parallel_runs in execution section (1 ≤ value ≤ 10)
+    execution = parsed.get("execution", {})
+    if isinstance(execution, dict) and "max_parallel_runs" in execution:
+        raw = execution["max_parallel_runs"]
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "invalid_max_parallel_runs",
+                    "message": "max_parallel_runs must be an integer.",
+                },
+            )
+        if not (1 <= value <= 10):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "invalid_max_parallel_runs",
+                    "message": "max_parallel_runs must be between 1 and 10 (inclusive).",
+                },
+            )
     policy_path = get_project_autopilot_policy_path(state.cwd)
     policy_path.parent.mkdir(parents=True, exist_ok=True)
     policy_path.write_text(body.yaml_content, encoding="utf-8")
