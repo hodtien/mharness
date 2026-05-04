@@ -44,10 +44,10 @@ oh --help
 
 ```bash
 # Activate bridge (đọc Claude config làm provider profile mặc định)
-oh profile use claude-router
+oh provider use claude-router
 
 # Liệt kê profile
-oh profile list
+oh provider list
 
 # Liệt kê model có sẵn (đọc từ ~/.claude/settings.json::models)
 oh model list
@@ -274,9 +274,9 @@ Mỗi profile chứa: `base_url`, `default_model`, `allowed_models`,
 `credential_slot`, `context_window_tokens`, `auto_compact_threshold_tokens`.
 
 ```bash
-oh profile list
-oh profile use claude-router
-oh profile show claude-router
+oh provider list
+oh provider use claude-router
+oh provider show claude-router
 ```
 
 `claude-router` được generate động từ Claude config — không cần khai báo
@@ -339,9 +339,9 @@ Override per-profile trong `~/.openharness/settings.json`:
 
 ```bash
 # Profile
-oh profile list
-oh profile use <name>
-oh profile show <name>
+oh provider list
+oh provider use <name>
+oh provider show <name>
 
 # Model
 oh model list
@@ -593,7 +593,7 @@ oh model use <m>    # Đổi active
 oh model agent ...  # Per-agent map (xem section 6)
 oh mcp list         # MCP servers đã cấu hình
 oh mcp add <name>   # Add MCP server
-oh profile list     # Provider profiles
+oh provider list     # Provider profiles
 ```
 
 ### Built-in tools (37)
@@ -800,7 +800,7 @@ oh model agent set Explore          "claude-haiku-4-5"
 ### "No API key configured"
 
 - Check `cat ~/.claude/settings.json | jq .env.ANTHROPIC_AUTH_TOKEN` có giá trị không
-- Verify bridge đang active: `oh profile current` → `claude-router`
+- Verify bridge đang active: `oh provider current` → `claude-router`
 - Manual: `export ANTHROPIC_API_KEY=$(jq -r .env.ANTHROPIC_AUTH_TOKEN ~/.claude/settings.json)`
 
 ### "Unknown model 'X'"
