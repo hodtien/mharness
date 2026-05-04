@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import shlex
 import sys
 import time
@@ -28,6 +29,18 @@ from openharness.autopilot.session_store import (
 from openharness.config.paths import get_project_autopilot_policy_path
 from openharness.autopilot.types import RepoAutopilotRegistry, RepoJournalEntry, RepoTaskStatus
 from openharness.webui.server.state import WebUIState, get_state, get_task_manager, require_token
+
+_CARD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+
+
+def _ensure_safe_card_id(card_id: str) -> None:
+    """Reject path-traversal attempts at the HTTP boundary."""
+    if not isinstance(card_id, str) or not _CARD_ID_RE.match(card_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_card_id"},
+        )
+
 
 router = APIRouter(
     prefix="/api/pipeline",
@@ -397,6 +410,7 @@ async def stream_card_events(
     if the card is currently running, subscribes to the live writer and
     tails subsequent events. Sends a heartbeat comment every 15s.
     """
+    _ensure_safe_card_id(card_id)
     runs_dir = state.cwd / ".openharness" / "autopilot" / "runs"
 
     async def _generator() -> AsyncIterator[bytes]:
@@ -484,6 +498,7 @@ def get_card_checkpoint(
     state: WebUIState = Depends(get_state),
 ) -> dict:
     """Return checkpoint info for a card, or 404 if none exists."""
+    _ensure_safe_card_id(card_id)
     runs_dir = state.cwd / ".openharness" / "autopilot" / "runs"
     ckpt = load_latest_checkpoint(runs_dir, card_id)
     if ckpt is None:
@@ -513,6 +528,7 @@ async def resume_card(
     currently active, and then spawns ``oh autopilot run-next`` with the
     card pre-queued for resume. Returns HTTP 202 with the background task id.
     """
+    _ensure_safe_card_id(card_id)
     store = RepoAutopilotStore(state.cwd)
     card = store.get_card(card_id)
     if card is None:

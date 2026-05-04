@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +21,15 @@ log = logging.getLogger(__name__)
 
 Phase = Literal["implement", "local_review", "remote_review", "merge"]
 
+_CARD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+
+
+def _validate_card_id(card_id: str) -> str:
+    """Reject card_ids that could escape the runs_dir via path traversal."""
+    if not isinstance(card_id, str) or not _CARD_ID_RE.match(card_id):
+        raise ValueError(f"invalid card_id: {card_id!r}")
+    return card_id
+
 
 @dataclass(frozen=True)
 class SessionCheckpoint:
@@ -35,7 +45,7 @@ class SessionCheckpoint:
 
 
 def _sessions_dir(runs_dir: Path, card_id: str) -> Path:
-    return runs_dir / "sessions" / card_id
+    return runs_dir / "sessions" / _validate_card_id(card_id)
 
 
 def save_checkpoint(

@@ -26,12 +26,21 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+_CARD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+
+
+def _validate_card_id(card_id: str) -> str:
+    if not isinstance(card_id, str) or not _CARD_ID_RE.match(card_id):
+        raise ValueError(f"invalid card_id: {card_id!r}")
+    return card_id
 
 _INPUT_SUMMARY_LIMIT = 500
 _OUTPUT_SUMMARY_LIMIT = 500
@@ -66,9 +75,9 @@ class RunStreamWriter:
     """Append-only writer + in-memory fan-out for one card's run stream."""
 
     def __init__(self, card_id: str, runs_dir: Path) -> None:
-        self.card_id = card_id
+        self.card_id = _validate_card_id(card_id)
         self._runs_dir = runs_dir
-        self._path = runs_dir / f"{card_id}-stream.jsonl"
+        self._path = runs_dir / f"{self.card_id}-stream.jsonl"
         self._lock = threading.Lock()
         self._subscribers: list[asyncio.Queue[dict[str, Any]]] = []
         self._subscriber_loops: list[asyncio.AbstractEventLoop] = []
@@ -187,7 +196,7 @@ def read_stream_file(
     Bad lines (truncated or malformed) are silently skipped. Returns an empty
     list when the file does not exist.
     """
-    path = runs_dir / f"{card_id}-stream.jsonl"
+    path = runs_dir / f"{_validate_card_id(card_id)}-stream.jsonl"
     if not path.is_file():
         return []
     events: list[dict[str, Any]] = []
@@ -208,7 +217,7 @@ def read_stream_file(
 
 def stream_file_line_count(runs_dir: Path, card_id: str) -> int:
     """Return the number of lines currently on disk for this card's stream."""
-    path = runs_dir / f"{card_id}-stream.jsonl"
+    path = runs_dir / f"{_validate_card_id(card_id)}-stream.jsonl"
     if not path.is_file():
         return 0
     count = 0

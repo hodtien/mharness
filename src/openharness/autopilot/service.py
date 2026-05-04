@@ -919,31 +919,29 @@ class RepoAutopilotStore:
                     {"phase": "implement", "attempt": attempt_count, "resumed": resume_msgs is not None},
                 )
                 try:
-                    try:
-                        assistant_summary = await self._run_agent_prompt(
-                            prompt,
-                            model=effective_model,
-                            max_turns=effective_max_turns,
-                            permission_mode=effective_permission_mode,
-                            cwd=working_cwd,
-                            stream=stream_writer,
-                            phase="implement",
-                            checkpoint_card_id=card.id,
-                            checkpoint_phase="implement",
-                            checkpoint_attempt=attempt_count,
-                            resume_messages=resume_msgs,
+                    assistant_summary = await self._run_agent_prompt(
+                        prompt,
+                        model=effective_model,
+                        max_turns=effective_max_turns,
+                        permission_mode=effective_permission_mode,
+                        cwd=working_cwd,
+                        stream=stream_writer,
+                        phase="implement",
+                        checkpoint_card_id=card.id,
+                        checkpoint_phase="implement",
+                        checkpoint_attempt=attempt_count,
+                        resume_messages=resume_msgs,
+                    )
+                    if resume_requested:
+                        self.update_status(
+                            card.id,
+                            status=card.status,
+                            metadata_updates={
+                                "resume_requested": False,
+                                "resume_available": False,
+                                "resume_phase": "",
+                            },
                         )
-                    finally:
-                        if resume_requested:
-                            self.update_status(
-                                card.id,
-                                status=card.status,
-                                metadata_updates={
-                                    "resume_requested": False,
-                                    "resume_available": False,
-                                    "resume_phase": "",
-                                },
-                            )
                 except Exception as exc:
                     stream_writer.emit("phase_end", {"phase": "implement", "attempt": attempt_count, "ok": False})
                     import traceback as _tb
@@ -2565,18 +2563,19 @@ class RepoAutopilotStore:
         async def _ask(_question: str) -> str:
             return ""
 
-        bundle = await build_runtime(
-            cwd=str(cwd or self._cwd),
-            model=model,
-            max_turns=max_turns,
-            permission_prompt=_allow,
-            ask_user_prompt=_ask,
-            permission_mode=permission_mode,
-        )
-        await start_runtime(bundle)
+        bundle = None
         collected: list[str] = []
         agent_failed = False
         try:
+            bundle = await build_runtime(
+                cwd=str(cwd or self._cwd),
+                model=model,
+                max_turns=max_turns,
+                permission_prompt=_allow,
+                ask_user_prompt=_ask,
+                permission_mode=permission_mode,
+            )
+            await start_runtime(bundle)
             if resume_messages:
                 from openharness.engine.messages import sanitize_conversation_messages
                 bundle.engine.load_messages(sanitize_conversation_messages(list(resume_messages)))
@@ -2622,9 +2621,20 @@ class RepoAutopilotStore:
             agent_failed = True
             raise
         finally:
-            if checkpoint_card_id and checkpoint_phase and bundle.engine._messages:
+            # Snapshot engine state BEFORE close_runtime — close may invalidate
+            # the engine. Save unconditionally on failure (any exception path),
+            # not just when the agent loop raised, so build/start failures still
+            # leave a checkpoint when partial messages exist.
+            if checkpoint_card_id and checkpoint_phase and bundle is not None:
+                engine_messages: list[Any] = []
+                has_pending = False
                 try:
-                    if agent_failed:
+                    engine_messages = list(getattr(bundle.engine, "_messages", []) or [])
+                    has_pending = bool(bundle.engine.has_pending_continuation())
+                except Exception as snap_exc:
+                    log.warning("Could not snapshot engine state: %s", snap_exc)
+                try:
+                    if agent_failed and engine_messages:
                         ckpt_path = save_checkpoint(
                             self._runs_dir,
                             card_id=checkpoint_card_id,
@@ -2633,19 +2643,23 @@ class RepoAutopilotStore:
                             model=model,
                             permission_mode=permission_mode,
                             cwd=str(cwd or self._cwd),
-                            messages=list(bundle.engine._messages),
-                            has_pending_continuation=bundle.engine.has_pending_continuation(),
+                            messages=engine_messages,
+                            has_pending_continuation=has_pending,
                         )
                         if stream is not None:
                             stream.emit(
                                 "checkpoint_saved",
                                 {"phase": checkpoint_phase, "path": str(ckpt_path)},
                             )
-                    else:
+                    elif not agent_failed:
                         clear_checkpoints(self._runs_dir, checkpoint_card_id)
                 except Exception as ckpt_exc:
                     log.warning("Checkpoint save/clear failed: %s", ckpt_exc)
-            await close_runtime(bundle)
+            if bundle is not None:
+                try:
+                    await close_runtime(bundle)
+                except Exception as close_exc:
+                    log.warning("close_runtime failed: %s", close_exc)
         return "".join(collected).strip()
 
     async def _run_remote_code_review_step(
