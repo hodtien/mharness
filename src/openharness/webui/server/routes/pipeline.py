@@ -648,7 +648,11 @@ async def resume_card(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "card_not_found", "card_id": card_id},
         )
-    if card.status in _ACTIVE_STATUSES:
+    is_stale_active = (
+        card.status in _ACTIVE_STATUSES
+        and time.time() - float(card.updated_at or 0) > store.STUCK_CARD_STALE_SECONDS
+    )
+    if card.status in _ACTIVE_STATUSES and not is_stale_active:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -659,7 +663,8 @@ async def resume_card(
         )
     runs_dir = state.cwd / ".openharness" / "autopilot" / "runs"
     ckpt = load_latest_checkpoint(runs_dir, card_id)
-    if ckpt is None or not ckpt.has_pending_continuation:
+    has_resumable_checkpoint = ckpt is not None and ckpt.has_pending_continuation
+    if not has_resumable_checkpoint:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -668,10 +673,18 @@ async def resume_card(
                 "card_id": card_id,
             },
         )
+    metadata_updates: dict[str, Any] = {"resume_requested": True}
+    if is_stale_active:
+        metadata_updates["stuck_resume"] = {
+            "from_status": card.status,
+            "stale_seconds": int(time.time() - float(card.updated_at or 0)),
+            "checkpoint_phase": ckpt.phase,
+            "checkpoint_attempt": ckpt.attempt,
+        }
     store.update_status(
         card_id,
         status="queued",
-        metadata_updates={"resume_requested": True},
+        metadata_updates=metadata_updates,
     )
     oh_executable = str(Path(sys.executable).with_name("oh"))
     command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"

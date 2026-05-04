@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
+from openharness.autopilot.session_store import save_checkpoint
 from openharness.webui.server.app import create_app
 
 AUTH = {"Authorization": "Bearer test-token"}
@@ -479,3 +483,97 @@ def test_run_next_returns_202_and_task_id_when_queued_card_exists(tmp_path, monk
     assert body["status"] == "accepted"
     assert "task_id" in body
     mock_manager.create_shell_task.assert_called_once()
+
+
+def test_resume_card_allows_stale_active_card_with_checkpoint(tmp_path, monkeypatch) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    import openharness.webui.server.routes.pipeline as pipeline_routes
+
+    client = _client(tmp_path)
+    created = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Stuck card"})
+    assert created.status_code == 201
+    card_id = created.json()["id"]
+
+    registry_path = tmp_path / ".openharness" / "autopilot" / "registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    for card in registry["cards"]:
+        if card["id"] == card_id:
+            card["status"] = "running"
+            card["updated_at"] = 0.0
+            break
+    registry_path.write_text(json.dumps(registry), encoding="utf-8")
+
+    runs_dir = tmp_path / ".openharness" / "autopilot" / "runs"
+    save_checkpoint(
+        runs_dir,
+        card_id,
+        phase="implement",
+        attempt=2,
+        model="sonnet",
+        permission_mode="full_auto",
+        cwd=str(tmp_path),
+        messages=[],
+        has_pending_continuation=True,
+    )
+
+    fake_task = MagicMock()
+    fake_task.id = "task-resume-001"
+    mock_manager = MagicMock()
+    mock_manager.create_shell_task = AsyncMock(return_value=fake_task)
+    monkeypatch.setattr(pipeline_routes, "get_task_manager", lambda: mock_manager)
+
+    response = client.post(f"/api/pipeline/cards/{card_id}/resume", headers=AUTH)
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "accepted"
+    updated = client.get(f"/api/pipeline/cards/{card_id}", headers=AUTH)
+    assert updated.status_code == 200
+    payload = updated.json()
+    assert payload["status"] == "queued"
+    assert payload["metadata"]["resume_requested"] is True
+    assert payload["metadata"]["stuck_resume"]["from_status"] == "running"
+    assert payload["metadata"]["stuck_resume"]["checkpoint_phase"] == "implement"
+
+
+def test_resume_card_rejects_fresh_active_card_without_stale_checkpoint(tmp_path) -> None:
+    client = _client(tmp_path)
+    created = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Fresh card"})
+    assert created.status_code == 201
+    card_id = created.json()["id"]
+
+    registry_path = tmp_path / ".openharness" / "autopilot" / "registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    for card in registry["cards"]:
+        if card["id"] == card_id:
+            card["status"] = "running"
+            card["updated_at"] = time.time()
+            break
+    registry_path.write_text(json.dumps(registry), encoding="utf-8")
+
+    response = client.post(f"/api/pipeline/cards/{card_id}/resume", headers=AUTH)
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["error"] == "card_active"
+
+
+def test_resume_card_rejects_active_card_without_checkpoint(tmp_path) -> None:
+    client = _client(tmp_path)
+    created = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "No checkpoint"})
+    assert created.status_code == 201
+    card_id = created.json()["id"]
+
+    registry_path = tmp_path / ".openharness" / "autopilot" / "registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    for card in registry["cards"]:
+        if card["id"] == card_id:
+            card["status"] = "running"
+            card["updated_at"] = 0.0
+            break
+    registry_path.write_text(json.dumps(registry), encoding="utf-8")
+
+    response = client.post(f"/api/pipeline/cards/{card_id}/resume", headers=AUTH)
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["error"] == "no_resumable_checkpoint"

@@ -11,6 +11,7 @@ from types import MethodType, SimpleNamespace
 
 from openharness.autopilot import RepoAutopilotStore, RepoVerificationStep
 from openharness.autopilot.service import _DEFAULT_AUTOPILOT_POLICY, _DEFAULT_VERIFICATION_POLICY
+from openharness.autopilot.session_store import save_checkpoint
 from openharness.config.paths import (
     get_project_active_repo_context_path,
     get_project_autopilot_policy_path,
@@ -460,6 +461,17 @@ def test_autopilot_tick_recovers_stuck_card(tmp_path: Path) -> None:
     target.status = "running"
     target.updated_at = time.time() - (store.STUCK_CARD_STALE_SECONDS + 60)
     store._save_registry(registry)
+    save_checkpoint(
+        store.runs_dir,
+        card.id,
+        phase="implement",
+        attempt=1,
+        model="sonnet",
+        permission_mode="full_auto",
+        cwd=str(repo),
+        messages=[],
+        has_pending_continuation=True,
+    )
 
     def fake_scan_all_sources(self, *, issue_limit: int = 10, pr_limit: int = 10):
         return {"github_issue": 0, "github_pr": 0, "claude_code_candidate": 0}
@@ -479,6 +491,8 @@ def test_autopilot_tick_recovers_stuck_card(tmp_path: Path) -> None:
     assert refreshed.status == "queued"
     assert "stuck_recovery" in refreshed.metadata
     assert refreshed.metadata["stuck_recovery"]["from_status"] == "running"
+    assert refreshed.metadata["resume_available"] is True
+    assert refreshed.metadata["resume_phase"] == "implement"
 
 
 def test_autopilot_tick_does_not_recover_fresh_active_card(tmp_path: Path) -> None:
@@ -1257,6 +1271,120 @@ def test_remote_code_review_step_skips_when_disabled(tmp_path: Path, monkeypatch
     assert calls == {"gh": 0, "agent": 0}
 
 
+def test_remote_code_review_step_blocks_tracked_virtualenv(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    store._repo_full_name = "hodtien/mharness"
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Review virtualenv", body="review")
+    calls = {"agent": 0}
+
+    monkeypatch.setattr(
+        store,
+        "_run_gh",
+        lambda args, *, cwd=None, check=False: subprocess.CompletedProcess(
+            args,
+            0,
+            stdout="diff --git a/.venv b/.venv\nnew file mode 120000\n",
+            stderr="",
+        ),
+    )
+
+    async def fake_run_agent_prompt(*args, **kwargs):
+        calls["agent"] += 1
+        return "Severity: NONE"
+
+    monkeypatch.setattr(store, "_run_agent_prompt", fake_run_agent_prompt)
+
+    import asyncio
+
+    step = asyncio.run(
+        store._run_remote_code_review_step(
+            card,
+            12,
+            policies=_remote_review_policy(),
+            model="test-model",
+        )
+    )
+
+    assert step.status == "failed"
+    assert step.stderr == "severity=critical"
+    assert ".venv" in step.stdout
+    assert calls["agent"] == 0
+
+
+def test_remote_code_review_step_blocks_nested_virtualenv_artifact(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    store._repo_full_name = "hodtien/mharness"
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Review virtualenv", body="review")
+
+    monkeypatch.setattr(
+        store,
+        "_run_gh",
+        lambda args, *, cwd=None, check=False: subprocess.CompletedProcess(
+            args,
+            0,
+            stdout="diff --git a/.venv/bin/python b/.venv/bin/python\nnew file mode 120000\n",
+            stderr="",
+        ),
+    )
+
+    import asyncio
+
+    step = asyncio.run(
+        store._run_remote_code_review_step(
+            card,
+            12,
+            policies=_remote_review_policy(),
+            model="test-model",
+        )
+    )
+
+    assert step.status == "failed"
+    assert step.stderr == "severity=critical"
+
+
+def test_remote_code_review_prompt_requires_requirement_completeness(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    store._repo_full_name = "hodtien/mharness"
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Configurable max_parallel_runs policy", body="review")
+
+    monkeypatch.setattr(
+        store,
+        "_run_gh",
+        lambda args, *, cwd=None, check=False: subprocess.CompletedProcess(
+            args,
+            0,
+            stdout="diff --git a/src/openharness/autopilot/service.py b/src/openharness/autopilot/service.py\n",
+            stderr="",
+        ),
+    )
+
+    async def fake_run_agent_prompt(prompt, *, model, max_turns, permission_mode, cwd=None, stream=None, checkpoint_card_id=None, checkpoint_phase=None, checkpoint_attempt=1, resume_messages=None, phase=None):
+        assert "satisfies the task requirement" in prompt
+        assert "missing behavior for named configuration options" in prompt
+        return "Severity: NONE"
+
+    monkeypatch.setattr(store, "_run_agent_prompt", fake_run_agent_prompt)
+
+    import asyncio
+
+    step = asyncio.run(
+        store._run_remote_code_review_step(
+            card,
+            12,
+            policies=_remote_review_policy(),
+            model="test-model",
+        )
+    )
+
+    assert step.status == "success"
+
+
 def test_remote_code_review_step_blocks_on_critical(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -1307,6 +1435,7 @@ def test_remote_code_review_blocks_merge_and_sets_human_gate(tmp_path: Path, mon
         body="open",
         source_ref="pr:88",
     )
+    store.update_status(card.id, status="queued", metadata_updates={"attempt_count": 3})
 
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
@@ -1363,6 +1492,7 @@ def test_remote_code_review_error_routes_to_human_gate(tmp_path: Path, monkeypat
         body="open",
         source_ref="pr:89",
     )
+    store.update_status(card.id, status="queued", metadata_updates={"attempt_count": 3})
 
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
@@ -1407,6 +1537,60 @@ def test_remote_code_review_error_routes_to_human_gate(tmp_path: Path, monkeypat
     assert updated is not None
     assert updated.metadata["human_gate_pending"] is True
     assert updated.metadata["remote_review_status"] == "error"
+
+
+def test_existing_pr_remote_code_review_failure_repairs_when_attempts_remain(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #91: Existing autopilot PR",
+        body="open",
+        source_ref="pr:91",
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        return _green_pr_snapshot(pr_number)
+
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=1,
+            status="failed",
+            stderr="severity=critical",
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci",
+        fake_wait_for_pr_ci,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store._process_existing_pr_card(card, 91, _remote_review_policy()))
+    updated = store.get_card(card.id)
+
+    assert result.status == "queued"
+    assert updated is not None
+    assert updated.status == "queued"
+    assert updated.metadata["human_gate_pending"] is False
+    assert updated.metadata["autopilot_managed"] is True
+    assert updated.metadata["attempt_count"] == 1
+    assert updated.metadata["last_failure_stage"] == "remote_review_failed"
+    assert updated.metadata["last_failure_summary"] == "severity=critical"
 
 
 def test_pull_base_branch_called_after_merge(tmp_path: Path, monkeypatch) -> None:

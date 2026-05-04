@@ -1322,7 +1322,7 @@ function Drawer({ card, onClose, onAction, onResume, loadingAction, policyDefaul
 
         {/* Actions */}
         <div className="flex gap-2 border-t border-[var(--border)] p-4">
-          {RESETTABLE_STATUSES.includes(card.status) ? (
+          {RESETTABLE_STATUSES.includes(card.status) || ACTIVE_STATUSES.includes(card.status) ? (
             <>
               {card.metadata?.resume_available ? (
                 <button
@@ -1334,13 +1334,15 @@ function Drawer({ card, onClose, onAction, onResume, loadingAction, policyDefaul
                   Resume{card.metadata?.resume_phase ? ` (${card.metadata.resume_phase})` : ""}
                 </button>
               ) : null}
-              <button
-                onClick={() => onAction(card.id, "reset")}
-                disabled={loadingAction}
-                className="flex-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-40"
-              >
-                Reset to Queue
-              </button>
+              {RESETTABLE_STATUSES.includes(card.status) ? (
+                <button
+                  onClick={() => onAction(card.id, "reset")}
+                  disabled={loadingAction}
+                  className="flex-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-40"
+                >
+                  Reset to Queue
+                </button>
+              ) : null}
             </>
           ) : (
             <>

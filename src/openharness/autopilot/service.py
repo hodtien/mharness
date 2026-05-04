@@ -1375,15 +1375,39 @@ class RepoAutopilotStore:
                             or remote_review_step.stdout
                             or "remote code review blocked merge"
                         )
+                        remote_review_meta = {
+                            "human_gate_pending": False,
+                            "linked_pr_number": linked_pr_number,
+                            "linked_pr_url": pr_url,
+                            "remote_review_status": remote_review_step.status,
+                            "last_failure_stage": "remote_review_failed",
+                            "last_failure_summary": summary,
+                        }
+                        if attempt_count < max_attempts:
+                            self.update_status(
+                                card.id,
+                                status="repairing",
+                                note="remote code review failed; retrying",
+                                metadata_updates=remote_review_meta,
+                            )
+                            self.append_journal(
+                                kind="remote_review_failed_retry",
+                                summary=f"{card.title}: remote review failed, retrying",
+                                task_id=card.id,
+                                metadata={"pr_number": linked_pr_number, "attempt_count": attempt_count},
+                            )
+                            self._comment_on_pr(linked_pr_number, self._comment_ci_failed(attempt_count, summary))
+                            prior_failure_stage = "remote_review_failed"
+                            prior_failure_summary = summary
+                            continue
+
                         self.update_status(
                             card.id,
                             status="completed",
                             note=f"PR #{linked_pr_number} requires human gate after remote review",
                             metadata_updates={
+                                **remote_review_meta,
                                 "human_gate_pending": True,
-                                "linked_pr_number": linked_pr_number,
-                                "linked_pr_url": pr_url,
-                                "remote_review_status": remote_review_step.status,
                             },
                         )
                         self.append_journal(
@@ -1544,17 +1568,26 @@ class RepoAutopilotStore:
             stale_minutes = int((now - updated_at) / 60)
             note = f"auto-recovered: status={card.status} stale for {stale_minutes}m"
             try:
+                ckpt = load_latest_checkpoint(self._runs_dir, card.id)
+                metadata_updates: dict[str, Any] = {
+                    "stuck_recovery": {
+                        "from_status": card.status,
+                        "stale_seconds": int(now - updated_at),
+                        "recovered_at": now,
+                    },
+                }
+                if ckpt is not None and ckpt.has_pending_continuation:
+                    metadata_updates.update(
+                        {
+                            "resume_available": True,
+                            "resume_phase": ckpt.phase,
+                        }
+                    )
                 self.update_status(
                     card.id,
                     status="queued",
                     note=note,
-                    metadata_updates={
-                        "stuck_recovery": {
-                            "from_status": card.status,
-                            "stale_seconds": int(now - updated_at),
-                            "recovered_at": now,
-                        },
-                    },
+                    metadata_updates=metadata_updates,
                 )
                 self.append_journal(
                     kind="stuck_card_recovered",
@@ -2253,15 +2286,50 @@ class RepoAutopilotStore:
                     or remote_review_step.stdout
                     or "remote code review blocked merge"
                 )
+                remote_review_meta = {
+                    "linked_pr_number": pr_number,
+                    "linked_pr_url": pr_url,
+                    "human_gate_pending": False,
+                    "remote_review_status": remote_review_step.status,
+                    "last_failure_stage": "remote_review_failed",
+                    "last_failure_summary": summary,
+                }
+                max_attempts = self._max_attempts(policies)
+                if attempt_count < max_attempts:
+                    self.update_status(
+                        card.id,
+                        status="queued",
+                        note="existing PR remote review failed; queued repair retry",
+                        metadata_updates={
+                            **remote_review_meta,
+                            "autopilot_managed": True,
+                            "attempt_count": attempt_count,
+                        },
+                    )
+                    self.append_journal(
+                        kind="remote_review_failed_retry",
+                        summary=f"{card.title}: existing PR remote review failed, queued repair retry",
+                        task_id=card.id,
+                        metadata={"pr_number": pr_number, "attempt_count": attempt_count},
+                    )
+                    self._comment_on_pr(pr_number, self._comment_ci_failed(attempt_count, summary))
+                    return RepoRunResult(
+                        card_id=card.id,
+                        status="queued",
+                        run_report_path=str(current_run_report),
+                        verification_report_path=str(current_verification_report),
+                        verification_steps=[remote_review_step],
+                        pr_number=pr_number,
+                        pr_url=pr_url,
+                    )
+
                 self.update_status(
                     card.id,
                     status="completed",
                     note=f"existing PR #{pr_number} requires human gate after remote review",
                     metadata_updates={
-                        "linked_pr_number": pr_number,
-                        "linked_pr_url": pr_url,
+                        **remote_review_meta,
                         "human_gate_pending": True,
-                        "remote_review_status": remote_review_step.status,
                     },
                 )
                 self._comment_on_pr(pr_number, self._comment_terminal_failure(summary))
@@ -2848,6 +2916,14 @@ class RepoAutopilotStore:
                 stdout="No PR diff detected.",
                 stderr="",
             )
+        if re.search(r"^diff --git a/\.venv(?:/[^\s]+)? b/\.venv(?:/[^\s]+)?$", diff_text, re.MULTILINE):
+            return RepoVerificationStep(
+                command=command,
+                returncode=1,
+                status="failed",
+                stdout="Severity: CRITICAL\nFindings:\n  - .venv: tracked virtualenv artifact must not be committed\nSummary: repository-local virtualenv artifacts are machine-specific and break uv/npm tooling.",
+                stderr="severity=critical",
+            )
 
         truncated = False
         if len(diff_text) > max_chars:
@@ -2862,6 +2938,8 @@ class RepoAutopilotStore:
             "    - <file:line> <category> <description>\n"
             "  Summary: <one paragraph>\n\n"
             "Apply the rules in `~/.claude/rules/common/code-review.md`. "
+            "Also verify the implementation satisfies the task requirement, not just that the diff is syntactically safe. "
+            "Treat committed virtualenvs, machine-local absolute paths, and missing behavior for named configuration options as CRITICAL. "
             "Block on CRITICAL only.\n\n"
             f"PR diff{' (truncated)' if truncated else ''}:\n```\n{diff_text}\n```\n"
         )
@@ -2951,6 +3029,8 @@ class RepoAutopilotStore:
             "    - <file:line> <category> <description>\n"
             "  Summary: <one paragraph>\n\n"
             "Apply the rules in `~/.claude/rules/common/code-review.md`. "
+            "Also verify the implementation satisfies the task requirement, not just that the diff is syntactically safe. "
+            "Treat committed virtualenvs, machine-local absolute paths, and missing behavior for named configuration options as CRITICAL. "
             "Block on CRITICAL only.\n\n"
             f"Diff{' (truncated)' if truncated else ''}:\n```\n{diff_text}\n```\n"
         )
