@@ -88,10 +88,9 @@ def _serialize_card(card: dict) -> dict:
         "source_kind": card["source_kind"],
         "score": card["score"],
         "labels": card["labels"],
-        "model": card.get("model"),
+        "model": card.get("model") or _safe_text(metadata.get("execution_model")),
         "created_at": card["created_at"],
         "updated_at": card["updated_at"],
-        "model": _safe_text(metadata.get("execution_model")),
         "attempt_count": int(metadata.get("attempt_count", 0) or 0),
         "metadata": {
             "last_note": _safe_text(metadata.get("last_note")),
