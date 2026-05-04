@@ -5,11 +5,13 @@ from __future__ import annotations
 import subprocess
 import threading
 import time
+from unittest.mock import AsyncMock
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import MethodType, SimpleNamespace
 
 from openharness.autopilot import RepoAutopilotStore, RepoVerificationStep
+from openharness.swarm.worktree import WorktreeInfo
 from openharness.autopilot.service import _DEFAULT_AUTOPILOT_POLICY, _DEFAULT_VERIFICATION_POLICY
 from openharness.autopilot.session_store import save_checkpoint
 from openharness.config.paths import (
@@ -529,6 +531,172 @@ def test_autopilot_tick_does_not_recover_fresh_active_card(tmp_path: Path) -> No
     assert refreshed.status == "running"
     assert "stuck_recovery" not in refreshed.metadata
 
+
+def test_worktree_cleanup_on_exception(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Cleanup on boom", body="body")
+
+    worktree_path = tmp_path / "worktree"
+    worktree_path.mkdir()
+    worktree_info = WorktreeInfo(
+        slug=f"autopilot/{card.id}",
+        path=worktree_path,
+        branch=f"worktree-autopilot+{card.id}",
+        original_path=repo,
+        created_at=time.time(),
+    )
+
+    async def fake_create_worktree(self, cwd, slug, branch=None, agent_id=None):
+        return worktree_info
+
+    remove_calls: list[str] = []
+
+    async def fake_remove_worktree(self, slug: str) -> bool:
+        remove_calls.append(slug)
+        return True
+
+    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree)
+    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree)
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, *, base_branch, head_branch, reset: None,
+    )
+    store._run_agent_prompt = MethodType(fake_run_agent_prompt, store)
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+
+    assert result.status == "failed"
+    assert remove_calls == [f"autopilot/{card.id}"]
+
+
+def test_worktree_cleanup_failure_non_fatal(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Cleanup warning", body="body")
+
+    worktree_path = tmp_path / "worktree"
+    worktree_path.mkdir()
+    worktree_info = WorktreeInfo(
+        slug=f"autopilot/{card.id}",
+        path=worktree_path,
+        branch=f"worktree-autopilot+{card.id}",
+        original_path=repo,
+        created_at=time.time(),
+    )
+
+    async def fake_create_worktree(self, cwd, slug, branch=None, agent_id=None):
+        return worktree_info
+
+    async def fake_remove_worktree(self, slug: str) -> bool:
+        raise RuntimeError("cleanup failed")
+
+    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree)
+    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree)
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, *, base_branch, head_branch, reset: None,
+    )
+    store._run_agent_prompt = MethodType(fake_run_agent_prompt, store)
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    journal = store.journal_path.read_text(encoding="utf-8")
+
+    assert result.status == "failed"
+    assert "cleanup_warning" in journal
+    assert "cleanup failed" in journal
+
+
+def test_startup_cleans_stale_worktrees(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    seed_store = RepoAutopilotStore(repo)
+    card, _ = seed_store.enqueue_card(source_kind="manual_idea", title="Done", body="body")
+    worktree_path = tmp_path / ".openharness" / "worktrees" / f"autopilot+{card.id}"
+    worktree_path.mkdir(parents=True)
+
+    removed: list[str] = []
+
+    async def fake_list_worktrees(self):
+        return [
+            WorktreeInfo(
+                slug=f"autopilot/{card.id}",
+                path=worktree_path,
+                branch="worktree-autopilot",
+                original_path=repo,
+                created_at=time.time(),
+            )
+        ]
+
+    async def fake_remove_worktree(self, slug: str) -> bool:
+        removed.append(slug)
+        if worktree_path.exists():
+            for child in worktree_path.iterdir():
+                if child.is_file() or child.is_symlink():
+                    child.unlink()
+            worktree_path.rmdir()
+        return True
+
+    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.list_worktrees", fake_list_worktrees)
+    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree)
+    seed_store.update_status(card.id, status="failed")
+
+    import asyncio
+
+    async def run() -> None:
+        store = RepoAutopilotStore(repo)
+        await store._startup_cleanup_task
+
+    asyncio.run(run())
+
+    assert removed == [f"autopilot/{card.id}"]
+    assert not worktree_path.exists()
+
+
+def test_startup_keeps_active_worktrees(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    card, _ = RepoAutopilotStore(repo).enqueue_card(source_kind="manual_idea", title="Active", body="body")
+    worktree_path = tmp_path / ".openharness" / "worktrees" / f"autopilot+{card.id}"
+    worktree_path.mkdir(parents=True)
+
+    async def fake_list_worktrees(self):
+        return [
+            WorktreeInfo(
+                slug=f"autopilot/{card.id}",
+                path=worktree_path,
+                branch="worktree-autopilot",
+                original_path=repo,
+                created_at=time.time(),
+            )
+        ]
+
+    remove_mock = AsyncMock(return_value=True)
+
+    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.list_worktrees", fake_list_worktrees)
+    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.remove_worktree", remove_mock)
+    store = RepoAutopilotStore(repo)
+
+    import asyncio
+
+    asyncio.run(store._cleanup_stale_worktrees())
+
+    assert worktree_path.exists()
+    assert remove_mock.await_count == 0
 
 def test_autopilot_install_default_cron_creates_jobs(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
