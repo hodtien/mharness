@@ -104,6 +104,8 @@ _DEFAULT_AUTOPILOT_POLICY = {
     },
     "execution": {
         "default_model": "",
+        "implement_agent": "",
+        "review_agent": "",
         "max_turns": 12,
         "permission_mode": "full_auto",
         "host_mode": "self_hosted",
@@ -176,6 +178,24 @@ def _shorten(text: str, *, limit: int = 120) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[: limit - 3] + "..."
+
+
+def _resolve_agent_model(agent_key: str) -> str | None:
+    try:
+        from openharness.config.claude_bridge import read_claude_settings
+
+        claude = read_claude_settings()
+    except Exception:
+        return None
+    if claude is None:
+        return None
+    model_config = claude.agent_models.get(agent_key)
+    if isinstance(model_config, str):
+        return model_config or None
+    if isinstance(model_config, list) and model_config:
+        model = model_config[0]
+        return model if isinstance(model, str) and model else None
+    return None
 
 
 def _parse_review_severity(text: str) -> str:
@@ -802,7 +822,15 @@ class RepoAutopilotStore:
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
         _stale_ttl_hours = float(execution.get("stream_registry_stale_hours", 1))
         set_registry_stale_seconds(_stale_ttl_hours * 3600)
-        effective_model = model or _safe_text(execution.get("default_model")) or None
+        _implement_agent = _safe_text(execution.get("implement_agent"))
+        _review_agent = _safe_text(execution.get("review_agent"))
+        effective_model = (
+            model
+            or (_implement_agent and _resolve_agent_model(_implement_agent))
+            or _safe_text(execution.get("default_model"))
+            or None
+        )
+        effective_review_model = (_review_agent and _resolve_agent_model(_review_agent)) or effective_model
         if max_turns is not None:
             effective_max_turns = max_turns
         else:
@@ -1033,7 +1061,7 @@ class RepoAutopilotStore:
                         cwd=working_cwd,
                         base_branch=base_branch,
                         policies=policies,
-                        model=effective_model,
+                        model=effective_review_model,
                         stream=stream_writer,
                         checkpoint_attempt=attempt_count,
                     )
@@ -1290,7 +1318,7 @@ class RepoAutopilotStore:
                         card,
                         linked_pr_number,
                         policies=policies,
-                        model=effective_model,
+                        model=effective_review_model,
                         base_branch=base_branch,
                         stream=stream_writer,
                         checkpoint_attempt=attempt_count,
@@ -2132,6 +2160,11 @@ class RepoAutopilotStore:
             note=f"monitoring existing PR #{pr_number}",
             metadata_updates={"linked_pr_number": pr_number},
         )
+        execution = dict(policies.get("autopilot", {}).get("execution", {}))
+        _review_agent = _safe_text(execution.get("review_agent"))
+        effective_review_model = (_review_agent and _resolve_agent_model(_review_agent)) or _safe_text(
+            execution.get("default_model")
+        ) or None
         ci_state, ci_summary, pr_snapshot, _checks = await self._wait_for_pr_ci(pr_number, policies)
         pr_url = _safe_text(pr_snapshot.get("url"))
         if ci_state == "failed":
@@ -2161,7 +2194,7 @@ class RepoAutopilotStore:
                 card,
                 pr_number,
                 policies=policies,
-                model=None,
+                model=effective_review_model,
                 base_branch=self._base_branch(policies),
                 stream=stream_writer,
                 checkpoint_attempt=attempt_count,
