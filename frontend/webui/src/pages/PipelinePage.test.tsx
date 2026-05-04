@@ -230,6 +230,78 @@ describe("PipelinePage", () => {
     expect(screen.getByRole("button", { name: /^Retry$/i })).toBeTruthy();
   });
 
+  it("model dropdown calls PATCH when model is selected", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/pipeline/cards") {
+        return Promise.resolve(jsonResponse({ cards: sampleCards, updated_at: 0 }));
+      }
+      if (url === "/api/pipeline/policy") {
+        return Promise.resolve(jsonResponse({ yaml_content: "", parsed: { execution: { default_model: "oc-medium" } } }));
+      }
+      if (url === "/api/models") {
+        return Promise.resolve(jsonResponse({ "claude-api": [{ id: "claude-haiku-4-5", label: "Claude Haiku", context_window: null, is_default: false, is_custom: false }] }));
+      }
+      if (url === "/api/pipeline/cards/card-queued-1/model" && init?.method === "PATCH") {
+        return Promise.resolve(jsonResponse({ model: "claude-haiku-4-5" }));
+      }
+      if (url.startsWith("/api/pipeline/journal")) {
+        return Promise.resolve(jsonResponse({ entries: [] }));
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("Add login form"));
+    const select = await screen.findByRole("combobox", { name: /select model/i });
+    fireEvent.change(select, { target: { value: "claude-haiku-4-5" } });
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find(
+        (c) => c[0] === "/api/pipeline/cards/card-queued-1/model" && (c[1] as RequestInit | undefined)?.method === "PATCH",
+      );
+      expect(patchCall).toBeTruthy();
+      expect((patchCall?.[1] as RequestInit).body).toBe(JSON.stringify({ model: "claude-haiku-4-5" }));
+    });
+    expect(await screen.findByText("Model updated")).toBeTruthy();
+  });
+
+  it("model dropdown is disabled when card is active", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards: sampleCards, updated_at: 0 }));
+        }
+        if (url === "/api/pipeline/policy") {
+          return Promise.resolve(jsonResponse({ yaml_content: "", parsed: { execution: { default_model: "oc-medium" } } }));
+        }
+        if (url === "/api/models") {
+          return Promise.resolve(jsonResponse({ "claude-api": [{ id: "claude-haiku-4-5", label: "Claude Haiku", context_window: null, is_default: false, is_custom: false }] }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: [] }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("Fix auth bug"));
+    const select = await screen.findByRole("combobox", { name: /select model/i });
+    expect(select).toHaveProperty("disabled", true);
+  });
+
   it("shows blocker banner for failed cards with note and PR actions", async () => {
     const blockedCards = [
       {

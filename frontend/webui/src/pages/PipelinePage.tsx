@@ -33,6 +33,7 @@ export interface PipelineCardMetadata {
   linked_pr_url?: string | null;
   resume_available?: boolean;
   resume_phase?: string | null;
+  model_override?: string | null;
 }
 
 export interface PipelineCard {
@@ -1525,6 +1526,7 @@ export default function PipelinePage() {
     },
     [refreshCards],
   );
+
 
   if (loading) {
     return (
