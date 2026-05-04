@@ -418,6 +418,22 @@ class RepoAutopilotStore:
                 return card
         return None
 
+    def update_card_model(self, card_id: str, model: str | None) -> RepoTaskCard:
+        registry = self._load_registry()
+        card = next((item for item in registry.cards if item.id == card_id), None)
+        if card is None:
+            raise ValueError(f"No autopilot card found with ID: {card_id}")
+        card.model = _safe_text(model) or None
+        card.updated_at = time.time()
+        self._save_registry(registry)
+        self.append_journal(
+            kind="card_model_updated",
+            summary=f"Updated model for card {card.id}: {card.model or 'none'}",
+            task_id=card.id,
+        )
+        self.rebuild_active_context()
+        return card
+
     def enqueue_card(
         self,
         *,
@@ -427,12 +443,14 @@ class RepoAutopilotStore:
         source_ref: str = "",
         labels: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
+        model: str | None = None,
     ) -> tuple[RepoTaskCard, bool]:
         registry = self._load_registry()
         now = time.time()
         normalized_title = title.strip()
         normalized_body = body.strip()
         normalized_ref = source_ref.strip()
+        normalized_model = _safe_text(model) or None
         fingerprint = self._build_fingerprint(
             source_kind=source_kind,
             source_ref=normalized_ref,
@@ -451,6 +469,8 @@ class RepoAutopilotStore:
                 existing.source_ref = normalized_ref
             existing.labels = self._merge_labels(existing.labels, merged_labels)
             existing.metadata.update(merged_metadata)
+            if normalized_model is not None:
+                existing.model = normalized_model
             existing.updated_at = now
             existing.score, existing.score_reasons = self._score_card(existing)
             self._save_registry(registry)
@@ -472,6 +492,7 @@ class RepoAutopilotStore:
             source_ref=normalized_ref,
             labels=merged_labels,
             metadata=merged_metadata,
+            model=normalized_model,
             created_at=now,
             updated_at=now,
         )
@@ -826,6 +847,7 @@ class RepoAutopilotStore:
         _review_agent = _safe_text(execution.get("review_agent"))
         effective_model = (
             model
+            or card.model
             or (_implement_agent and _resolve_agent_model(_implement_agent))
             or _safe_text(execution.get("default_model"))
             or None

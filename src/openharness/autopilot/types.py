@@ -60,6 +60,7 @@ class RepoTaskCard(BaseModel):
     score_reasons: list[str] = Field(default_factory=list)
     labels: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    model: str | None = None
     created_at: float
     updated_at: float
 

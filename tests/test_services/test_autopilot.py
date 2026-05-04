@@ -1827,3 +1827,136 @@ def test_concurrent_pull_serialized(tmp_path: Path) -> None:
     assert sorted(completion_order) == [1, 2], f"Both workers must complete, got {completion_order}"
     # Two non-overlapping 0.1s holds should take at least ~0.18s in aggregate.
     assert elapsed >= 0.18, f"Lock did not actually serialize work (elapsed={elapsed:.3f}s)"
+
+
+# ----------------------------------------------------------------------
+# Per-card model field tests
+# ----------------------------------------------------------------------
+
+
+def test_card_model_default_none(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, created = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Test card model default",
+        body="body",
+    )
+    assert created is True
+    assert card.model is None
+    reloaded = store.get_card(card.id)
+    assert reloaded is not None
+    assert reloaded.model is None
+
+
+def test_card_model_overrides_policy(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Use haiku model",
+        body="override test",
+        model="claude-haiku-4-5",
+    )
+    assert card.model == "claude-haiku-4-5"
+
+    reloaded = store.get_card(card.id)
+    assert reloaded is not None
+    assert reloaded.model == "claude-haiku-4-5"
+
+
+def test_update_card_model(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Update model test",
+        body="body",
+    )
+    assert card.model is None
+
+    updated = store.update_card_model(card.id, "claude-haiku-4-5")
+    assert updated.model == "claude-haiku-4-5"
+
+    reloaded = store.get_card(card.id)
+    assert reloaded is not None
+    assert reloaded.model == "claude-haiku-4-5"
+
+    updated2 = store.update_card_model(card.id, None)
+    assert updated2.model is None
+
+
+def test_registry_backward_compat_model_field(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    from openharness.config.paths import get_project_autopilot_registry_path
+
+    registry_path = get_project_autopilot_registry_path(repo)
+    registry_path.write_text(
+        '{"version":1,"updated_at":0.0,"cards":[\n'
+        '  {\n'
+        '    "id":"ap-oldcard1",\n'
+        '    "fingerprint":"f1","title":"Old card","body":"",\n'
+        '    "source_kind":"manual_idea","source_ref":"","status":"queued",\n'
+        '    "score":0,"score_reasons":[],"labels":[],"metadata":{},\n'
+        '    "created_at":1000.0,"updated_at":1000.0\n'
+        '  }\n'
+        "]}",
+        encoding="utf-8",
+    )
+
+    store = RepoAutopilotStore(repo)
+    loaded = store._load_registry()
+    assert len(loaded.cards) == 1
+    old_card = loaded.cards[0]
+    assert old_card.id == "ap-oldcard1"
+    assert old_card.model is None
+
+    new_card, created = store.enqueue_card(
+        source_kind="manual_idea",
+        title="New card after old registry",
+        body="new",
+        model="claude-sonnet",
+    )
+    assert created is True
+    assert new_card.model == "claude-sonnet"
+
+
+def test_card_model_precedes_policy_agent_model(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Use card model",
+        body="override test",
+        model="card-model",
+    )
+    used_models: list[str | None] = []
+
+    async def fake_run_agent_prompt(self, prompt, *, model, max_turns, permission_mode, cwd=None, **kwargs):
+        used_models.append(model)
+        return "Implemented the change and ran targeted checks."
+
+    def fake_run_verification_steps(self, policies, *, cwd=None):
+        return [
+            RepoVerificationStep(
+                command="uv run pytest -q",
+                returncode=0,
+                status="success",
+                stdout="1 passed",
+            )
+        ]
+
+    monkeypatch.setattr(RepoAutopilotStore, "_run_agent_prompt", fake_run_agent_prompt)
+    monkeypatch.setattr(RepoAutopilotStore, "_run_verification_steps", fake_run_verification_steps)
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id, model=None))
+    assert result.status == "completed"
+    assert used_models[0] == "card-model"
