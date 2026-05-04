@@ -279,7 +279,7 @@ def test_autopilot_run_card_marks_completed_after_verification(tmp_path: Path) -
         body="run next queued task and verify it",
     )
 
-    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None):
+    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
         assert "Implement repo autopilot tick" in prompt
         return "Implemented the change and ran targeted checks."
 
@@ -322,7 +322,7 @@ def test_autopilot_run_card_marks_failed_when_verification_fails(tmp_path: Path)
         body="this should fail verification",
     )
 
-    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None):
+    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
         return "Made a risky change."
 
     def fake_run_verification_steps(self, policies, *, cwd=None):
@@ -385,6 +385,80 @@ def test_autopilot_tick_scans_then_runs_next(tmp_path: Path) -> None:
     assert result.card_id == "ap-test"
 
 
+def test_autopilot_tick_recovers_stuck_card(tmp_path: Path) -> None:
+    """A card stuck in an active state with stale ``updated_at`` is reset to queued."""
+    import time
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Stuck card",
+        body="simulated abandoned run",
+    )
+
+    registry = store._load_registry()
+    target = next(c for c in registry.cards if c.id == card.id)
+    target.status = "running"
+    target.updated_at = time.time() - (store.STUCK_CARD_STALE_SECONDS + 60)
+    store._save_registry(registry)
+
+    def fake_scan_all_sources(self, *, issue_limit: int = 10, pr_limit: int = 10):
+        return {"github_issue": 0, "github_pr": 0, "claude_code_candidate": 0}
+
+    async def fake_run_next(self, *, model=None, max_turns=None, permission_mode=None):
+        return None
+
+    store.scan_all_sources = MethodType(fake_scan_all_sources, store)
+    store.run_next = MethodType(fake_run_next, store)
+
+    import asyncio
+
+    asyncio.run(store.tick())
+
+    refreshed = store.get_card(card.id)
+    assert refreshed is not None
+    assert refreshed.status == "queued"
+    assert "stuck_recovery" in refreshed.metadata
+    assert refreshed.metadata["stuck_recovery"]["from_status"] == "running"
+
+
+def test_autopilot_tick_does_not_recover_fresh_active_card(tmp_path: Path) -> None:
+    """An active card with a recent ``updated_at`` is left alone."""
+    import time
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Fresh active card",
+        body="still running",
+    )
+
+    registry = store._load_registry()
+    target = next(c for c in registry.cards if c.id == card.id)
+    target.status = "running"
+    target.updated_at = time.time()
+    store._save_registry(registry)
+
+    def fake_scan_all_sources(self, *, issue_limit: int = 10, pr_limit: int = 10):
+        return {"github_issue": 0, "github_pr": 0, "claude_code_candidate": 0}
+
+    store.scan_all_sources = MethodType(fake_scan_all_sources, store)
+
+    import asyncio
+
+    result = asyncio.run(store.tick())
+
+    assert result is None
+    refreshed = store.get_card(card.id)
+    assert refreshed is not None
+    assert refreshed.status == "running"
+    assert "stuck_recovery" not in refreshed.metadata
+
+
 def test_autopilot_install_default_cron_creates_jobs(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -421,7 +495,7 @@ def test_autopilot_run_card_opens_pr_and_waits_for_ci(tmp_path: Path, monkeypatc
     async def fake_remove_worktree(self, slug):
         return True
 
-    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None):
+    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
         assert cwd == worktree
         return "Implemented the requested feature."
 
@@ -483,7 +557,7 @@ def test_autopilot_run_card_repairs_after_local_verification_failure(tmp_path: P
     async def fake_remove_worktree(self, slug):
         return True
 
-    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None):
+    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
         return f"attempt for {cwd}"
 
     def fake_run_verification_steps(self, policies, *, cwd=None):
@@ -557,7 +631,7 @@ def test_autopilot_run_card_reuses_existing_branch_progress(tmp_path: Path, monk
     async def fake_remove_worktree(self, slug):
         return True
 
-    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None):
+    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
         return "A direct git commit already exists on the branch."
 
     def fake_run_verification_steps(self, policies, *, cwd=None):

@@ -147,14 +147,38 @@ def stop_scheduler() -> bool:
 # Job execution
 # ---------------------------------------------------------------------------
 
+DEFAULT_JOB_TIMEOUT_SECONDS = 300
+"""Default per-job timeout when no ``timeout`` field is set."""
+
+LONG_RUNNING_JOB_PATTERNS = ("autopilot.tick", "autopilot.scan")
+"""Job-name prefixes that get a longer default timeout."""
+
+LONG_RUNNING_JOB_TIMEOUT_SECONDS = 3600
+"""Default timeout (1h) for long-running jobs that spawn agents."""
+
+
+def _resolve_timeout(job: dict[str, Any]) -> int:
+    """Resolve the timeout for a job: explicit field > pattern default > default."""
+    explicit = job.get("timeout")
+    if isinstance(explicit, (int, float)) and explicit > 0:
+        return int(explicit)
+    name = str(job.get("name") or "")
+    if any(name.startswith(prefix) for prefix in LONG_RUNNING_JOB_PATTERNS):
+        return LONG_RUNNING_JOB_TIMEOUT_SECONDS
+    return DEFAULT_JOB_TIMEOUT_SECONDS
+
+
 async def execute_job(job: dict[str, Any]) -> dict[str, Any]:
     """Run a single cron job and return a history entry."""
     name = job["name"]
     command = job["command"]
     cwd = Path(job.get("cwd") or ".").expanduser()
+    timeout_seconds = _resolve_timeout(job)
     started_at = datetime.now(timezone.utc)
 
-    logger.info("Executing cron job %r: %s", name, command)
+    logger.info(
+        "Executing cron job %r (timeout=%ds): %s", name, timeout_seconds, command
+    )
     try:
         process = await create_shell_subprocess(
             command,
@@ -164,7 +188,7 @@ async def execute_job(job: dict[str, Any]) -> dict[str, Any]:
         )
         stdout, stderr = await asyncio.wait_for(
             process.communicate(),
-            timeout=300,
+            timeout=timeout_seconds,
         )
     except asyncio.TimeoutError:
         try:
@@ -180,7 +204,7 @@ async def execute_job(job: dict[str, Any]) -> dict[str, Any]:
             "returncode": -1,
             "status": "timeout",
             "stdout": "",
-            "stderr": "Job timed out after 300s",
+            "stderr": f"Job timed out after {timeout_seconds}s",
         }
         mark_job_run(name, success=False)
         append_history(entry)

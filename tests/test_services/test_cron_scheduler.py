@@ -9,7 +9,10 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from openharness.services.cron_scheduler import (
+    DEFAULT_JOB_TIMEOUT_SECONDS,
+    LONG_RUNNING_JOB_TIMEOUT_SECONDS,
     _jobs_due,
+    _resolve_timeout,
     append_history,
     execute_job,
     load_history,
@@ -169,3 +172,36 @@ class TestSchedulerLoop:
         entries = load_history(job_name="test-once")
         assert len(entries) == 1
         assert entries[0]["status"] == "success"
+
+
+class TestResolveTimeout:
+    def test_default_timeout(self) -> None:
+        assert _resolve_timeout({"name": "generic.job"}) == DEFAULT_JOB_TIMEOUT_SECONDS
+
+    def test_autopilot_tick_default(self) -> None:
+        assert (
+            _resolve_timeout({"name": "autopilot.tick"})
+            == LONG_RUNNING_JOB_TIMEOUT_SECONDS
+        )
+
+    def test_autopilot_scan_default(self) -> None:
+        assert (
+            _resolve_timeout({"name": "autopilot.scan"})
+            == LONG_RUNNING_JOB_TIMEOUT_SECONDS
+        )
+
+    def test_explicit_timeout_overrides_pattern(self) -> None:
+        assert _resolve_timeout({"name": "autopilot.tick", "timeout": 600}) == 600
+
+    def test_explicit_timeout_overrides_default(self) -> None:
+        assert _resolve_timeout({"name": "anything", "timeout": 90}) == 90
+
+    def test_invalid_timeout_falls_back(self) -> None:
+        assert (
+            _resolve_timeout({"name": "generic.job", "timeout": 0})
+            == DEFAULT_JOB_TIMEOUT_SECONDS
+        )
+        assert (
+            _resolve_timeout({"name": "generic.job", "timeout": "bad"})
+            == DEFAULT_JOB_TIMEOUT_SECONDS
+        )

@@ -775,9 +775,12 @@ def test_pipeline_cards_returns_serialized_cards(tmp_path) -> None:
     assert card1["labels"] == ["bug", "urgent"]
     assert card1["created_at"] == 900.0
     assert card1["updated_at"] == 950.0
-    # Extra fields (body, fingerprint, source_ref, score_reasons)
+    # body, model, attempt_count IS included for the card detail drawer.
+    assert card1["body"] == "Fix the bug"
+    assert card1["model"] is None
+    assert card1["attempt_count"] == 0
+    # Extra internal fields (fingerprint, source_ref, score_reasons)
     # must NOT appear in the response.
-    assert "body" not in card1
     assert "fingerprint" not in card1
     assert "source_ref" not in card1
     assert "score_reasons" not in card1
@@ -931,6 +934,9 @@ def test_pipeline_cards_action_accept_sets_status_accepted(tmp_path) -> None:
     card = response.json()
     assert card["id"] == "ap-test-card"
     assert card["status"] == "accepted"
+    assert card["body"] == "Body text"
+    assert card["model"] is None
+    assert card["attempt_count"] == 0
     # Verify persisted
     registry_path = tmp_path / ".openharness" / "autopilot" / "registry.json"
     saved = json.loads(registry_path.read_text())
@@ -1044,6 +1050,79 @@ def test_pipeline_cards_action_rejects_invalid_action(tmp_path) -> None:
         json={"action": "invalid"},
     )
     assert response.status_code == 422
+
+
+def test_pipeline_cards_model_patch_updates_execution_model(tmp_path) -> None:
+    registry = {
+        "version": 1,
+        "updated_at": 1000.0,
+        "cards": [
+            {
+                "id": "ap-model-card",
+                "title": "Model card",
+                "body": "Body",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "source_ref": "",
+                "fingerprint": "manual_idea:model",
+                "score": 0,
+                "score_reasons": [],
+                "labels": [],
+                "metadata": {},
+                "created_at": 1.0,
+                "updated_at": 1.0,
+            },
+        ],
+    }
+    (tmp_path / ".openharness" / "autopilot").mkdir(parents=True)
+    (tmp_path / ".openharness" / "autopilot" / "registry.json").write_text(
+        json.dumps(registry)
+    )
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/pipeline/cards/ap-model-card/model",
+        headers={"Authorization": "Bearer test-token"},
+        json={"model": "gpt-4.1"},
+    )
+    assert response.status_code == 200
+    assert response.json()["model"] == "gpt-4.1"
+    saved = json.loads((tmp_path / ".openharness" / "autopilot" / "registry.json").read_text())
+    assert saved["cards"][0]["metadata"]["execution_model"] == "gpt-4.1"
+
+
+def test_pipeline_cards_model_patch_rejects_active_card(tmp_path) -> None:
+    registry = {
+        "version": 1,
+        "updated_at": 1000.0,
+        "cards": [
+            {
+                "id": "ap-running-card",
+                "title": "Running card",
+                "body": "",
+                "status": "running",
+                "source_kind": "manual_idea",
+                "source_ref": "",
+                "fingerprint": "manual_idea:running",
+                "score": 0,
+                "score_reasons": [],
+                "labels": [],
+                "metadata": {},
+                "created_at": 1.0,
+                "updated_at": 1.0,
+            },
+        ],
+    }
+    (tmp_path / ".openharness" / "autopilot").mkdir(parents=True)
+    (tmp_path / ".openharness" / "autopilot" / "registry.json").write_text(
+        json.dumps(registry)
+    )
+    client = _client(tmp_path)
+    response = client.patch(
+        "/api/pipeline/cards/ap-running-card/model",
+        headers={"Authorization": "Bearer test-token"},
+        json={"model": "gpt-4.1"},
+    )
+    assert response.status_code == 409
 
 
 # ----------------------------------------------------------------------
@@ -1217,16 +1296,16 @@ def test_pipeline_policy_get_returns_yaml_content_and_parsed_json(tmp_path) -> N
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "yaml_content": _policy_yaml(),
-        "parsed": {
-            "intake": {"mode": "unified_queue"},
-            "decision": {"default_human_gate": True},
-            "execution": {"default_model": "oc-medium"},
-            "github": {"issue_comment_style": "bilingual"},
-            "repair": {"max_rounds": 2},
-        },
+    data = response.json()
+    assert data["yaml_content"] == _policy_yaml()
+    assert data["parsed"] == {
+        "intake": {"mode": "unified_queue"},
+        "decision": {"default_human_gate": True},
+        "execution": {"default_model": "oc-medium"},
+        "github": {"issue_comment_style": "bilingual"},
+        "repair": {"max_rounds": 2},
     }
+    assert data["defaults"]["default_model"] == "oc-medium"
 
 
 def test_pipeline_policy_get_returns_empty_when_file_missing(tmp_path) -> None:
@@ -1237,7 +1316,10 @@ def test_pipeline_policy_get_returns_empty_when_file_missing(tmp_path) -> None:
     )
 
     assert response.status_code == 200
-    assert response.json() == {"yaml_content": "", "parsed": None}
+    data = response.json()
+    assert data["yaml_content"] == ""
+    assert data["parsed"] is None
+    assert data["defaults"]["default_model"] is None
 
 
 def test_pipeline_policy_patch_validates_and_writes_policy(tmp_path) -> None:

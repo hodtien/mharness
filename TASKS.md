@@ -151,9 +151,11 @@ oh autopilot add idea "[P6.5] Frontend: Review tab trong Pipeline card detail" -
 
 oh autopilot add idea "[P6.6] Frontend: Review badge trong Tasks list" --body "Trong /tasks page (P5.9): thêm cột Review status. Badge: '✅ Reviewed' (xanh), '⏳ Reviewing' (vàng), '—' (xám). Click badge navigate tới review detail."
 
-oh autopilot add idea "[P6.7] Frontend: Toggle auto-review trong Settings/Modes" --body "Trong /settings/modes page (P2.3): thêm section 'Auto Code Review'. Toggle enabled/disabled. Dropdown scope (All tasks / Autopilot only / Manual only). Model override input (optional, placeholder 'Use default'). Save → PATCH tới endpoint mới PATCH /api/settings/auto-review."
+# [SKIPPED] P6.7 — redundant with autopilot remote_code_review policy (autopilot_policy.yaml). Toggle lives in YAML, not UI.
+# oh autopilot add idea "[P6.7] Frontend: Toggle auto-review trong Settings/Modes" ...
 
-oh autopilot add idea "[P6.8] Test: auto_review service + review routes" --body "Tạo tests/webui/test_review_routes.py: GET review không tồn tại → 404, mock review file → GET trả markdown. Tạo tests/services/test_auto_review.py: test maybe_spawn_review với mock git diff empty → skip, mock git diff có changes → spawn được gọi, test settings disabled → skip."
+# [NARROWED] P6.8 — only test review routes (P6.4 shipped). Auto-spawn tests dropped (no auto_review service needed).
+oh autopilot add idea "[P6.8] Test: review routes" --body "Tạo tests/webui/test_review_routes.py: GET review không tồn tại → 404, mock review file → GET trả markdown, POST rerun → 200."
 ```
 
 ---

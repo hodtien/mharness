@@ -2,17 +2,29 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import shlex
 import sys
+import time
 from pathlib import Path
-from typing import Literal
+from typing import Any, AsyncIterator, Literal
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 
+from openharness.autopilot.run_stream import (
+    get_writer,
+    read_stream_file,
+    stream_file_line_count,
+)
 from openharness.autopilot.service import RepoAutopilotStore
+from openharness.autopilot.session_store import (
+    clear_checkpoints,
+    load_latest_checkpoint,
+)
 from openharness.config.paths import get_project_autopilot_policy_path
 from openharness.autopilot.types import RepoAutopilotRegistry, RepoJournalEntry, RepoTaskStatus
 from openharness.webui.server.state import WebUIState, get_state, get_task_manager, require_token
@@ -45,20 +57,32 @@ class CardActionRequest(BaseModel):
     action: Literal["accept", "reject", "retry", "reset"]
 
 
+class CardModelPatchRequest(BaseModel):
+    """Payload for PATCH /api/pipeline/cards/{id}/model."""
+
+    model: str | None = None
+
+
 def _serialize_card(card: dict) -> dict:
-    """Return only the fields required by the GET /api/pipeline/cards contract."""
+    """Return the JSON representation required by the Web UI card contract."""
+    metadata = card.get("metadata", {})
     return {
         "id": card["id"],
         "title": card["title"],
+        "body": _safe_text(card.get("body")) or "",
         "status": card["status"],
         "source_kind": card["source_kind"],
         "score": card["score"],
         "labels": card["labels"],
         "created_at": card["created_at"],
         "updated_at": card["updated_at"],
+        "model": _safe_text(metadata.get("execution_model")),
+        "attempt_count": int(metadata.get("attempt_count", 0) or 0),
         "metadata": {
-            "last_note": _safe_text(card.get("metadata", {}).get("last_note")),
-            "linked_pr_url": _safe_text(card.get("metadata", {}).get("linked_pr_url")),
+            "last_note": _safe_text(metadata.get("last_note")),
+            "linked_pr_url": _safe_text(metadata.get("linked_pr_url")),
+            "resume_available": bool(metadata.get("resume_available")),
+            "resume_phase": _safe_text(metadata.get("resume_phase")),
         },
     }
 
@@ -176,6 +200,49 @@ def action_pipeline_card(
     return _serialize_card(card.model_dump(mode="json"))
 
 
+_ACTIVE_STATUSES: frozenset[str] = frozenset(
+    {"preparing", "running", "verifying", "waiting_ci", "repairing"}
+)
+
+
+@router.patch("/cards/{card_id}/model")
+def patch_pipeline_card_model(
+    card_id: str,
+    body: CardModelPatchRequest,
+    state: WebUIState = Depends(get_state),
+) -> dict:
+    """Override the execution model used the next time this card runs.
+
+    Pass ``model: null`` (or empty string) to clear the override and fall back
+    to the policy default. Rejected with HTTP 409 while the card is in an
+    active run state, since the model is captured at run-start time.
+    """
+    store = RepoAutopilotStore(state.cwd)
+    card = store.get_card(card_id)
+    if card is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "card_not_found", "card_id": card_id},
+        )
+    if card.status in _ACTIVE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "card_active",
+                "message": "Cannot change model while card is running.",
+                "card_id": card_id,
+                "status": card.status,
+            },
+        )
+    raw_model = (body.model or "").strip()
+    updated = store.update_status(
+        card_id,
+        status=card.status,
+        metadata_updates={"execution_model": raw_model},
+    )
+    return _serialize_card(updated.model_dump(mode="json"))
+
+
 # ---------------------------------------------------------------------------
 # Autopilot run-next trigger
 # ---------------------------------------------------------------------------
@@ -233,6 +300,18 @@ class UpdatePolicyRequest(BaseModel):
     yaml_content: str
 
 
+def _policy_defaults(policies: dict[str, Any]) -> dict[str, str | None]:
+    """Extract selectable model defaults from a parsed policy dict."""
+    execution = policies.get("execution")
+    if not isinstance(execution, dict):
+        execution = dict(policies.get("autopilot", {}).get("execution", {}))
+    return {
+        "default_model": (execution.get("default_model") or "").strip() or None,
+        "permission_mode": (execution.get("permission_mode") or "full_auto").strip(),
+        "max_attempts": str(execution.get("max_attempts", "") or ""),
+    }
+
+
 @router.get("/policy")
 def get_pipeline_policy(state: WebUIState = Depends(get_state)) -> dict:
     """Return the autopilot policy as both raw YAML and parsed JSON.
@@ -243,13 +322,14 @@ def get_pipeline_policy(state: WebUIState = Depends(get_state)) -> dict:
     """
     policy_path = get_project_autopilot_policy_path(state.cwd)
     if not policy_path.is_file():
-        return {"yaml_content": "", "parsed": None}
+        return {"yaml_content": "", "parsed": None, "defaults": {"default_model": None}}
     yaml_content = policy_path.read_text(encoding="utf-8")
     try:
-        parsed = yaml.safe_load(yaml_content)
+        parsed = yaml.safe_load(yaml_content) or {}
     except yaml.YAMLError:
         parsed = None
-    return {"yaml_content": yaml_content, "parsed": parsed}
+    defaults = _policy_defaults(parsed) if isinstance(parsed, dict) else {"default_model": None}
+    return {"yaml_content": yaml_content, "parsed": parsed, "defaults": defaults}
 
 
 @router.patch("/policy")
@@ -294,3 +374,195 @@ def update_pipeline_policy(
     policy_path.parent.mkdir(parents=True, exist_ok=True)
     policy_path.write_text(body.yaml_content, encoding="utf-8")
     return {"yaml_content": body.yaml_content, "parsed": parsed}
+
+
+# ---------------------------------------------------------------------------
+# Per-card realtime event stream (SSE)
+# ---------------------------------------------------------------------------
+
+
+def _sse_format(event: dict[str, Any]) -> str:
+    return f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
+
+
+@router.get("/cards/{card_id}/stream")
+async def stream_card_events(
+    card_id: str,
+    after: int = 0,
+    state: WebUIState = Depends(get_state),
+) -> StreamingResponse:
+    """Server-Sent Events feed for one autopilot card's run stream.
+
+    Replays ``{runs_dir}/{card_id}-stream.jsonl`` from offset ``after``, then
+    if the card is currently running, subscribes to the live writer and
+    tails subsequent events. Sends a heartbeat comment every 15s.
+    """
+    runs_dir = state.cwd / ".openharness" / "autopilot" / "runs"
+
+    async def _generator() -> AsyncIterator[bytes]:
+        offset = max(0, int(after))
+
+        # Subscribe BEFORE reading the file so that any events emitted during
+        # replay are buffered into the queue (no replay-to-subscribe gap). If
+        # the writer is not live, fall back to a pure on-disk replay.
+        writer = get_writer(card_id)
+        queue: asyncio.Queue[dict[str, Any]] | None = None
+        if writer is not None:
+            loop = asyncio.get_running_loop()
+            queue = writer.subscribe(loop=loop)
+
+        try:
+            replay = read_stream_file(runs_dir, card_id, after=offset)
+            for event in replay:
+                yield _sse_format(event).encode("utf-8")
+            offset += len(replay)
+
+            if writer is None or queue is None:
+                current_total = stream_file_line_count(runs_dir, card_id)
+                if current_total > offset:
+                    tail = read_stream_file(runs_dir, card_id, after=offset)
+                    for event in tail:
+                        yield _sse_format(event).encode("utf-8")
+                yield b": stream-ended\n\n"
+                return
+
+            # Catch any lines that were appended between replay-read and
+            # subscribe-time (the file is the durable source; any such line
+            # is also queued, so we dedup using ts+kind+payload comparison).
+            seen_keys: set[tuple[float, str, str]] = set()
+            tail_after_subscribe = read_stream_file(runs_dir, card_id, after=offset)
+            for event in tail_after_subscribe:
+                key = (
+                    float(event.get("ts", 0.0)),
+                    str(event.get("kind", "")),
+                    json.dumps(event.get("payload", {}), sort_keys=True, default=str),
+                )
+                seen_keys.add(key)
+                yield _sse_format(event).encode("utf-8")
+            offset += len(tail_after_subscribe)
+
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    yield f": heartbeat {time.time():.0f}\n\n".encode("utf-8")
+                    if writer.closed:
+                        break
+                    continue
+                key = (
+                    float(event.get("ts", 0.0)),
+                    str(event.get("kind", "")),
+                    json.dumps(event.get("payload", {}), sort_keys=True, default=str),
+                )
+                if key in seen_keys:
+                    seen_keys.discard(key)
+                    if writer.closed and queue.empty():
+                        break
+                    continue
+                yield _sse_format(event).encode("utf-8")
+                if writer.closed and queue.empty():
+                    break
+        finally:
+            if queue is not None and writer is not None:
+                writer.unsubscribe(queue)
+
+    return StreamingResponse(
+        _generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Per-card checkpoint / resume
+# ---------------------------------------------------------------------------
+
+
+@router.get("/cards/{card_id}/checkpoint")
+def get_card_checkpoint(
+    card_id: str,
+    state: WebUIState = Depends(get_state),
+) -> dict:
+    """Return checkpoint info for a card, or 404 if none exists."""
+    runs_dir = state.cwd / ".openharness" / "autopilot" / "runs"
+    ckpt = load_latest_checkpoint(runs_dir, card_id)
+    if ckpt is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "no_checkpoint", "card_id": card_id},
+        )
+    return {
+        "card_id": ckpt.card_id,
+        "phase": ckpt.phase,
+        "attempt": ckpt.attempt,
+        "saved_at": ckpt.saved_at,
+        "has_pending_continuation": ckpt.has_pending_continuation,
+        "model": ckpt.model,
+        "permission_mode": ckpt.permission_mode,
+    }
+
+
+@router.post("/cards/{card_id}/resume", status_code=status.HTTP_202_ACCEPTED)
+async def resume_card(
+    card_id: str,
+    state: WebUIState = Depends(get_state),
+) -> dict:
+    """Resume an interrupted autopilot card from its latest checkpoint.
+
+    Validates that a resumable checkpoint exists, that the card is not
+    currently active, and then spawns ``oh autopilot run-next`` with the
+    card pre-queued for resume. Returns HTTP 202 with the background task id.
+    """
+    store = RepoAutopilotStore(state.cwd)
+    card = store.get_card(card_id)
+    if card is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "card_not_found", "card_id": card_id},
+        )
+    if card.status in _ACTIVE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "card_active",
+                "message": "Cannot resume while card is running.",
+                "card_id": card_id,
+            },
+        )
+    runs_dir = state.cwd / ".openharness" / "autopilot" / "runs"
+    ckpt = load_latest_checkpoint(runs_dir, card_id)
+    if ckpt is None or not ckpt.has_pending_continuation:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "no_resumable_checkpoint",
+                "message": "No resumable checkpoint found for this card.",
+                "card_id": card_id,
+            },
+        )
+    store.update_status(
+        card_id,
+        status="queued",
+        metadata_updates={"resume_requested": True},
+    )
+    oh_executable = str(Path(sys.executable).with_name("oh"))
+    command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
+    manager = get_task_manager()
+    task = await manager.create_shell_task(
+        command=command,
+        description=f"autopilot resume {card_id}",
+        cwd=state.cwd,
+        task_type="local_bash",
+    )
+    return {"task_id": task.id, "card_id": card_id, "status": "accepted"}
+
+
+@router.delete("/cards/{card_id}/checkpoint")
+def delete_card_checkpoint(
+    card_id: str,
+    state: WebUIState = Depends(get_state),
+) -> dict:
+    """Delete all checkpoints for a card."""
+    runs_dir = state.cwd / ".openharness" / "autopilot" / "runs"
+    clear_checkpoints(runs_dir, card_id)
+    return {"card_id": card_id, "cleared": True}

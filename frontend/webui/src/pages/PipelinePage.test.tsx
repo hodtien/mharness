@@ -89,6 +89,77 @@ describe("matchesActivityFilter", () => {
   ])("matches %s filter for %s", (filter, kind, expected) => {
     expect(matchesActivityFilter(kind, filter)).toBe(expected);
   });
+
+  it("test_model_dropdown_calls_patch: choosing a model calls PATCH", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/pipeline/cards" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve(jsonResponse({ cards: sampleCards, updated_at: 0 }));
+      }
+      if (url === "/api/pipeline/policy") {
+        return Promise.resolve(jsonResponse({ yaml_content: "", parsed: {}, defaults: { default_model: "oc-medium" } }));
+      }
+      if (url === "/api/models") {
+        return Promise.resolve(jsonResponse({ openai: [{ id: "gpt-4.1", label: "GPT 4.1", is_default: false, is_custom: false }] }));
+      }
+      if (url === "/api/pipeline/cards/card-queued-1/model" && init?.method === "PATCH") {
+        return Promise.resolve(jsonResponse({ ...sampleCards[0], model: "gpt-4.1" }));
+      }
+      if (url.startsWith("/api/pipeline/journal")) {
+        return Promise.resolve(jsonResponse({ entries: [] }));
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("Add login form"));
+    const select = await screen.findByLabelText(/select execution model/i);
+    await screen.findByText("GPT 4.1");
+    fireEvent.change(select, { target: { value: "gpt-4.1" } });
+
+    await waitFor(() => {
+      const patchCalls = fetchMock.mock.calls.filter(
+        (c) => c[0] === "/api/pipeline/cards/card-queued-1/model" && (c[1] as RequestInit | undefined)?.method === "PATCH",
+      );
+      expect(patchCalls.length).toBe(1);
+      expect(JSON.parse(String((patchCalls[0][1] as RequestInit).body))).toEqual({ model: "gpt-4.1" });
+    });
+    expect(await screen.findByText(/Model updated/i)).toBeTruthy();
+  });
+
+  it("test_model_dropdown_disabled_when_active: running card disables model select", async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url === "/api/pipeline/cards") {
+        return Promise.resolve(jsonResponse({ cards: sampleCards, updated_at: 0 }));
+      }
+      if (url === "/api/pipeline/policy") {
+        return Promise.resolve(jsonResponse({ yaml_content: "", parsed: {}, defaults: { default_model: "oc-medium" } }));
+      }
+      if (url === "/api/models") {
+        return Promise.resolve(jsonResponse({ openai: [{ id: "gpt-4.1", label: "GPT 4.1", is_default: false, is_custom: false }] }));
+      }
+      if (url.startsWith("/api/pipeline/journal")) {
+        return Promise.resolve(jsonResponse({ entries: [] }));
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("Fix auth bug"));
+    const select = await screen.findByLabelText(/select execution model/i);
+    expect((select as HTMLSelectElement).disabled).toBe(true);
+  });
 });
 
 describe("PipelinePage", () => {

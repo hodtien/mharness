@@ -201,6 +201,51 @@ def serialize_content_block(block: ContentBlock) -> dict[str, Any]:
     }
 
 
+def deserialize_content_block(raw: dict[str, Any]) -> ContentBlock:
+    """Reverse of :func:`serialize_content_block`. Reconstruct a content block from its wire dict."""
+    block_type = raw.get("type")
+    if block_type == "text":
+        return TextBlock(text=str(raw.get("text", "")))
+    if block_type == "image":
+        source = raw.get("source") or {}
+        return ImageBlock(
+            media_type=str(source.get("media_type", "image/png")),
+            data=str(source.get("data", "")),
+            source_path=str(raw.get("source_path", "")),
+        )
+    if block_type == "tool_use":
+        return ToolUseBlock(
+            id=str(raw.get("id", f"toolu_{uuid4().hex}")),
+            name=str(raw.get("name", "")),
+            input=dict(raw.get("input") or {}),
+        )
+    if block_type == "tool_result":
+        return ToolResultBlock(
+            tool_use_id=str(raw.get("tool_use_id", "")),
+            content=str(raw.get("content", "")),
+            is_error=bool(raw.get("is_error", False)),
+        )
+    raise ValueError(f"Unsupported content block type: {block_type!r}")
+
+
+def deserialize_conversation_message(raw: dict[str, Any]) -> ConversationMessage:
+    """Reconstruct a :class:`ConversationMessage` from a serialized dict."""
+    role = raw.get("role")
+    if role not in ("user", "assistant"):
+        raise ValueError(f"Unsupported message role: {role!r}")
+    content_raw = raw.get("content") or []
+    blocks: list[ContentBlock] = [deserialize_content_block(item) for item in content_raw]
+    return ConversationMessage(role=role, content=blocks)
+
+
+def serialize_conversation_message(message: ConversationMessage) -> dict[str, Any]:
+    """Inverse of :func:`deserialize_conversation_message` — full round-trip serialization."""
+    return {
+        "role": message.role,
+        "content": [serialize_content_block(block) for block in message.content],
+    }
+
+
 def assistant_message_from_api(raw_message: Any) -> ConversationMessage:
     """Convert an Anthropic SDK message object into a conversation message."""
     content: list[ContentBlock] = []

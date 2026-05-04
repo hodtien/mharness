@@ -353,7 +353,7 @@ async def test_ship_command_queues_and_executes_card(tmp_path: Path, monkeypatch
     registry = create_default_command_registry()
     context = _make_context(tmp_path)
 
-    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None):
+    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
         return "Implemented the requested feature."
 
     def fake_run_verification_steps(self, policies, *, cwd=None):

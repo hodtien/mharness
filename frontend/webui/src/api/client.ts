@@ -195,6 +195,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  patchPipelineCardModel: (cardId: string, model: string | null) =>
+    apiFetch<Record<string, unknown>>(`/api/pipeline/cards/${encodeURIComponent(cardId)}/model`, {
+      method: "PATCH",
+      body: JSON.stringify({ model }),
+    }),
   deleteCustomModel: (provider: string, modelId: string) =>
     apiFetch<{ ok: boolean; provider: string; model_id: string }>(
       `/api/models/${encodeURIComponent(provider)}/${encodeURIComponent(modelId)}`,

@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useCallback, useRef, type FormEvent } from "react";
+import React, { useEffect, useState, useCallback, useRef, type ChangeEvent, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
-import { apiFetch, getToken } from "../api/client";
+import { api, apiFetch, getToken } from "../api/client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,17 +31,22 @@ export type RepoTaskSource =
 export interface PipelineCardMetadata {
   last_note?: string | null;
   linked_pr_url?: string | null;
+  resume_available?: boolean;
+  resume_phase?: string | null;
 }
 
 export interface PipelineCard {
   id: string;
   title: string;
+  body?: string;
   status: RepoTaskStatus;
   source_kind: RepoTaskSource;
   score: number;
   labels: string[];
   created_at: number;
   updated_at: number;
+  model?: string | null;
+  attempt_count?: number;
   metadata?: PipelineCardMetadata;
 }
 
@@ -460,6 +465,7 @@ function MarkdownText({ content }: { content: string }) {
 interface ReviewTabProps {
   cardId: string;
   isActive: boolean;
+  cardStatus: string;
 }
 
 interface ReviewData {
@@ -469,7 +475,8 @@ interface ReviewData {
   created_at: number;
 }
 
-function ReviewTab({ cardId, isActive }: ReviewTabProps) {
+function ReviewTab({ cardId, isActive, cardStatus }: ReviewTabProps) {
+  const isMerged = cardStatus === "merged";
   const [reviewState, setReviewState] = useState<
     "loading" | "not_found" | "running" | "done"
   >("loading");
@@ -559,20 +566,24 @@ function ReviewTab({ cardId, isActive }: ReviewTabProps) {
     return (
       <div className="flex flex-col items-center gap-4 p-6 text-center">
         <p className="text-sm text-[var(--text-dim)]">
-          No review yet for this task.
+          {isMerged
+            ? "No local review file. This card was merged after passing the autopilot remote review gate."
+            : "No review yet for this task."}
         </p>
         {error && (
           <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
             {error}
           </p>
         )}
-        <button
-          onClick={startRerun}
-          disabled={rerunning}
-          className="rounded-lg border border-[var(--accent)]/40 bg-[var(--accent)]/20 px-5 py-2 text-sm font-medium text-[var(--accent)] transition hover:bg-[var(--accent)]/30 disabled:opacity-40"
-        >
-          {rerunning ? "Starting…" : "Run Review"}
-        </button>
+        {!isMerged && (
+          <button
+            onClick={startRerun}
+            disabled={rerunning}
+            className="rounded-lg border border-[var(--accent)]/40 bg-[var(--accent)]/20 px-5 py-2 text-sm font-medium text-[var(--accent)] transition hover:bg-[var(--accent)]/30 disabled:opacity-40"
+          >
+            {rerunning ? "Starting…" : "Run Review"}
+          </button>
+        )}
       </div>
     );
   }
@@ -584,13 +595,15 @@ function ReviewTab({ cardId, isActive }: ReviewTabProps) {
         <span className="text-[10px] uppercase tracking-wider text-[var(--text-dim)]">
           Review · {review ? relativeAge(review.created_at) : ""}
         </span>
-        <button
-          onClick={startRerun}
-          disabled={rerunning}
-          className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1 text-xs text-[var(--text-dim)] transition hover:border-[var(--accent)]/40 hover:text-[var(--text)] disabled:opacity-40"
-        >
-          {rerunning ? "Starting…" : "Re-run Review"}
-        </button>
+        {!isMerged && (
+          <button
+            onClick={startRerun}
+            disabled={rerunning}
+            className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1 text-xs text-[var(--text-dim)] transition hover:border-[var(--accent)]/40 hover:text-[var(--text)] disabled:opacity-40"
+          >
+            {rerunning ? "Starting…" : "Re-run Review"}
+          </button>
+        )}
       </div>
       <div className="overflow-y-auto p-4">
         <div className="prose prose-invert max-w-none text-sm text-[var(--text)]">
@@ -740,6 +753,176 @@ function ActivityTab({ cardId, isActive }: ActivityTabProps) {
   );
 }
 
+// ─── Logs Tab ─────────────────────────────────────────────────────────────────
+
+interface LogsTabProps {
+  cardId: string;
+  isActive: boolean;
+}
+
+interface StreamEvent {
+  ts: number;
+  kind: string;
+  payload: Record<string, unknown>;
+}
+
+function LogsTab({ cardId, isActive }: LogsTabProps) {
+  const [events, setEvents] = useState<StreamEvent[]>([]);
+  const [streamState, setStreamState] = useState<"connecting" | "open" | "closed">("connecting");
+  const [error, setError] = useState<string | null>(null);
+  const sourceRef = useRef<EventSource | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const stickRef = useRef<boolean>(true);
+
+  useEffect(() => {
+    if (!isActive) return;
+    setEvents([]);
+    setError(null);
+    setStreamState("connecting");
+
+    const token = getToken();
+    const url = `/api/pipeline/cards/${encodeURIComponent(cardId)}/stream${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+    const es = new EventSource(url);
+    sourceRef.current = es;
+
+    es.onopen = () => setStreamState("open");
+    es.onerror = () => {
+      setStreamState("closed");
+    };
+    es.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data) as StreamEvent;
+        setEvents((prev) => [...prev, data]);
+      } catch {
+        // ignore malformed lines
+      }
+    };
+
+    return () => {
+      es.close();
+      sourceRef.current = null;
+      setStreamState("closed");
+    };
+  }, [cardId, isActive]);
+
+  useEffect(() => {
+    const node = scrollerRef.current;
+    if (!node) return;
+    if (stickRef.current) {
+      node.scrollTop = node.scrollHeight;
+    }
+  }, [events]);
+
+  const onScroll = useCallback(() => {
+    const node = scrollerRef.current;
+    if (!node) return;
+    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+    stickRef.current = distanceFromBottom < 40;
+  }, []);
+
+  const badge = streamState === "open" ? (
+    <span className="text-emerald-300">● live</span>
+  ) : streamState === "connecting" ? (
+    <span className="text-amber-300">● connecting…</span>
+  ) : (
+    <span className="text-[var(--text-dim)]">○ ended</span>
+  );
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2 text-[11px]">
+        <div className="font-mono uppercase tracking-wider text-[var(--text-dim)]">Stream</div>
+        <div className="font-mono">{badge}</div>
+      </div>
+      {error && (
+        <div className="px-4 py-2 text-xs text-red-300">{error}</div>
+      )}
+      <div
+        ref={scrollerRef}
+        onScroll={onScroll}
+        className="flex-1 overflow-auto px-4 py-2 font-mono text-[11px] leading-snug"
+      >
+        {events.length === 0 ? (
+          <div className="text-[var(--text-dim)]">
+            {streamState === "open" ? "Waiting for activity…" : "No events yet."}
+          </div>
+        ) : (
+          events.map((ev, idx) => <LogLine key={idx} event={ev} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LogLine({ event }: { event: StreamEvent }) {
+  const { kind, payload } = event;
+  const phase = typeof payload?.phase === "string" ? (payload.phase as string) : null;
+
+  if (kind === "phase_start") {
+    const attempt = typeof payload?.attempt === "number" ? ` · attempt ${payload.attempt}` : "";
+    return (
+      <div className="mt-2 border-t border-[var(--border)] pt-1 text-[var(--accent)]">
+        ▶ {String(payload?.phase ?? "phase")}{attempt}
+      </div>
+    );
+  }
+  if (kind === "phase_end") {
+    const ok = payload?.ok === false ? "✗" : "✓";
+    return (
+      <div className="text-[var(--text-dim)]">
+        {ok} {String(payload?.phase ?? "phase")} ended
+      </div>
+    );
+  }
+  if (kind === "text_delta") {
+    return (
+      <span className="whitespace-pre-wrap text-[var(--text)]">
+        {String(payload?.text ?? "")}
+      </span>
+    );
+  }
+  if (kind === "tool_call") {
+    return (
+      <div className="text-sky-300">
+        ⚙ {String(payload?.name ?? "tool")}
+        {payload?.input_summary ? (
+          <span className="text-[var(--text-dim)]"> {String(payload.input_summary)}</span>
+        ) : null}
+      </div>
+    );
+  }
+  if (kind === "tool_result") {
+    const isError = payload?.is_error === true;
+    return (
+      <div className={isError ? "text-red-300" : "text-emerald-300"}>
+        {isError ? "✗" : "→"} {String(payload?.name ?? "tool")}
+        {payload?.summary ? (
+          <span className="text-[var(--text-dim)]"> {String(payload.summary)}</span>
+        ) : null}
+      </div>
+    );
+  }
+  if (kind === "error") {
+    return (
+      <div className="text-red-300">
+        ✗ error: {String(payload?.message ?? "")}
+      </div>
+    );
+  }
+  if (kind === "checkpoint_saved") {
+    return (
+      <div className="text-violet-300">
+        ⛯ checkpoint: {String(payload?.phase ?? "")}
+      </div>
+    );
+  }
+  return (
+    <div className="text-[var(--text-dim)]">
+      {kind}{phase ? ` (${phase})` : ""}
+    </div>
+  );
+}
+
 // ─── Blocker Banner ───────────────────────────────────────────────────────────
 
 const BLOCKER_STATUSES: RepoTaskStatus[] = ["failed", "repairing", "waiting_ci"];
@@ -825,6 +1008,92 @@ export function BlockerBanner({ card, onAction, loadingAction }: BlockerBannerPr
   );
 }
 
+// ─── Model Section ────────────────────────────────────────────────────────────
+
+const MODEL_LOCKED_STATUSES: RepoTaskStatus[] = [
+  "preparing", "running", "verifying", "waiting_ci", "repairing",
+];
+
+interface ModelSectionProps {
+  card: PipelineCard;
+  policyDefaultModel: string | null;
+  onModelChange: (model: string | null) => void;
+}
+
+function ModelSection({ card, policyDefaultModel, onModelChange }: ModelSectionProps) {
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{ kind: "ok" | "error"; msg: string } | null>(null);
+  const [modelList, setModelList] = useState<Array<{ id: string; label: string }>>([]);
+
+  const isActive = MODEL_LOCKED_STATUSES.includes(card.status);
+  const currentModel = card.model ?? null;
+
+  useEffect(() => {
+    api.listModels().then((raw) => {
+      const flat: Array<{ id: string; label: string }> = [];
+      for (const [, profiles] of Object.entries(raw)) {
+        for (const p of profiles) {
+          flat.push({ id: p.id, label: p.label });
+        }
+      }
+      setModelList(flat);
+    }).catch(() => setModelList([]));
+  }, []);
+
+  const handleChange = async (e: ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    const next = value === "__policy__" ? null : value;
+    const previous = currentModel;
+    setLoading(true);
+    setToast(null);
+    onModelChange(next);
+    try {
+      await api.patchPipelineCardModel(card.id, next);
+      setToast({ kind: "ok", msg: "Model updated" });
+    } catch {
+      onModelChange(previous);
+      setToast({ kind: "error", msg: "Failed to update model" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-dim)]">Model</div>
+      <div className="flex items-center gap-2">
+        <select
+          value={currentModel ?? "__policy__"}
+          disabled={isActive || loading}
+          onChange={handleChange}
+          className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--accent)]/60 focus:outline-none disabled:opacity-40"
+          aria-label="Select execution model"
+        >
+          <option value="__policy__">Policy default{policyDefaultModel ? ` (${policyDefaultModel})` : ""}</option>
+          {modelList.map((m) => (
+            <option key={m.id} value={m.id}>{m.label}</option>
+          ))}
+        </select>
+        {isActive && (
+          <span className="text-[10px] text-[var(--text-dim)] whitespace-nowrap">running…</span>
+        )}
+      </div>
+      {toast && (
+        <div
+          className={`rounded border px-2 py-1 text-xs ${
+            toast.kind === "ok"
+              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+              : "border-red-500/40 bg-red-500/10 text-red-300"
+          }`}
+          role="status"
+        >
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Drawer ───────────────────────────────────────────────────────────────────
 
 const RESETTABLE_STATUSES: RepoTaskStatus[] = ["failed", "rejected", "killed"];
@@ -833,11 +1102,14 @@ interface DrawerProps {
   card: PipelineCard | null;
   onClose: () => void;
   onAction: (cardId: string, action: "accept" | "reject" | "retry" | "reset") => void;
+  onResume: (cardId: string) => void;
   loadingAction: boolean;
+  policyDefaultModel: string | null;
+  onCardModelChange: (cardId: string, model: string | null) => void;
 }
 
-function Drawer({ card, onClose, onAction, loadingAction }: DrawerProps) {
-  const [drawerTab, setDrawerTab] = useState<"info" | "activity" | "review">("info");
+function Drawer({ card, onClose, onAction, onResume, loadingAction, policyDefaultModel, onCardModelChange }: DrawerProps) {
+  const [drawerTab, setDrawerTab] = useState<"info" | "activity" | "review" | "logs">("info");
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -929,11 +1201,28 @@ function Drawer({ card, onClose, onAction, loadingAction }: DrawerProps) {
             >
               Review
             </button>
+            <button
+              onClick={() => setDrawerTab("logs")}
+              className={`flex-1 px-4 py-2 text-sm font-medium transition ${
+                drawerTab === "logs"
+                  ? "border-b-2 border-[var(--accent)] text-[var(--accent)]"
+                  : "text-[var(--text-dim)] hover:text-[var(--text)]"
+              }`}
+            >
+              Logs
+            </button>
           </div>
 
           {/* Tab content */}
           {drawerTab === "info" ? (
             <div className="space-y-4 p-4">
+              {/* Model */}
+              <ModelSection
+                card={card}
+                policyDefaultModel={policyDefaultModel}
+                onModelChange={(model) => onCardModelChange(card.id, model)}
+              />
+
               {/* Score */}
               <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3">
                 <div className="text-[10px] uppercase tracking-wider text-[var(--text-dim)] mb-1">Score</div>
@@ -957,29 +1246,65 @@ function Drawer({ card, onClose, onAction, loadingAction }: DrawerProps) {
                 </div>
               )}
 
-              {/* Age */}
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3 text-sm">
-                <div className="mb-0.5 text-[10px] uppercase tracking-wider text-[var(--text-dim)]">Created</div>
-                <div className="text-[var(--text)]">{relativeAge(card.created_at)}</div>
+              {/* Details */}
+              <div className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3 text-sm">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--text-dim)]">Details</div>
+                {card.body && (
+                  <div className="whitespace-pre-wrap text-[var(--text)]">{card.body}</div>
+                )}
+                <dl className="grid grid-cols-2 gap-3">
+                  <div>
+                    <dt className="text-[10px] uppercase tracking-wider text-[var(--text-dim)]">Created</dt>
+                    <dd className="text-[var(--text)]">{relativeAge(card.created_at)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] uppercase tracking-wider text-[var(--text-dim)]">Attempts</dt>
+                    <dd className="font-mono text-[var(--text)]">{card.attempt_count ?? 0}</dd>
+                  </div>
+                </dl>
+                {card.metadata?.linked_pr_url && (
+                  <a
+                    href={card.metadata.linked_pr_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex text-xs text-[var(--accent)] hover:underline"
+                  >
+                    Linked PR
+                  </a>
+                )}
               </div>
             </div>
           ) : drawerTab === "activity" ? (
             <ActivityTab cardId={card.id} isActive={drawerTab === "activity"} />
+          ) : drawerTab === "logs" ? (
+            <LogsTab cardId={card.id} isActive={drawerTab === "logs"} />
           ) : (
-            <ReviewTab cardId={card.id} isActive={drawerTab === "review"} />
+            <ReviewTab cardId={card.id} isActive={drawerTab === "review"} cardStatus={card.status} />
           )}
         </div>
 
         {/* Actions */}
         <div className="flex gap-2 border-t border-[var(--border)] p-4">
           {RESETTABLE_STATUSES.includes(card.status) ? (
-            <button
-              onClick={() => onAction(card.id, "reset")}
-              disabled={loadingAction}
-              className="flex-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-40"
-            >
-              Reset to Queue
-            </button>
+            <>
+              {card.metadata?.resume_available ? (
+                <button
+                  onClick={() => onResume(card.id)}
+                  disabled={loadingAction}
+                  className="flex-1 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-40"
+                  title={card.metadata?.resume_phase ? `Resume from ${card.metadata.resume_phase}` : "Resume from checkpoint"}
+                >
+                  Resume{card.metadata?.resume_phase ? ` (${card.metadata.resume_phase})` : ""}
+                </button>
+              ) : null}
+              <button
+                onClick={() => onAction(card.id, "reset")}
+                disabled={loadingAction}
+                className="flex-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-40"
+              >
+                Reset to Queue
+              </button>
+            </>
           ) : (
             <>
               <button
@@ -1027,6 +1352,7 @@ export default function PipelinePage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("board");
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
+  const [policyDefaultModel, setPolicyDefaultModel] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -1035,6 +1361,15 @@ export default function PipelinePage() {
     return () => {
       document.title = previous;
     };
+  }, []);
+
+  // Load policy defaults for the model dropdown
+  useEffect(() => {
+    apiFetch<{ defaults?: { default_model?: string | null } }>("/api/pipeline/policy")
+      .then((data) => {
+        setPolicyDefaultModel(data.defaults?.default_model ?? null);
+      })
+      .catch(() => setPolicyDefaultModel(null));
   }, []);
 
   const refreshCards = useCallback(() => {
@@ -1107,6 +1442,15 @@ export default function PipelinePage() {
     }
   }, [refreshCards]);
 
+  const handleCardModelChange = useCallback((cardId: string, model: string | null) => {
+    setCards((prev) =>
+      prev.map((c) => (c.id === cardId ? { ...c, model } : c)),
+    );
+    setSelectedCard((prev) =>
+      prev && prev.id === cardId ? { ...prev, model } : prev,
+    );
+  }, []);
+
   const handleAction = useCallback(
     async (cardId: string, action: "accept" | "reject" | "retry" | "reset") => {
       setLoadingAction(true);
@@ -1120,6 +1464,24 @@ export default function PipelinePage() {
         refreshCards();
       } catch (err) {
         console.error("action failed:", err);
+      } finally {
+        setLoadingAction(false);
+      }
+    },
+    [refreshCards],
+  );
+
+  const handleResume = useCallback(
+    async (cardId: string) => {
+      setLoadingAction(true);
+      try {
+        await apiFetch(`/api/pipeline/cards/${encodeURIComponent(cardId)}/resume`, {
+          method: "POST",
+        });
+        setSelectedCard(null);
+        refreshCards();
+      } catch (err) {
+        console.error("resume failed:", err);
       } finally {
         setLoadingAction(false);
       }
@@ -1267,7 +1629,10 @@ export default function PipelinePage() {
         card={selectedCard}
         onClose={() => setSelectedCard(null)}
         onAction={handleAction}
+        onResume={handleResume}
         loadingAction={loadingAction}
+        policyDefaultModel={policyDefaultModel}
+        onCardModelChange={handleCardModelChange}
       />
     </div>
   );
