@@ -228,3 +228,77 @@ def test_two_cards_run_parallel_end_to_end_with_real_git_and_worktrees(
     assert final_b.metadata["linked_pr_number"] == 102
     assert pr_comments.count(101) >= 1
     assert pr_comments.count(102) >= 1
+
+
+def test_capacity_gate_blocks_third_card(tmp_path: Path) -> None:
+    """max_parallel_runs=2: third card blocked; card 1 finish → third unblocked."""
+    import pytest
+
+    repo, _ = _bootstrap_repo(tmp_path)
+    store = RepoAutopilotStore(repo)
+    card_a, _ = store.enqueue_card(source_kind="manual_idea", title="Card A", body="a")
+    card_b, _ = store.enqueue_card(source_kind="manual_idea", title="Card B", body="b")
+    card_c, _ = store.enqueue_card(source_kind="manual_idea", title="Card C", body="c")
+
+    # Simulate two active cards occupying capacity.
+    store.update_status(card_a.id, status="running", metadata_updates={"worker_id": "worker-1"})
+    store.update_status(card_b.id, status="running", metadata_updates={"worker_id": "worker-2"})
+
+    # run_next() should raise when capacity is full
+    with pytest.raises(ValueError, match="Maximum parallel runs reached"):
+        asyncio.run(store.run_next())
+
+    # Finish card A to free a slot
+    store.update_status(card_a.id, status="completed")
+
+    # Now capacity allows card C to be claimed and started
+    assert store.has_capacity(store.load_policies())
+    claimed_c = store.pick_and_claim_card("worker-3")
+    assert claimed_c is not None
+    assert claimed_c.id == card_c.id
+
+    # Card B remains active and unaffected
+    final_b = store.get_card(card_b.id)
+    assert final_b is not None and final_b.status == "running"
+
+
+def test_merge_one_does_not_corrupt_other(tmp_path: Path) -> None:
+    """Updating one merged card must not disturb another running card."""
+    repo, _ = _bootstrap_repo(tmp_path)
+    store = RepoAutopilotStore(repo)
+    card_a, _ = store.enqueue_card(source_kind="manual_idea", title="Card A", body="a")
+    card_b, _ = store.enqueue_card(source_kind="manual_idea", title="Card B", body="b")
+
+    store.update_status(
+        card_b.id, status="running", metadata_updates={"worktree_path": str(tmp_path / "wt-b")}
+    )
+    store.update_status(card_a.id, status="merged", metadata_updates={"linked_pr_number": 101})
+
+    final_a = store.get_card(card_a.id)
+    final_b = store.get_card(card_b.id)
+    assert final_a is not None and final_a.status == "merged"
+    assert final_b is not None and final_b.status == "running"
+    assert final_b.metadata["worktree_path"] == str(tmp_path / "wt-b")
+
+
+def test_crash_cleanup_does_not_affect_sibling(tmp_path: Path) -> None:
+    """Marking one card as failed should not affect another running card."""
+    repo, _ = _bootstrap_repo(tmp_path)
+    store = RepoAutopilotStore(repo)
+    card_a, _ = store.enqueue_card(source_kind="manual_idea", title="Card A", body="a")
+    card_b, _ = store.enqueue_card(source_kind="manual_idea", title="Card B", body="b")
+
+    wt_b = tmp_path / "worktrees" / "b"
+    wt_b.mkdir(parents=True)
+    (wt_b / "artifact_b.txt").write_text("survived", encoding="utf-8")
+
+    store.update_status(
+        card_a.id, status="failed", metadata_updates={"last_failure_stage": "agent_crash"}
+    )
+    store.update_status(card_b.id, status="running", metadata_updates={"worktree_path": str(wt_b)})
+
+    final_a = store.get_card(card_a.id)
+    final_b = store.get_card(card_b.id)
+    assert final_a is not None and final_a.status == "failed"
+    assert final_b is not None and final_b.status == "running"
+    assert (wt_b / "artifact_b.txt").read_text(encoding="utf-8") == "survived"
