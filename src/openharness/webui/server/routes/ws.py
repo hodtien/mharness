@@ -4,8 +4,7 @@ The browser connects to ``/api/ws/{session_id}`` after creating a session
 via ``POST /api/sessions``. Without this route, every connection ends with
 close code 1006 ("abnormal closure") and the SPA shows an error banner.
 
-The handler validates the bearer token from the query string (browsers can't
-attach Authorization headers to WebSocket handshakes), looks up the
+The handler validates the token from the ``oh_token`` cookie, looks up the
 :class:`SessionEntry` registered by ``SessionManager``, and pumps frames
 between the browser and the per-session :class:`WebSocketBackendHost`.
 """

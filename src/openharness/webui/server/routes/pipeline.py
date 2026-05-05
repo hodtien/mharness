@@ -29,7 +29,7 @@ from openharness.autopilot.session_store import (
 )
 from openharness.config.paths import get_project_autopilot_policy_path
 from openharness.autopilot.types import RepoAutopilotRegistry, RepoJournalEntry, RepoTaskStatus
-from openharness.webui.server.state import WebUIState, get_state, get_task_manager, require_token
+from openharness.webui.server.state import WebUIState, get_state, get_task_manager, require_stream_token, require_token
 
 _CARD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
@@ -46,8 +46,9 @@ def _ensure_safe_card_id(card_id: str) -> None:
 router = APIRouter(
     prefix="/api/pipeline",
     tags=["pipeline"],
-    dependencies=[Depends(require_token)],
 )
+
+_AUTH_DEPENDENCY = [Depends(require_token)]
 
 
 class CreateManualCardRequest(BaseModel):
@@ -151,7 +152,7 @@ def _serialize_journal_entry(entry: RepoJournalEntry) -> dict:
     return entry.model_dump(mode="json")
 
 
-@router.get("/journal")
+@router.get("/journal", dependencies=_AUTH_DEPENDENCY)
 def list_pipeline_journal(
     limit: int = 50,
     card_id: str | None = None,
@@ -168,7 +169,7 @@ def list_pipeline_journal(
     return {"entries": [_serialize_journal_entry(entry) for entry in entries]}
 
 
-@router.get("/cards")
+@router.get("/cards", dependencies=_AUTH_DEPENDENCY)
 def list_pipeline_cards(state: WebUIState = Depends(get_state)) -> dict:
     """Return the autopilot task card list from the per-repo registry.
 
@@ -193,7 +194,7 @@ def list_pipeline_cards(state: WebUIState = Depends(get_state)) -> dict:
     }
 
 
-@router.post("/cards", status_code=status.HTTP_201_CREATED)
+@router.post("/cards", status_code=status.HTTP_201_CREATED, dependencies=_AUTH_DEPENDENCY)
 def enqueue_manual_card(
     body: CreateManualCardRequest,
     state: WebUIState = Depends(get_state),
@@ -231,7 +232,7 @@ _ACTION_TO_STATUS: dict[str, RepoTaskStatus] = {
 }
 
 
-@router.post("/cards/{card_id}/action")
+@router.post("/cards/{card_id}/action", dependencies=_AUTH_DEPENDENCY)
 def action_pipeline_card(
     card_id: str,
     body: CardActionRequest,
@@ -260,7 +261,7 @@ _ACTIVE_STATUSES: frozenset[str] = frozenset(
 )
 
 
-@router.get("/cards/{card_id}")
+@router.get("/cards/{card_id}", dependencies=_AUTH_DEPENDENCY)
 def get_pipeline_card(
     card_id: str,
     state: WebUIState = Depends(get_state),
@@ -284,7 +285,7 @@ def get_pipeline_card(
     )
 
 
-@router.patch("/cards/{card_id}/model")
+@router.patch("/cards/{card_id}/model", dependencies=_AUTH_DEPENDENCY)
 def patch_pipeline_card_model(
     card_id: str,
     body: CardModelPatchRequest,
@@ -325,7 +326,7 @@ def patch_pipeline_card_model(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/run-next", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/run-next", status_code=status.HTTP_202_ACCEPTED, dependencies=_AUTH_DEPENDENCY)
 async def run_next_card(state: WebUIState = Depends(get_state)) -> dict:
     """Spawn ``oh autopilot run-next`` as a background task.
 
@@ -395,7 +396,7 @@ def _policy_defaults(policies: dict[str, Any]) -> dict[str, str | None]:
     }
 
 
-@router.get("/policy")
+@router.get("/policy", dependencies=_AUTH_DEPENDENCY)
 def get_pipeline_policy(state: WebUIState = Depends(get_state)) -> dict:
     """Return the autopilot policy as both raw YAML and parsed JSON.
 
@@ -415,7 +416,7 @@ def get_pipeline_policy(state: WebUIState = Depends(get_state)) -> dict:
     return {"yaml_content": yaml_content, "parsed": parsed, "defaults": defaults}
 
 
-@router.patch("/policy")
+@router.patch("/policy", dependencies=_AUTH_DEPENDENCY)
 def update_pipeline_policy(
     body: UpdatePolicyRequest,
     state: WebUIState = Depends(get_state),
@@ -499,6 +500,7 @@ async def stream_card_events(
     card_id: str,
     after: int = 0,
     state: WebUIState = Depends(get_state),
+    _: None = Depends(require_stream_token),
 ) -> StreamingResponse:
     """Server-Sent Events feed for one autopilot card's run stream.
 
@@ -604,7 +606,7 @@ async def stream_card_events(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/cards/{card_id}/checkpoint")
+@router.get("/cards/{card_id}/checkpoint", dependencies=_AUTH_DEPENDENCY)
 def get_card_checkpoint(
     card_id: str,
     state: WebUIState = Depends(get_state),
@@ -629,7 +631,7 @@ def get_card_checkpoint(
     }
 
 
-@router.post("/cards/{card_id}/resume", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/cards/{card_id}/resume", status_code=status.HTTP_202_ACCEPTED, dependencies=_AUTH_DEPENDENCY)
 async def resume_card(
     card_id: str,
     state: WebUIState = Depends(get_state),
@@ -698,7 +700,7 @@ async def resume_card(
     return {"task_id": task.id, "card_id": card_id, "status": "accepted"}
 
 
-@router.delete("/cards/{card_id}/checkpoint")
+@router.delete("/cards/{card_id}/checkpoint", dependencies=_AUTH_DEPENDENCY)
 def delete_card_checkpoint(
     card_id: str,
     state: WebUIState = Depends(get_state),

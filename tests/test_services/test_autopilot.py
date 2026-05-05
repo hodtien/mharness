@@ -120,8 +120,12 @@ def test_pick_and_claim_returns_highest_score(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
-    low, _ = store.enqueue_card(source_kind="claude_code_candidate", title="Low priority", body="candidate")
-    high, _ = store.enqueue_card(source_kind="ohmo_request", title="High priority", body="urgent bug")
+    low, _ = store.enqueue_card(
+        source_kind="claude_code_candidate", title="Low priority", body="candidate"
+    )
+    high, _ = store.enqueue_card(
+        source_kind="ohmo_request", title="High priority", body="urgent bug"
+    )
     medium, _ = store.enqueue_card(source_kind="manual_idea", title="Medium priority", body="idea")
 
     claimed = store.pick_and_claim_card("worker-1")
@@ -339,7 +343,9 @@ def test_autopilot_run_card_marks_completed_after_verification(tmp_path: Path) -
         body="run next queued task and verify it",
     )
 
-    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
+    async def fake_run_agent_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
         assert "Implement repo autopilot tick" in prompt
         return "Implemented the change and ran targeted checks."
 
@@ -382,7 +388,9 @@ def test_autopilot_run_card_marks_failed_when_verification_fails(tmp_path: Path)
         body="this should fail verification",
     )
 
-    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
+    async def fake_run_agent_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
         return "Made a risky change."
 
     def fake_run_verification_steps(self, policies, *, cwd=None):
@@ -557,15 +565,23 @@ def test_worktree_cleanup_on_exception(tmp_path: Path, monkeypatch) -> None:
         remove_calls.append(slug)
         return True
 
-    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
+    async def fake_run_agent_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree)
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
-        lambda self, cwd, *, base_branch, head_branch, reset: None,
+        lambda self, cwd, **kwargs: None,
     )
     store._run_agent_prompt = MethodType(fake_run_agent_prompt, store)
 
@@ -599,15 +615,23 @@ def test_worktree_cleanup_failure_non_fatal(tmp_path: Path, monkeypatch) -> None
     async def fake_remove_worktree(self, slug: str) -> bool:
         raise RuntimeError("cleanup failed")
 
-    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
+    async def fake_run_agent_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree)
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
-        lambda self, cwd, *, base_branch, head_branch, reset: None,
+        lambda self, cwd, **kwargs: None,
     )
     store._run_agent_prompt = MethodType(fake_run_agent_prompt, store)
 
@@ -651,8 +675,12 @@ def test_startup_cleans_stale_worktrees(tmp_path: Path, monkeypatch) -> None:
             worktree_path.rmdir()
         return True
 
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.list_worktrees", fake_list_worktrees)
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.list_worktrees", fake_list_worktrees
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
     seed_store.update_status(card.id, status="failed")
 
     import asyncio
@@ -670,7 +698,9 @@ def test_startup_cleans_stale_worktrees(tmp_path: Path, monkeypatch) -> None:
 def test_startup_keeps_active_worktrees(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
-    card, _ = RepoAutopilotStore(repo).enqueue_card(source_kind="manual_idea", title="Active", body="body")
+    card, _ = RepoAutopilotStore(repo).enqueue_card(
+        source_kind="manual_idea", title="Active", body="body"
+    )
     worktree_path = tmp_path / ".openharness" / "worktrees" / f"autopilot+{card.id}"
     worktree_path.mkdir(parents=True)
 
@@ -687,8 +717,12 @@ def test_startup_keeps_active_worktrees(tmp_path: Path, monkeypatch) -> None:
 
     remove_mock = AsyncMock(return_value=True)
 
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.list_worktrees", fake_list_worktrees)
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.remove_worktree", remove_mock)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.list_worktrees", fake_list_worktrees
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", remove_mock
+    )
     store = RepoAutopilotStore(repo)
 
     import asyncio
@@ -697,6 +731,7 @@ def test_startup_keeps_active_worktrees(tmp_path: Path, monkeypatch) -> None:
 
     assert worktree_path.exists()
     assert remove_mock.await_count == 0
+
 
 def test_autopilot_install_default_cron_creates_jobs(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
@@ -734,7 +769,9 @@ def test_autopilot_run_card_opens_pr_and_waits_for_ci(tmp_path: Path, monkeypatc
     async def fake_remove_worktree(self, slug):
         return True
 
-    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
+    async def fake_run_agent_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
         assert cwd == worktree
         return "Implemented the requested feature."
 
@@ -743,16 +780,41 @@ def test_autopilot_run_card_opens_pr_and_waits_for_ci(tmp_path: Path, monkeypatc
         return [RepoVerificationStep(command="uv run pytest -q", returncode=0, status="success")]
 
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
-        return "success", "All reported remote checks passed.", {"url": "https://example/pr/17", "labels": [], "isDraft": False}, []
+        return (
+            "success",
+            "All reported remote checks passed.",
+            {"url": "https://example/pr/17", "labels": [], "isDraft": False},
+            [],
+        )
 
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree)
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt", fake_run_agent_prompt)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_verification_steps", fake_run_verification_steps)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base", lambda self, cwd, *, base_branch, head_branch, reset: None)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._git_commit_all", lambda self, cwd, message: True)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._git_push_branch", lambda self, cwd, branch: None)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt", fake_run_agent_prompt
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        fake_run_verification_steps,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_commit_all",
+        lambda self, cwd, message: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch",
+        lambda self, cwd, branch: None,
+    )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
         lambda self, card, *, head_branch, base_branch, run_report_path, verification_report_path: {
@@ -760,9 +822,17 @@ def test_autopilot_run_card_opens_pr_and_waits_for_ci(tmp_path: Path, monkeypatc
             "url": "https://example/pr/17",
         },
     )
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._automerge_eligible", lambda self, pr_snapshot, policies: False)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._comment_on_pr", lambda self, pr_number, comment: None)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: False,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
 
     import asyncio
 
@@ -776,7 +846,9 @@ def test_autopilot_run_card_opens_pr_and_waits_for_ci(tmp_path: Path, monkeypatc
     assert updated.metadata["human_gate_pending"] is True
 
 
-def test_autopilot_run_card_repairs_after_local_verification_failure(tmp_path: Path, monkeypatch) -> None:
+def test_autopilot_run_card_repairs_after_local_verification_failure(
+    tmp_path: Path, monkeypatch
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     worktree = tmp_path / "wt"
@@ -796,19 +868,40 @@ def test_autopilot_run_card_repairs_after_local_verification_failure(tmp_path: P
     async def fake_remove_worktree(self, slug):
         return True
 
-    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
+    async def fake_run_agent_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
         return f"attempt for {cwd}"
 
     def fake_run_verification_steps(self, policies, *, cwd=None):
         verification_calls["count"] += 1
         if verification_calls["count"] == 1:
-            return [RepoVerificationStep(command="uv run pytest -q", returncode=1, status="failed", stderr="1 failed")]
+            return [
+                RepoVerificationStep(
+                    command="uv run pytest -q", returncode=1, status="failed", stderr="1 failed"
+                )
+            ]
         return [RepoVerificationStep(command="uv run pytest -q", returncode=0, status="success")]
 
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
-        return "success", "All reported remote checks passed.", {"url": "https://example/pr/23", "labels": ["autopilot:merge"], "isDraft": False}, []
+        return (
+            "success",
+            "All reported remote checks passed.",
+            {"url": "https://example/pr/23", "labels": ["autopilot:merge"], "isDraft": False},
+            [],
+        )
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=0,
@@ -818,14 +911,34 @@ def test_autopilot_run_card_repairs_after_local_verification_failure(tmp_path: P
 
     merged = {"called": False}
 
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree)
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt", fake_run_agent_prompt)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_verification_steps", fake_run_verification_steps)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base", lambda self, cwd, *, base_branch, head_branch, reset: None)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._git_commit_all", lambda self, cwd, message: True)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._git_push_branch", lambda self, cwd, branch: None)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt", fake_run_agent_prompt
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        fake_run_verification_steps,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_commit_all",
+        lambda self, cwd, message: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch",
+        lambda self, cwd, branch: None,
+    )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
         lambda self, card, *, head_branch, base_branch, run_report_path, verification_report_path: {
@@ -833,14 +946,25 @@ def test_autopilot_run_card_repairs_after_local_verification_failure(tmp_path: P
             "url": "https://example/pr/23",
         },
     )
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._automerge_eligible", lambda self, pr_snapshot, policies: True)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
         fake_remote_review,
     )
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._merge_pull_request", lambda self, pr_number: merged.__setitem__("called", True))
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._comment_on_pr", lambda self, pr_number, comment: None)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: merged.__setitem__("called", True),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
 
     import asyncio
 
@@ -870,25 +994,52 @@ def test_autopilot_run_card_reuses_existing_branch_progress(tmp_path: Path, monk
     async def fake_remove_worktree(self, slug):
         return True
 
-    async def fake_run_agent_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
+    async def fake_run_agent_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
         return "A direct git commit already exists on the branch."
 
     def fake_run_verification_steps(self, policies, *, cwd=None):
         return [RepoVerificationStep(command="uv run pytest -q", returncode=0, status="success")]
 
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
-        return "success", "All reported remote checks passed.", {"url": "https://example/pr/29", "labels": [], "isDraft": False}, []
+        return (
+            "success",
+            "All reported remote checks passed.",
+            {"url": "https://example/pr/29", "labels": [], "isDraft": False},
+            [],
+        )
 
     pushed = {"called": False}
 
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree)
-    monkeypatch.setattr("openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt", fake_run_agent_prompt)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_verification_steps", fake_run_verification_steps)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base", lambda self, cwd, *, base_branch, head_branch, reset: None)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._git_commit_all", lambda self, cwd, message: False)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._git_branch_has_progress", lambda self, cwd, *, base_branch: True)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt", fake_run_agent_prompt
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        fake_run_verification_steps,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_commit_all",
+        lambda self, cwd, message: False,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_branch_has_progress",
+        lambda self, cwd, *, base_branch: True,
+    )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._git_push_branch",
         lambda self, cwd, branch: pushed.__setitem__("called", True),
@@ -900,9 +1051,17 @@ def test_autopilot_run_card_reuses_existing_branch_progress(tmp_path: Path, monk
             "url": "https://example/pr/29",
         },
     )
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._automerge_eligible", lambda self, pr_snapshot, policies: False)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._comment_on_pr", lambda self, pr_number, comment: None)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: False,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
 
     import asyncio
 
@@ -929,9 +1088,24 @@ def test_autopilot_existing_pr_card_can_auto_merge(tmp_path: Path, monkeypatch) 
 
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         assert pr_number == 88
-        return "success", "All reported remote checks passed.", {"url": "https://example/pr/88", "labels": ["autopilot:merge"], "isDraft": False}, []
+        return (
+            "success",
+            "All reported remote checks passed.",
+            {"url": "https://example/pr/88", "labels": ["autopilot:merge"], "isDraft": False},
+            [],
+        )
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=0,
@@ -941,15 +1115,29 @@ def test_autopilot_existing_pr_card_can_auto_merge(tmp_path: Path, monkeypatch) 
 
     merged = {"called": False}
 
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._automerge_eligible", lambda self, pr_snapshot, policies: True)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
         fake_remote_review,
     )
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._merge_pull_request", lambda self, pr_number: merged.__setitem__("called", True))
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._pull_base_branch", lambda self, *, base_branch: None)
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._comment_on_pr", lambda self, pr_number, comment: None)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: merged.__setitem__("called", True),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pull_base_branch",
+        lambda self, *, base_branch: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
 
     import asyncio
 
@@ -973,7 +1161,9 @@ def test_automerge_eligible_accepts_always_mode(tmp_path: Path) -> None:
     assert eligible is True
 
 
-def test_wait_for_pr_ci_allows_repos_with_no_remote_checks_after_grace(tmp_path: Path, monkeypatch) -> None:
+def test_wait_for_pr_ci_allows_repos_with_no_remote_checks_after_grace(
+    tmp_path: Path, monkeypatch
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
@@ -995,7 +1185,15 @@ def test_wait_for_pr_ci_allows_repos_with_no_remote_checks_after_grace(tmp_path:
     state, summary, snapshot, checks = asyncio.run(
         store._wait_for_pr_ci(
             31,
-            {"autopilot": {"github": {"ci_poll_interval_seconds": 1, "ci_timeout_seconds": 30, "no_checks_grace_seconds": 5}}},
+            {
+                "autopilot": {
+                    "github": {
+                        "ci_poll_interval_seconds": 1,
+                        "ci_timeout_seconds": 30,
+                        "no_checks_grace_seconds": 5,
+                    }
+                }
+            },
         )
     )
 
@@ -1016,20 +1214,32 @@ def test_wait_for_pr_ci_waits_for_check_settle_window(tmp_path: Path, monkeypatc
         {
             "url": "https://example/pr/33",
             "statusCheckRollup": [
-                {"name": "GitGuardian Security Checks", "status": "COMPLETED", "conclusion": "SUCCESS"}
+                {
+                    "name": "GitGuardian Security Checks",
+                    "status": "COMPLETED",
+                    "conclusion": "SUCCESS",
+                }
             ],
         },
         {
             "url": "https://example/pr/33",
             "statusCheckRollup": [
-                {"name": "GitGuardian Security Checks", "status": "COMPLETED", "conclusion": "SUCCESS"},
+                {
+                    "name": "GitGuardian Security Checks",
+                    "status": "COMPLETED",
+                    "conclusion": "SUCCESS",
+                },
                 {"name": "Python tests (3.10)", "status": "IN_PROGRESS", "conclusion": ""},
             ],
         },
         {
             "url": "https://example/pr/33",
             "statusCheckRollup": [
-                {"name": "GitGuardian Security Checks", "status": "COMPLETED", "conclusion": "SUCCESS"},
+                {
+                    "name": "GitGuardian Security Checks",
+                    "status": "COMPLETED",
+                    "conclusion": "SUCCESS",
+                },
                 {"name": "Python tests (3.10)", "status": "COMPLETED", "conclusion": "SUCCESS"},
             ],
         },
@@ -1091,7 +1301,9 @@ def test_merge_pull_request_does_not_request_branch_deletion(tmp_path: Path, mon
     monkeypatch.setattr(
         store,
         "_run_gh",
-        lambda args, *, cwd=None, check=False: captured.update({"args": args, "cwd": cwd, "check": check}),
+        lambda args, *, cwd=None, check=False: captured.update(
+            {"args": args, "cwd": cwd, "check": check}
+        ),
     )
 
     store._merge_pull_request(41)
@@ -1100,7 +1312,9 @@ def test_merge_pull_request_does_not_request_branch_deletion(tmp_path: Path, mon
     assert captured["check"] is True
 
 
-def test_find_open_pr_for_branch_uses_repo_qualified_head_lookup(tmp_path: Path, monkeypatch) -> None:
+def test_find_open_pr_for_branch_uses_repo_qualified_head_lookup(
+    tmp_path: Path, monkeypatch
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
@@ -1141,7 +1355,9 @@ def test_comment_on_pr_uses_repo_qualified_command(tmp_path: Path, monkeypatch) 
     monkeypatch.setattr(
         store,
         "_run_gh",
-        lambda args, *, cwd=None, check=False: captured.update({"args": args, "cwd": cwd, "check": check}),
+        lambda args, *, cwd=None, check=False: captured.update(
+            {"args": args, "cwd": cwd, "check": check}
+        ),
     )
 
     store._comment_on_pr(12, "hello")
@@ -1191,7 +1407,9 @@ def test_best_effort_add_labels_uses_repo_qualified_edit(tmp_path: Path, monkeyp
     monkeypatch.setattr(
         store,
         "_run_gh",
-        lambda args, *, cwd=None, check=False: captured.update({"args": args, "cwd": cwd, "check": check}),
+        lambda args, *, cwd=None, check=False: captured.update(
+            {"args": args, "cwd": cwd, "check": check}
+        ),
     )
 
     store._best_effort_add_labels(12, ["autopilot", "ready"])
@@ -1250,7 +1468,9 @@ def test_create_pr_succeeds_on_first_attempt(tmp_path: Path, monkeypatch) -> Non
     ]
 
 
-def test_create_pr_retries_with_explicit_repo_on_head_resolution_error(tmp_path: Path, monkeypatch) -> None:
+def test_create_pr_retries_with_explicit_repo_on_head_resolution_error(
+    tmp_path: Path, monkeypatch
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     body_path = tmp_path / "body.md"
@@ -1261,7 +1481,9 @@ def test_create_pr_retries_with_explicit_repo_on_head_resolution_error(tmp_path:
     def fake_run_gh(args, *, cwd=None, check=False):
         calls.append(args)
         if args[:2] == ["repo", "view"]:
-            return subprocess.CompletedProcess(["gh", *args], 0, '{"nameWithOwner":"hodtien/mharness"}', "")
+            return subprocess.CompletedProcess(
+                ["gh", *args], 0, '{"nameWithOwner":"hodtien/mharness"}', ""
+            )
         if len(calls) == 1:
             return subprocess.CompletedProcess(
                 ["gh", *args],
@@ -1349,7 +1571,11 @@ def test_current_repo_full_name_prefers_origin_remote(tmp_path: Path, monkeypatc
         )
 
     monkeypatch.setattr(store, "_run_git", fake_run_git)
-    monkeypatch.setattr(store, "_gh_json", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("gh should not run")))
+    monkeypatch.setattr(
+        store,
+        "_gh_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("gh should not run")),
+    )
 
     assert store._current_repo_full_name() == "hodtien/mharness"
 
@@ -1360,14 +1586,18 @@ def test_current_repo_full_name_handles_ssh_origin_remote(tmp_path: Path, monkey
     store = RepoAutopilotStore(repo)
 
     def fake_run_git(args, *, cwd=None, check=False):
-        return subprocess.CompletedProcess(["git", *args], 0, "git@github.com:hodtien/mharness.git\n", "")
+        return subprocess.CompletedProcess(
+            ["git", *args], 0, "git@github.com:hodtien/mharness.git\n", ""
+        )
 
     monkeypatch.setattr(store, "_run_git", fake_run_git)
 
     assert store._current_repo_full_name() == "hodtien/mharness"
 
 
-def test_current_repo_full_name_falls_back_to_gh_when_origin_unavailable(tmp_path: Path, monkeypatch) -> None:
+def test_current_repo_full_name_falls_back_to_gh_when_origin_unavailable(
+    tmp_path: Path, monkeypatch
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
@@ -1376,7 +1606,9 @@ def test_current_repo_full_name_falls_back_to_gh_when_origin_unavailable(tmp_pat
         return subprocess.CompletedProcess(["git", *args], 1, "", "no origin")
 
     monkeypatch.setattr(store, "_run_git", fake_run_git)
-    monkeypatch.setattr(store, "_gh_json", lambda args, *, cwd=None: {"nameWithOwner": "fallback/repo"})
+    monkeypatch.setattr(
+        store, "_gh_json", lambda args, *, cwd=None: {"nameWithOwner": "fallback/repo"}
+    )
 
     assert store._current_repo_full_name() == "fallback/repo"
 
@@ -1444,7 +1676,9 @@ def test_remote_code_review_step_blocks_tracked_virtualenv(tmp_path: Path, monke
     repo.mkdir()
     store = RepoAutopilotStore(repo)
     store._repo_full_name = "hodtien/mharness"
-    card, _ = store.enqueue_card(source_kind="manual_idea", title="Review virtualenv", body="review")
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea", title="Review virtualenv", body="review"
+    )
     calls = {"agent": 0}
 
     monkeypatch.setattr(
@@ -1481,12 +1715,16 @@ def test_remote_code_review_step_blocks_tracked_virtualenv(tmp_path: Path, monke
     assert calls["agent"] == 0
 
 
-def test_remote_code_review_step_blocks_nested_virtualenv_artifact(tmp_path: Path, monkeypatch) -> None:
+def test_remote_code_review_step_blocks_nested_virtualenv_artifact(
+    tmp_path: Path, monkeypatch
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
     store._repo_full_name = "hodtien/mharness"
-    card, _ = store.enqueue_card(source_kind="manual_idea", title="Review virtualenv", body="review")
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea", title="Review virtualenv", body="review"
+    )
 
     monkeypatch.setattr(
         store,
@@ -1514,12 +1752,16 @@ def test_remote_code_review_step_blocks_nested_virtualenv_artifact(tmp_path: Pat
     assert step.stderr == "severity=critical"
 
 
-def test_remote_code_review_prompt_requires_requirement_completeness(tmp_path: Path, monkeypatch) -> None:
+def test_remote_code_review_prompt_requires_requirement_completeness(
+    tmp_path: Path, monkeypatch
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
     store._repo_full_name = "hodtien/mharness"
-    card, _ = store.enqueue_card(source_kind="manual_idea", title="Configurable max_parallel_runs policy", body="review")
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea", title="Configurable max_parallel_runs policy", body="review"
+    )
 
     monkeypatch.setattr(
         store,
@@ -1532,7 +1774,20 @@ def test_remote_code_review_prompt_requires_requirement_completeness(tmp_path: P
         ),
     )
 
-    async def fake_run_agent_prompt(prompt, *, model, max_turns, permission_mode, cwd=None, stream=None, checkpoint_card_id=None, checkpoint_phase=None, checkpoint_attempt=1, resume_messages=None, phase=None):
+    async def fake_run_agent_prompt(
+        prompt,
+        *,
+        model,
+        max_turns,
+        permission_mode,
+        cwd=None,
+        stream=None,
+        checkpoint_card_id=None,
+        checkpoint_phase=None,
+        checkpoint_attempt=1,
+        resume_messages=None,
+        phase=None,
+    ):
         assert "satisfies the task requirement" in prompt
         assert "missing behavior for named configuration options" in prompt
         return "Severity: NONE"
@@ -1571,7 +1826,20 @@ def test_remote_code_review_step_blocks_on_critical(tmp_path: Path, monkeypatch)
         ),
     )
 
-    async def fake_run_agent_prompt(prompt, *, model, max_turns, permission_mode, cwd=None, stream=None, checkpoint_card_id=None, checkpoint_phase=None, checkpoint_attempt=1, resume_messages=None, phase=None):
+    async def fake_run_agent_prompt(
+        prompt,
+        *,
+        model,
+        max_turns,
+        permission_mode,
+        cwd=None,
+        stream=None,
+        checkpoint_card_id=None,
+        checkpoint_phase=None,
+        checkpoint_attempt=1,
+        resume_messages=None,
+        phase=None,
+    ):
         assert "Review GitHub PR #12" in prompt
         return "Severity: CRITICAL\nFindings:\n  - a.py:1 bug broken\nSummary: blocked"
 
@@ -1608,7 +1876,17 @@ def test_remote_code_review_blocks_merge_and_sets_human_gate(tmp_path: Path, mon
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=1,
@@ -1665,7 +1943,17 @@ def test_remote_code_review_error_routes_to_human_gate(tmp_path: Path, monkeypat
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=2,
@@ -1707,7 +1995,9 @@ def test_remote_code_review_error_routes_to_human_gate(tmp_path: Path, monkeypat
     assert updated.metadata["remote_review_status"] == "error"
 
 
-def test_existing_pr_remote_code_review_failure_repairs_when_attempts_remain(tmp_path: Path, monkeypatch) -> None:
+def test_existing_pr_remote_code_review_failure_repairs_when_attempts_remain(
+    tmp_path: Path, monkeypatch
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
@@ -1721,7 +2011,17 @@ def test_existing_pr_remote_code_review_failure_repairs_when_attempts_remain(tmp
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=1,
@@ -1775,7 +2075,17 @@ def test_pull_base_branch_called_after_merge(tmp_path: Path, monkeypatch) -> Non
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=0,
@@ -1837,7 +2147,17 @@ def test_pull_base_branch_failure_is_non_fatal(tmp_path: Path, monkeypatch) -> N
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=0,
@@ -1866,7 +2186,9 @@ def test_pull_base_branch_failure_is_non_fatal(tmp_path: Path, monkeypatch) -> N
         "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
         lambda self, pr_number: None,
     )
-    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._pull_base_branch", fail_pull)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pull_base_branch", fail_pull
+    )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._install_editable",
         lambda self: installed.__setitem__("called", True),
@@ -1879,7 +2201,9 @@ def test_pull_base_branch_failure_is_non_fatal(tmp_path: Path, monkeypatch) -> N
     import asyncio
 
     result = asyncio.run(store.run_card(card.id))
-    journal = (repo / ".openharness" / "autopilot" / "repo_journal.jsonl").read_text(encoding="utf-8")
+    journal = (repo / ".openharness" / "autopilot" / "repo_journal.jsonl").read_text(
+        encoding="utf-8"
+    )
 
     assert result.status == "merged"
     assert "merge_warning" in journal
@@ -1901,7 +2225,17 @@ def test_install_editable_failure_is_non_fatal(tmp_path: Path, monkeypatch) -> N
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=0,
@@ -1941,7 +2275,9 @@ def test_install_editable_failure_is_non_fatal(tmp_path: Path, monkeypatch) -> N
     import asyncio
 
     result = asyncio.run(store.run_card(card.id))
-    journal = (repo / ".openharness" / "autopilot" / "repo_journal.jsonl").read_text(encoding="utf-8")
+    journal = (repo / ".openharness" / "autopilot" / "repo_journal.jsonl").read_text(
+        encoding="utf-8"
+    )
 
     assert result.status == "merged"
     assert "merge_warning" in journal
@@ -1982,6 +2318,133 @@ def test_pull_base_branch_fetch_and_ff_only(tmp_path: Path, monkeypatch) -> None
         (["fetch", "origin", "main"], repo, True),
         (["pull", "--ff-only", "origin", "main"], repo, True),
     ]
+
+
+def test_default_rebase_strategy_is_on_conflict() -> None:
+    assert _DEFAULT_AUTOPILOT_POLICY["execution"]["rebase_strategy"] == "on_conflict"
+
+
+def test_rebase_none_skips_rebase(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    calls = []
+
+    def fake_run_git(args, *, cwd=None, check=False):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout="0", stderr="")
+
+    monkeypatch.setattr(store, "_run_git", fake_run_git)
+    store._sync_worktree_to_base(
+        repo,
+        base_branch="main",
+        head_branch="autopilot/card",
+        reset=False,
+        rebase_strategy="none",
+        card_id="card",
+    )
+
+    assert ["rebase", "origin/main"] not in calls
+    assert calls == [["fetch", "origin", "main"], ["checkout", "autopilot/card"]]
+
+
+def test_rebase_on_advance_rebases_when_base_ahead(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    calls = []
+
+    def fake_run_git(args, *, cwd=None, check=False):
+        calls.append(args)
+        stdout = "1" if args[:2] == ["rev-list", "--count"] else ""
+        return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(store, "_run_git", fake_run_git)
+    store._sync_worktree_to_base(
+        repo,
+        base_branch="main",
+        head_branch="autopilot/card",
+        reset=False,
+        rebase_strategy="on_advance",
+        card_id="card",
+    )
+
+    assert ["rebase", "origin/main"] in calls
+
+
+def test_rebase_conflict_aborts_cleanly_and_journals(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    calls = []
+
+    def fake_run_git(args, *, cwd=None, check=False):
+        calls.append(args)
+        if args == ["rebase", "origin/main"]:
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="conflict")
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(store, "_run_git", fake_run_git)
+
+    assert store._rebase_head_onto_base(repo, base_branch="main", card_id="card") is False
+
+    entries = store.load_journal(limit=5)
+    assert ["rebase", "--abort"] in calls
+    assert entries[-1].kind == "rebase_conflict"
+    assert entries[-1].metadata["non_fatal"] is True
+
+
+def test_rebase_inflight_worktrees_strategy_none_skips_active_cards(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    active_wt = tmp_path / "active-wt"
+    active_wt.mkdir()
+    store = RepoAutopilotStore(repo)
+    _, _ = store.enqueue_card(source_kind="manual_idea", title="Merged", body="done")
+    active, _ = store.enqueue_card(source_kind="manual_idea", title="Active", body="work")
+    store.update_status(
+        active.id, status="running", metadata_updates={"worktree_path": str(active_wt)}
+    )
+    calls = []
+
+    def fake_run_git(args, *, cwd=None, check=False):
+        calls.append((args, cwd))
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(store, "_run_git", fake_run_git)
+
+    store.rebase_inflight_worktrees(base_branch="main", rebase_strategy="none")
+
+    assert calls == []
+
+
+def test_rebase_inflight_worktrees_updates_active_cards(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    active_wt = tmp_path / "active-wt"
+    active_wt.mkdir()
+    store = RepoAutopilotStore(repo)
+    merged, _ = store.enqueue_card(source_kind="manual_idea", title="Merged", body="done")
+    active, _ = store.enqueue_card(source_kind="manual_idea", title="Active", body="work")
+    store.update_status(
+        active.id, status="running", metadata_updates={"worktree_path": str(active_wt)}
+    )
+    calls = []
+
+    def fake_run_git(args, *, cwd=None, check=False):
+        calls.append((args, cwd))
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(store, "_run_git", fake_run_git)
+
+    store.rebase_inflight_worktrees(base_branch="main", merged_card_id=merged.id)
+
+    entries = store.load_journal(limit=10)
+    assert (["fetch", "origin", "main"], active_wt) in calls
+    assert (["rebase", "origin/main"], active_wt) in calls
+    assert any(entry.kind == "rebase_done" and entry.task_id == active.id for entry in entries)
 
 
 def test_install_editable_runs_uv_pip_install(tmp_path: Path, monkeypatch) -> None:
@@ -2028,7 +2491,17 @@ def _run_card_with_locked_pull(
     async def fake_wait_for_pr_ci(self, pr_number, policies):
         return _green_pr_snapshot(pr_number)
 
-    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
         return RepoVerificationStep(
             command="agent:code-reviewer",
             returncode=0,
@@ -2133,7 +2606,9 @@ def test_pull_base_branch_acquires_lock(tmp_path: Path, monkeypatch) -> None:
     # both pull and install must have happened, and there must be 2 enter/exit pairs.
     enters = [e for e in main_events if e[0] == "enter"]
     exits = [e for e in main_events if e[0] == "exit"]
-    assert len(enters) == 2, f"Expected 2 lock enters (one for pull, one for install), got {len(enters)}"
+    assert len(enters) == 2, (
+        f"Expected 2 lock enters (one for pull, one for install), got {len(enters)}"
+    )
     assert len(exits) == 2, f"Expected 2 lock exits, got {len(exits)}"
     assert action_events == ["pull", "install"], f"Expected pull then install, got {action_events}"
 
@@ -2188,7 +2663,9 @@ def test_pull_base_branch_releases_lock_on_error(tmp_path: Path, monkeypatch) ->
         install_impl=fake_install,
     )
 
-    journal = (repo / ".openharness" / "autopilot" / "repo_journal.jsonl").read_text(encoding="utf-8")
+    journal = (repo / ".openharness" / "autopilot" / "repo_journal.jsonl").read_text(
+        encoding="utf-8"
+    )
 
     assert result.status == "merged"
     assert "post-merge pull failed" in journal
@@ -2284,17 +2761,18 @@ def test_card_model_none_falls_back_to_policy(tmp_path: Path) -> None:
 
     # Override policy with a custom default_model
     from openharness.config.paths import get_project_autopilot_policy_path
+
     policy_path = get_project_autopilot_policy_path(repo)
     policy_path.parent.mkdir(parents=True, exist_ok=True)
     policy_path.write_text(
-        'execution:\n'
+        "execution:\n"
         '  default_model: "oc-default-model"\n'
-        '  max_turns: 12\n'
-        '  permission_mode: full_auto\n'
-        '  host_mode: self_hosted\n'
-        '  use_worktree: false\n'
-        '  base_branch: main\n'
-        '  max_attempts: 3\n',
+        "  max_turns: 12\n"
+        "  permission_mode: full_auto\n"
+        "  host_mode: self_hosted\n"
+        "  use_worktree: false\n"
+        "  base_branch: main\n"
+        "  max_attempts: 3\n",
         encoding="utf-8",
     )
 
@@ -2310,7 +2788,9 @@ def test_card_model_none_falls_back_to_policy(tmp_path: Path) -> None:
     # We mock run_agent_prompt to capture the model argument
     used_models = []
 
-    async def capture_model_prompt(self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs):
+    async def capture_model_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
         used_models.append(model)
         return "done"
 
@@ -2366,13 +2846,13 @@ def test_registry_backward_compat_model_field(tmp_path: Path) -> None:
     registry_path = get_project_autopilot_registry_path(repo)
     registry_path.write_text(
         '{"version":1,"updated_at":0.0,"cards":[\n'
-        '  {\n'
+        "  {\n"
         '    "id":"ap-oldcard1",\n'
         '    "fingerprint":"f1","title":"Old card","body":"",\n'
         '    "source_kind":"manual_idea","source_ref":"","status":"queued",\n'
         '    "score":0,"score_reasons":[],"labels":[],"metadata":{},\n'
         '    "created_at":1000.0,"updated_at":1000.0\n'
-        '  }\n'
+        "  }\n"
         "]}",
         encoding="utf-8",
     )
@@ -2406,7 +2886,9 @@ def test_card_model_precedes_policy_agent_model(tmp_path: Path, monkeypatch) -> 
     )
     used_models: list[str | None] = []
 
-    async def fake_run_agent_prompt(self, prompt, *, model, max_turns, permission_mode, cwd=None, **kwargs):
+    async def fake_run_agent_prompt(
+        self, prompt, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
         used_models.append(model)
         return "Implemented the change and ran targeted checks."
 

@@ -1,13 +1,20 @@
 import type { BackendEvent, FrontendRequest } from "./types";
 
 const TOKEN_STORAGE_KEY = "oh_token";
+const TOKEN_COOKIE_NAME = "oh_token";
+
+function persistToken(token: string): void {
+  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${TOKEN_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; SameSite=Strict${secure}`;
+}
 
 export function getToken(): string {
   // 1. ?token=... in URL takes priority (one-time bootstrap from terminal).
   const params = new URLSearchParams(window.location.search);
   const fromUrl = params.get("token");
   if (fromUrl) {
-    localStorage.setItem(TOKEN_STORAGE_KEY, fromUrl);
+    persistToken(fromUrl);
     // Clean URL so the token isn't visible / leaked in history.
     params.delete("token");
     const cleaned = `${window.location.pathname}${
@@ -20,11 +27,12 @@ export function getToken(): string {
 }
 
 export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  persistToken(token);
 }
 
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
+  document.cookie = `${TOKEN_COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Strict`;
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -233,9 +241,9 @@ export function openWebSocket(
   onEvent: (evt: BackendEvent) => void,
   onStatus: (status: "connecting" | "open" | "closed", detail?: string) => void,
 ): WsHandle {
-  const token = getToken();
+  getToken();
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
-  const url = `${proto}://${window.location.host}/api/ws/${sessionId}?token=${encodeURIComponent(token)}`;
+  const url = `${proto}://${window.location.host}/api/ws/${sessionId}`;
   let ws: WebSocket = new WebSocket(url);
   let currentState: "connecting" | "open" | "closed" = "connecting";
   let manuallyClosed = false;

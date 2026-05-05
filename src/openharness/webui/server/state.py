@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fastapi import Depends, Header, HTTPException, Query, Request, status
+from fastapi import Cookie, Depends, Header, HTTPException, Query, Request, status
 
 if TYPE_CHECKING:  # pragma: no cover - type-only imports
     from openharness.bridge.manager import BridgeSessionManager
@@ -53,23 +53,34 @@ def require_token(
     authorization: str | None = Header(default=None),
     token_query: str | None = Query(default=None, alias="token"),
 ) -> None:
-    """Validate the bearer token in ``Authorization`` header or ``token`` query.
+    """Validate the bearer token in ``Authorization`` header or ``token`` query."""
 
-    The Web UI passes the token in either the ``Authorization: Bearer …``
-    header (browser fetches) or in the ``?token=`` query string (initial page
-    load and WebSocket handshake). Constant-time comparison avoids leaking the
-    token via timing.
-    """
+    candidate = _bearer_candidate(authorization) or token_query
+    _require_matching_token(candidate, state.token)
 
-    candidate: str | None = None
-    if authorization:
-        prefix = "Bearer "
-        if authorization.startswith(prefix):
-            candidate = authorization[len(prefix):].strip() or None
-    if candidate is None:
-        candidate = token_query
 
-    if candidate is None or not secrets.compare_digest(candidate, state.token):
+def require_stream_token(
+    state: WebUIState = Depends(get_state),
+    authorization: str | None = Header(default=None),
+    token_cookie: str | None = Cookie(default=None, alias="oh_token"),
+) -> None:
+    """Validate stream auth without accepting bearer tokens in the URL."""
+
+    candidate = _bearer_candidate(authorization) or token_cookie
+    _require_matching_token(candidate, state.token)
+
+
+def _bearer_candidate(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    prefix = "Bearer "
+    if authorization.startswith(prefix):
+        return authorization[len(prefix):].strip() or None
+    return None
+
+
+def _require_matching_token(candidate: str | None, token: str) -> None:
+    if candidate is None or not secrets.compare_digest(candidate, token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing token",

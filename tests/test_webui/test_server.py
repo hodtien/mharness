@@ -56,6 +56,21 @@ def test_meta_accepts_query_token():
         assert r.status_code == 200
 
 
+def test_meta_rejects_cookie_token():
+    app = create_app(token="secret")
+    with TestClient(app) as client:
+        client.cookies.set("oh_token", "secret")
+        r = client.get("/api/meta")
+        assert r.status_code == 401
+
+
+def test_stream_accepts_cookie_token(tmp_path):
+    app = create_app(token="secret", cwd=tmp_path)
+    with TestClient(app) as client:
+        with client.stream("GET", "/api/pipeline/cards/card-1/stream", headers={"Cookie": "oh_token=secret"}) as r:
+            assert r.status_code == 200
+
+
 def test_meta_rejects_wrong_token():
     app = create_app(token="secret")
     with TestClient(app) as client:
@@ -71,6 +86,22 @@ def test_list_sessions_requires_token():
         r = client.get("/api/sessions", headers={"Authorization": "Bearer secret"})
         assert r.status_code == 200
         assert "sessions" in r.json()
+
+
+def test_websocket_rejects_query_token():
+    app = create_app(token="secret")
+    with TestClient(app) as client:
+        with pytest.raises(Exception):
+            with client.websocket_connect("/api/ws/missing?token=secret"):
+                pass
+
+
+def test_websocket_accepts_cookie_token_for_auth():
+    app = create_app(token="secret")
+    with TestClient(app) as client:
+        with pytest.raises(Exception):
+            with client.websocket_connect("/api/ws/missing", headers={"Cookie": "oh_token=secret"}):
+                pass
 
 
 @pytest.mark.asyncio

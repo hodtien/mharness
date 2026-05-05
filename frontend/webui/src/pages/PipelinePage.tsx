@@ -1,8 +1,12 @@
-import React, { useEffect, useState, useCallback, useRef, type ChangeEvent, type FormEvent } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkBreaks from "remark-breaks";
-import remarkGfm from "remark-gfm";
+import React, { useEffect, useState, useCallback, useMemo, useRef, type ChangeEvent, type FormEvent } from "react";
 import { api, apiFetch, getToken } from "../api/client";
+import {
+  LOG_FILTERS,
+  type LogFilter,
+  type LogPhaseGroup,
+  type LogStep,
+  type StreamEvent,
+} from "./PipelineLogModel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -450,170 +454,6 @@ function TruncatedText({ text }: { text: string }) {
   );
 }
 
-// ─── Markdown helper ──────────────────────────────────────────────────────────
-
-function MarkdownText({ content }: { content: string }) {
-  return (
-    <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
-      {content}
-    </ReactMarkdown>
-  );
-}
-
-// ─── Review Tab ────────────────────────────────────────────────────────────────
-
-interface ReviewTabProps {
-  cardId: string;
-  isActive: boolean;
-  cardStatus: string;
-}
-
-interface ReviewData {
-  task_id: string;
-  status: string;
-  markdown: string;
-  created_at: number;
-}
-
-function ReviewTab({ cardId, isActive, cardStatus }: ReviewTabProps) {
-  const isMerged = cardStatus === "merged";
-  const [reviewState, setReviewState] = useState<
-    "loading" | "not_found" | "running" | "done"
-  >("loading");
-  const [review, setReview] = useState<ReviewData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [rerunning, setRerunning] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const fetchReview = useCallback(async () => {
-    try {
-      const data = await apiFetch<ReviewData>(`/api/review/${encodeURIComponent(cardId)}`);
-      setReview(data);
-      setReviewState("done");
-    } catch (err) {
-      // 404 means no review yet; treat any 4xx as not_found
-      const msg = String(err);
-      if (msg.includes("404")) {
-        setReviewState("not_found");
-      } else {
-        setError(msg);
-        setReviewState("not_found");
-      }
-    }
-  }, [cardId]);
-
-  const startRerun = useCallback(async () => {
-    setRerunning(true);
-    setReviewState("running");
-    setError(null);
-    try {
-      await apiFetch<{ ok: boolean; message: string }>(
-        `/api/review/${encodeURIComponent(cardId)}/rerun`,
-        { method: "POST" },
-      );
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setRerunning(false);
-    }
-  }, [cardId]);
-
-  // Reset when tab becomes active
-  useEffect(() => {
-    if (isActive) {
-      setReviewState("loading");
-      setReview(null);
-      setError(null);
-      fetchReview();
-    }
-  }, [isActive, fetchReview]);
-
-  // Poll every 3 s while in running state
-  useEffect(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (reviewState === "running") {
-      timerRef.current = setInterval(fetchReview, 3000);
-    }
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [reviewState, fetchReview]);
-
-  if (reviewState === "loading") {
-    return (
-      <div className="flex items-center justify-center p-6">
-        <span className="text-sm text-[var(--text-dim)]">Loading review…</span>
-      </div>
-    );
-  }
-
-  if (reviewState === "running") {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 p-6">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
-        <span className="text-sm text-[var(--text-dim)]">Reviewing…</span>
-      </div>
-    );
-  }
-
-  if (reviewState === "not_found") {
-    return (
-      <div className="flex flex-col items-center gap-4 p-6 text-center">
-        <p className="text-sm text-[var(--text-dim)]">
-          {isMerged
-            ? "No local review file. This card was merged after passing the autopilot remote review gate."
-            : "No review yet for this task."}
-        </p>
-        {error && (
-          <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
-            {error}
-          </p>
-        )}
-        {!isMerged && (
-          <button
-            onClick={startRerun}
-            disabled={rerunning}
-            className="rounded-lg border border-[var(--accent)]/40 bg-[var(--accent)]/20 px-5 py-2 text-sm font-medium text-[var(--accent)] transition hover:bg-[var(--accent)]/30 disabled:opacity-40"
-          >
-            {rerunning ? "Starting…" : "Run Review"}
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  // done
-  return (
-    <div className="flex flex-col">
-      <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2">
-        <span className="text-[10px] uppercase tracking-wider text-[var(--text-dim)]">
-          Review · {review ? relativeAge(review.created_at) : ""}
-        </span>
-        {!isMerged && (
-          <button
-            onClick={startRerun}
-            disabled={rerunning}
-            className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1 text-xs text-[var(--text-dim)] transition hover:border-[var(--accent)]/40 hover:text-[var(--text)] disabled:opacity-40"
-          >
-            {rerunning ? "Starting…" : "Re-run Review"}
-          </button>
-        )}
-      </div>
-      <div className="overflow-y-auto p-4">
-        <div className="prose prose-invert max-w-none text-sm text-[var(--text)]">
-          <MarkdownText content={review?.markdown ?? ""} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Activity Tab ──────────────────────────────────────────────────────────────
 
 export type ActivityFilter = "all" | "failures" | "ci" | "agent" | "git";
@@ -760,12 +600,6 @@ interface LogsTabProps {
   isActive: boolean;
 }
 
-interface StreamEvent {
-  ts: number;
-  kind: string;
-  payload: Record<string, unknown>;
-}
-
 const _SSE_BACKOFF_INITIAL_MS = 1_000;
 const _SSE_BACKOFF_MAX_MS = 30_000;
 const _SSE_MAX_RETRIES = 6;
@@ -774,6 +608,9 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [streamState, setStreamState] = useState<"connecting" | "open" | "closed">("connecting");
   const [error, setError] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<LogFilter>("all");
+  const [query, setQuery] = useState("");
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef<boolean>(true);
@@ -793,10 +630,9 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
 
     function connect() {
       if (cancelled) return;
-      const token = getToken();
+      getToken();
       const after = seenCountRef.current;
-      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
-      const url = `/api/pipeline/cards/${encodeURIComponent(cardId)}/stream?after=${after}${tokenParam}`;
+      const url = `/api/pipeline/cards/${encodeURIComponent(cardId)}/stream?after=${after}`;
       const es = new EventSource(url);
       sourceRef.current = es;
 
@@ -821,12 +657,13 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
       };
 
       es.onmessage = (ev) => {
+        const index = seenCountRef.current;
+        seenCountRef.current += 1;
         try {
           const data = JSON.parse(ev.data) as StreamEvent;
-          setEvents((prev) => [...prev, data]);
-          seenCountRef.current += 1;
+          setEvents((prev) => [...prev, { ...data, index }]);
         } catch {
-          // ignore malformed lines
+          setError("Received malformed stream event.");
         }
       };
     }
@@ -864,100 +701,490 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
   ) : (
     <span className="text-[var(--text-dim)]">○ ended</span>
   );
+  const phases = useMemo(() => eventsToLogPhaseGroups(events), [events]);
+  const normalizedQuery = query.trim().toLowerCase();
+  const visiblePhases = useMemo(
+    () => filterLogPhaseGroups(phases, activeFilter, normalizedQuery),
+    [activeFilter, normalizedQuery, phases],
+  );
+  const visibleStepCount = visiblePhases.reduce((total, phase) => total + phase.steps.length, 0);
+  const selectedStep = getSelectedLogStep(visiblePhases, selectedStepId);
+
+  useEffect(() => {
+    if (!selectedStep && visibleStepCount > 0) {
+      setSelectedStepId(visiblePhases[0]?.steps[0]?.id ?? null);
+    }
+  }, [selectedStep, visiblePhases, visibleStepCount]);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2 text-[11px]">
-        <div className="font-mono uppercase tracking-wider text-[var(--text-dim)]">Stream</div>
-        <div className="font-mono">{badge}</div>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="space-y-3 border-b border-[var(--border)] px-4 py-3 text-[11px]">
+        <div className="flex items-center justify-between">
+          <div className="font-mono uppercase tracking-wider text-[var(--text-dim)]">Stream</div>
+          <div className="font-mono">{badge}</div>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label className="sr-only" htmlFor="task-log-search">Search logs</label>
+          <input
+            id="task-log-search"
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search logs"
+            className="min-h-9 flex-1 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text)] focus:border-[var(--accent)]/60 focus:outline-none"
+          />
+          <div className="flex flex-wrap gap-1.5" aria-label="Filter log segments">
+            {LOG_FILTERS.map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveFilter(id)}
+                aria-pressed={activeFilter === id}
+                className={`min-h-9 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                  activeFilter === id
+                    ? "border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]"
+                    : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)] hover:text-[var(--text)]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="sr-only" aria-live="polite">{visibleStepCount} log steps shown</div>
       </div>
       {error && (
         <div className="px-4 py-2 text-xs text-red-300">{error}</div>
       )}
-      <div
-        ref={scrollerRef}
-        onScroll={onScroll}
-        className="flex-1 overflow-auto px-4 py-2 font-mono text-[11px] leading-snug"
-      >
-        {events.length === 0 ? (
-          <div className="text-[var(--text-dim)]">
-            {streamState === "open" ? "Waiting for activity…" : "No events yet."}
-          </div>
-        ) : (
-          events.map((ev, idx) => <LogLine key={idx} event={ev} />)
-        )}
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+        <div
+          ref={scrollerRef}
+          onScroll={onScroll}
+          className="min-h-0 overflow-y-auto overscroll-contain border-b border-[var(--border)] px-4 pb-24 pt-3 font-mono text-[11px] leading-snug lg:border-b-0 lg:border-r"
+        >
+          {events.length === 0 ? (
+            <div className="text-[var(--text-dim)]">
+              {streamState === "open" ? "Waiting for activity…" : "No events yet."}
+            </div>
+          ) : visibleStepCount === 0 ? (
+            <div className="text-[var(--text-dim)]">No log steps match this filter.</div>
+          ) : (
+            <LogPhaseAccordion
+              phases={visiblePhases}
+              selectedStepId={selectedStep?.id ?? null}
+              onSelectStep={setSelectedStepId}
+            />
+          )}
+        </div>
+        <LogDetailInspector step={selectedStep} />
       </div>
     </div>
   );
 }
 
-function LogLine({ event }: { event: StreamEvent }) {
-  const { kind, payload } = event;
-  const phase = typeof payload?.phase === "string" ? (payload.phase as string) : null;
+function eventsToLogPhaseGroups(events: StreamEvent[]): LogPhaseGroup[] {
+  const steps: LogStep[] = [];
+  const pendingTools = new Map<string, LogStep[]>();
+  let textBuffer: { event: StreamEvent; index: number; text: string; phase: string } | null = null;
 
+  const flushText = () => {
+    if (!textBuffer) return;
+    steps.push(createLogStep({
+      id: `${textBuffer.index}-agent-${textBuffer.phase}`,
+      type: "agent",
+      phase: textBuffer.phase,
+      title: `Agent · ${textBuffer.phase}`,
+      summary: summarizeText(textBuffer.text) || "Agent output",
+      timestamp: textBuffer.event.ts,
+      isError: false,
+      details: [{ label: "Output", value: textBuffer.text }],
+      rawEvents: [textBuffer.event],
+    }));
+    textBuffer = null;
+  };
+
+  for (const [position, event] of events.entries()) {
+    const index = event.index ?? position;
+    const phase = getEventPhase(event);
+    if (event.kind === "text_delta") {
+      const text = String(event.payload?.text ?? "");
+      if (textBuffer && textBuffer.phase === phase) {
+        textBuffer.text += text;
+      } else {
+        flushText();
+        textBuffer = { event, index, text, phase };
+      }
+      continue;
+    }
+
+    flushText();
+
+    if (event.kind === "tool_call") {
+      const step = toolCallToStep(event, phase, index);
+      const key = getToolKey(event, phase);
+      if (key) pendingTools.set(key, [...(pendingTools.get(key) ?? []), step]);
+      steps.push(step);
+      continue;
+    }
+
+    if (event.kind === "tool_result") {
+      const key = getToolKey(event, phase);
+      const pendingQueue = key ? (pendingTools.get(key) ?? []) : [];
+      const pending = pendingQueue[0];
+      if (key && pending) {
+        const stepIndex = steps.findIndex((step) => step.id === pending.id);
+        const pairedStep = pairToolResult(pending, event);
+        if (stepIndex >= 0) steps[stepIndex] = pairedStep;
+        const nextQueue = pendingQueue.slice(1);
+        if (nextQueue.length > 0) {
+          pendingTools.set(key, nextQueue);
+        } else {
+          pendingTools.delete(key);
+        }
+      } else {
+        steps.push(toolResultToStep(event, phase, index));
+      }
+      continue;
+    }
+
+    steps.push(eventToLogStep(event, phase, index));
+  }
+
+  flushText();
+  return groupLogStepsByPhase(steps);
+}
+
+function filterLogPhaseGroups(phases: LogPhaseGroup[], activeFilter: LogFilter, normalizedQuery: string): LogPhaseGroup[] {
+  return phases
+    .map((phase) => {
+      const steps = phase.steps.filter((step) => {
+        const matchesFilter =
+          activeFilter === "all" ||
+          (activeFilter === "agent" && step.type === "agent") ||
+          (activeFilter === "tools" && step.type === "tool") ||
+          (activeFilter === "phases" && step.type === "phase") ||
+          (activeFilter === "errors" && step.isError);
+        return matchesFilter && (!normalizedQuery || step.searchText.includes(normalizedQuery));
+      });
+      return { ...phase, steps };
+    })
+    .filter((phase) => phase.steps.length > 0 || (activeFilter === "errors" && phase.hasErrors));
+}
+
+function getSelectedLogStep(phases: LogPhaseGroup[], selectedStepId: string | null): LogStep | null {
+  const steps = phases.flatMap((phase) => phase.steps);
+  return steps.find((step) => step.id === selectedStepId) ?? steps[0] ?? null;
+}
+
+function createLogStep(input: Omit<LogStep, "searchText">): LogStep {
+  const raw = input.rawEvents.map((event) => `${event.kind}\n${JSON.stringify(event.payload, null, 2)}`).join("\n\n");
+  const detailText = input.details.map((detail) => detail.value).join("\n");
+  return {
+    ...input,
+    searchText: `${input.phase} ${input.title} ${input.summary} ${detailText} ${raw}`.toLowerCase(),
+  };
+}
+
+function eventToLogStep(event: StreamEvent, phase: string, index: number): LogStep {
+  const { kind, payload } = event;
+  const rawPayload = JSON.stringify(payload, null, 2);
   if (kind === "phase_start") {
     const attempt = typeof payload?.attempt === "number" ? ` · attempt ${payload.attempt}` : "";
-    return (
-      <div className="mt-2 border-t border-[var(--border)] pt-1 text-[var(--accent)]">
-        ▶ {String(payload?.phase ?? "phase")}{attempt}
-      </div>
-    );
+    return createLogStep({
+      id: getEventId(event, index),
+      type: "phase",
+      phase,
+      title: `${String(payload?.phase ?? "phase")}${attempt}`,
+      summary: "Phase started",
+      timestamp: event.ts,
+      isError: false,
+      details: [{ label: "Payload", value: rawPayload }],
+      rawEvents: [event],
+    });
   }
   if (kind === "phase_end") {
-    const ok = payload?.ok === false ? "✗" : "✓";
-    return (
-      <div className="text-[var(--text-dim)]">
-        {ok} {String(payload?.phase ?? "phase")} ended
-      </div>
-    );
-  }
-  if (kind === "text_delta") {
-    return (
-      <span className="whitespace-pre-wrap text-[var(--text)]">
-        {String(payload?.text ?? "")}
-      </span>
-    );
-  }
-  if (kind === "tool_call") {
-    return (
-      <div className="text-sky-300">
-        ⚙ {String(payload?.name ?? "tool")}
-        {payload?.input_summary ? (
-          <span className="text-[var(--text-dim)]"> {String(payload.input_summary)}</span>
-        ) : null}
-      </div>
-    );
-  }
-  if (kind === "tool_result") {
-    const isError = payload?.is_error === true;
-    return (
-      <div className={isError ? "text-red-300" : "text-emerald-300"}>
-        {isError ? "✗" : "→"} {String(payload?.name ?? "tool")}
-        {payload?.summary ? (
-          <span className="text-[var(--text-dim)]"> {String(payload.summary)}</span>
-        ) : null}
-      </div>
-    );
+    const ok = payload?.ok !== false;
+    return createLogStep({
+      id: getEventId(event, index),
+      type: "phase",
+      phase,
+      title: `${String(payload?.phase ?? "phase")} ended`,
+      summary: ok ? "Phase completed" : "Phase failed",
+      timestamp: event.ts,
+      isError: !ok,
+      details: [{ label: "Payload", value: rawPayload }],
+      rawEvents: [event],
+    });
   }
   if (kind === "error") {
-    return (
-      <div className="text-red-300">
-        ✗ error: {String(payload?.message ?? "")}
-      </div>
-    );
+    return createLogStep({
+      id: getEventId(event, index),
+      type: "error",
+      phase,
+      title: "Error",
+      summary: String(payload?.message ?? "Unknown error"),
+      timestamp: event.ts,
+      isError: true,
+      details: [{ label: "Payload", value: rawPayload }],
+      rawEvents: [event],
+    });
   }
-  if (kind === "checkpoint_saved") {
-    return (
-      <div className="text-violet-300">
-        ⛯ checkpoint: {String(payload?.phase ?? "")}
-      </div>
-    );
+  if (kind === "checkpoint_saved" || kind === "resume_started") {
+    return createLogStep({
+      id: getEventId(event, index),
+      type: "checkpoint",
+      phase,
+      title: kind === "checkpoint_saved" ? "Checkpoint saved" : "Resume started",
+      summary: `Phase: ${phase}`,
+      timestamp: event.ts,
+      isError: false,
+      details: [{ label: "Payload", value: rawPayload }],
+      rawEvents: [event],
+    });
   }
+  return createLogStep({
+    id: getEventId(event, index),
+    type: "event",
+    phase,
+    title: kind,
+    summary: `Phase: ${phase}`,
+    timestamp: event.ts,
+    isError: false,
+    details: [{ label: "Payload", value: rawPayload }],
+    rawEvents: [event],
+  });
+}
+
+function toolCallToStep(event: StreamEvent, phase: string, index: number): LogStep {
+  const name = String(event.payload?.name ?? "tool");
+  const input = JSON.stringify(event.payload, null, 2);
+  return createLogStep({
+    id: `${getEventId(event, index)}-tool`,
+    type: "tool",
+    phase,
+    title: `Tool · ${name}`,
+    summary: String(event.payload?.input_summary ?? "Tool called"),
+    timestamp: event.ts,
+    isError: false,
+    details: [{ label: "Input", value: input }],
+    rawEvents: [event],
+  });
+}
+
+function toolResultToStep(event: StreamEvent, phase: string, index: number): LogStep {
+  const name = String(event.payload?.name ?? "tool");
+  const output = JSON.stringify(event.payload, null, 2);
+  const isError = event.payload?.is_error === true;
+  return createLogStep({
+    id: `${getEventId(event, index)}-tool-result`,
+    type: "tool",
+    phase,
+    title: `Tool result · ${name}`,
+    summary: String(event.payload?.summary ?? (isError ? "Tool failed" : "Tool returned")),
+    timestamp: event.ts,
+    isError,
+    details: [{ label: "Output", value: output }],
+    rawEvents: [event],
+  });
+}
+
+function pairToolResult(step: LogStep, event: StreamEvent): LogStep {
+  const output = JSON.stringify(event.payload, null, 2);
+  const isError = event.payload?.is_error === true;
+  return createLogStep({
+    ...step,
+    summary: String(event.payload?.summary ?? step.summary),
+    isError,
+    details: [...step.details, { label: "Output", value: output }],
+    rawEvents: [...step.rawEvents, event],
+  });
+}
+
+function groupLogStepsByPhase(steps: LogStep[]): LogPhaseGroup[] {
+  const groups = new Map<string, LogStep[]>();
+  for (const step of steps) {
+    groups.set(step.phase, [...(groups.get(step.phase) ?? []), step]);
+  }
+  return Array.from(groups.entries()).map(([phase, phaseSteps]) => {
+    const firstTimestamp = phaseSteps[0]?.timestamp ?? 0;
+    const lastTimestamp = phaseSteps[phaseSteps.length - 1]?.timestamp ?? firstTimestamp;
+    const hasErrors = phaseSteps.some((step) => step.isError);
+    const searchText = phaseSteps.map((step) => step.searchText).join(" ");
+    return {
+      id: `phase-${phase}`,
+      phase,
+      label: phase === "default" ? "General" : phase,
+      firstTimestamp,
+      lastTimestamp,
+      steps: phaseSteps,
+      hasErrors,
+      searchText,
+    };
+  });
+}
+
+function getEventPhase(event: StreamEvent): string {
+  return typeof event.payload?.phase === "string" && event.payload.phase.trim() ? event.payload.phase : "default";
+}
+
+function getEventId(event: StreamEvent, index: number): string {
+  return `${index}-${event.ts}-${event.kind}`;
+}
+
+function getToolKey(event: StreamEvent, phase: string): string | null {
+  const payload = event.payload ?? {};
+  const explicitId = payload.call_id ?? payload.tool_call_id ?? payload.id ?? payload.invocation_id;
+  if (typeof explicitId === "string" || typeof explicitId === "number") return `${phase}:${explicitId}`;
+  return null;
+}
+
+function summarizeText(text: string): string {
+  return text.trim().replace(/\s+/g, " ").slice(0, 180);
+}
+
+interface LogPhaseAccordionProps {
+  phases: LogPhaseGroup[];
+  selectedStepId: string | null;
+  onSelectStep: (stepId: string) => void;
+}
+
+function LogPhaseAccordion({ phases, selectedStepId, onSelectStep }: LogPhaseAccordionProps) {
   return (
-    <div className="text-[var(--text-dim)]">
-      {kind}{phase ? ` (${phase})` : ""}
+    <div className="space-y-3">
+      {phases.map((phase) => (
+        <LogPhasePanel
+          key={phase.id}
+          phase={phase}
+          selectedStepId={selectedStepId}
+          onSelectStep={onSelectStep}
+        />
+      ))}
     </div>
   );
+}
+
+interface LogPhasePanelProps {
+  phase: LogPhaseGroup;
+  selectedStepId: string | null;
+  onSelectStep: (stepId: string) => void;
+}
+
+function LogPhasePanel({ phase, selectedStepId, onSelectStep }: LogPhasePanelProps) {
+  const triggerId = `${phase.id}-trigger`;
+  const panelId = `${phase.id}-panel`;
+  const [isOpen, setIsOpen] = useState(true);
+  return (
+    <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel-2)]">
+      <h3>
+        <button
+          type="button"
+          id={triggerId}
+          aria-expanded={isOpen}
+          aria-controls={panelId}
+          onClick={() => setIsOpen((value) => !value)}
+          className="flex min-h-12 w-full items-center justify-between gap-3 px-3 py-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+        >
+          <span className="min-w-0">
+            <span className="block truncate text-xs font-semibold text-[var(--text)]">{phase.label}</span>
+            <span className="block text-[10px] text-[var(--text-dim)]">
+              {phase.steps.length} steps · {formatLogTimeRange(phase.firstTimestamp, phase.lastTimestamp)}
+            </span>
+          </span>
+          <span className={phase.hasErrors ? "text-red-300" : "text-emerald-300"}>
+            {phase.hasErrors ? "has errors" : "ok"}
+          </span>
+        </button>
+      </h3>
+      {isOpen && (
+        <div id={panelId} role="region" aria-labelledby={triggerId} className="border-t border-[var(--border)] p-2">
+          <div aria-label={`${phase.label} log steps`} className="space-y-1">
+            {phase.steps.map((step) => (
+              <LogStepRow
+                key={step.id}
+                step={step}
+                isSelected={step.id === selectedStepId}
+                onSelect={() => onSelectStep(step.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+interface LogStepRowProps {
+  step: LogStep;
+  isSelected: boolean;
+  onSelect: () => void;
+}
+
+function LogStepRow({ step, isSelected, onSelect }: LogStepRowProps) {
+  const tone = step.isError
+    ? "border-red-500/40 bg-red-500/10 text-red-100"
+    : isSelected
+      ? "border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--text)]"
+      : "border-transparent text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-black/10 hover:text-[var(--text)]";
+  return (
+    <button
+      type="button"
+      aria-pressed={isSelected}
+      onClick={onSelect}
+      className={`grid min-h-12 w-full grid-cols-[4.5rem_minmax(0,1fr)_auto] items-start gap-3 rounded-lg border px-3 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${tone}`}
+    >
+      <span className="text-[10px] text-[var(--text-dim)]">{new Date(step.timestamp * 1000).toLocaleTimeString()}</span>
+      <span className="min-w-0">
+        <span className="block truncate text-xs font-semibold">{step.title}</span>
+        <span className="block truncate text-[10px] text-[var(--text-dim)]">{step.summary}</span>
+      </span>
+      <span className="rounded-full border border-current/20 px-2 py-0.5 text-[9px] uppercase tracking-wide">{step.type}</span>
+    </button>
+  );
+}
+
+function LogDetailInspector({ step }: { step: LogStep | null }) {
+  return (
+    <aside
+      className="min-h-0 overflow-y-auto bg-[var(--panel)] px-4 pb-24 pt-3 font-mono text-[11px] leading-snug"
+      aria-labelledby="log-detail-heading"
+    >
+      <div className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--panel)] pb-3">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)]">Inspector</div>
+        <h3 id="log-detail-heading" className="mt-1 text-sm font-semibold text-[var(--text)]">
+          {step ? step.title : "Select a log step"}
+        </h3>
+        {step && <p className="mt-1 text-[10px] text-[var(--text-dim)]">{step.phase} · {new Date(step.timestamp * 1000).toLocaleString()}</p>}
+      </div>
+      {!step ? (
+        <div className="pt-4 text-[var(--text-dim)]">Select a timeline row to inspect full input, output, and raw payload.</div>
+      ) : (
+        <div className="space-y-4 pt-4">
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3">
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-dim)]">Summary</div>
+            <div className="whitespace-pre-wrap text-[var(--text)]">{step.summary}</div>
+          </div>
+          {step.details.map((detail) => (
+            <div key={detail.label} className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)]">
+              <div className="border-b border-[var(--border)] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-dim)]">{detail.label}</div>
+              <pre className="max-h-[45vh] overflow-auto whitespace-pre-wrap p-3 text-[var(--text)]">{detail.value}</pre>
+            </div>
+          ))}
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)]">
+            <div className="border-b border-[var(--border)] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-dim)]">Raw events</div>
+            <pre className="max-h-[45vh] overflow-auto whitespace-pre-wrap p-3 text-[var(--text)]">
+              {JSON.stringify(step.rawEvents, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function formatLogTimeRange(firstTimestamp: number, lastTimestamp: number): string {
+  const first = new Date(firstTimestamp * 1000).toLocaleTimeString();
+  const last = new Date(lastTimestamp * 1000).toLocaleTimeString();
+  return first === last ? first : `${first} → ${last}`;
 }
 
 // ─── Blocker Banner ───────────────────────────────────────────────────────────
@@ -1146,15 +1373,54 @@ interface DrawerProps {
 }
 
 function Drawer({ card, onClose, onAction, onResume, loadingAction, policyDefaultModel, onCardModelChange }: DrawerProps) {
-  const [drawerTab, setDrawerTab] = useState<"info" | "activity" | "review" | "logs">("info");
+  const [drawerTab, setDrawerTab] = useState<"info" | "activity" | "logs">("info");
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+    if (!card) return;
+
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusableSelector = [
+      "button:not([disabled])",
+      "a[href]",
+      "select:not([disabled])",
+      "input:not([disabled])",
+      "textarea:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(",");
+
+    const focusFirst = () => {
+      const focusable = dialogRef.current?.querySelector<HTMLElement>(focusableSelector);
+      focusable?.focus();
     };
-    if (card) {
-      window.addEventListener("keydown", onKey);
-      return () => window.removeEventListener("keydown", onKey);
-    }
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? []);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    const raf = window.requestAnimationFrame(focusFirst);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("keydown", onKey);
+      previouslyFocused?.focus();
+    };
   }, [card, onClose]);
 
   if (!card) return null;
@@ -1172,16 +1438,20 @@ function Drawer({ card, onClose, onAction, onResume, loadingAction, policyDefaul
       />
 
       {/* Panel */}
-      <div
-        className="fixed bottom-0 right-0 top-0 z-50 flex w-full max-w-lg max-h-screen flex-col border-l border-[var(--border)] bg-[var(--panel)] shadow-2xl sm:bottom-auto"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Card detail"
-      >
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+        <div
+          ref={dialogRef}
+          className="flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)] shadow-2xl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="task-detail-title"
+          aria-describedby="task-detail-summary"
+        >
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] p-4">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-[var(--border)] bg-[var(--panel)] p-4">
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-semibold leading-snug text-[var(--text)]">{card.title}</h2>
+            <p id="task-detail-summary" className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)]">Autopilot task</p>
+            <h2 id="task-detail-title" className="text-base font-semibold leading-snug text-[var(--text)]">{card.title}</h2>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
               <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${sourceColor}`}>
                 {sourceLabel}
@@ -1194,8 +1464,8 @@ function Drawer({ card, onClose, onAction, onResume, loadingAction, policyDefaul
           </div>
           <button
             onClick={onClose}
-            className="shrink-0 rounded-md border border-[var(--border)] bg-[var(--panel-2)] p-1.5 text-sm text-[var(--text-dim)] transition hover:border-[var(--accent)]/40 hover:text-[var(--text)]"
-            aria-label="Close drawer"
+            className="min-h-11 min-w-11 shrink-0 rounded-md border border-[var(--border)] bg-[var(--panel-2)] p-2 text-sm text-[var(--text-dim)] transition hover:border-[var(--accent)]/40 hover:text-[var(--text)]"
+            aria-label="Close task details"
           >
             ✕
           </button>
@@ -1207,52 +1477,31 @@ function Drawer({ card, onClose, onAction, onResume, loadingAction, policyDefaul
           <BlockerBanner card={card} onAction={onAction} loadingAction={loadingAction} />
 
           {/* Tab bar */}
-          <div className="flex shrink-0 border-b border-[var(--border)]">
-            <button
-              onClick={() => setDrawerTab("info")}
-              className={`flex-1 px-4 py-2 text-sm font-medium transition ${
-                drawerTab === "info"
-                  ? "border-b-2 border-[var(--accent)] text-[var(--accent)]"
-                  : "text-[var(--text-dim)] hover:text-[var(--text)]"
-              }`}
-            >
-              Info
-            </button>
-            <button
-              onClick={() => setDrawerTab("activity")}
-              className={`flex-1 px-4 py-2 text-sm font-medium transition ${
-                drawerTab === "activity"
-                  ? "border-b-2 border-[var(--accent)] text-[var(--accent)]"
-                  : "text-[var(--text-dim)] hover:text-[var(--text)]"
-              }`}
-            >
-              Activity
-            </button>
-            <button
-              onClick={() => setDrawerTab("review")}
-              className={`flex-1 px-4 py-2 text-sm font-medium transition ${
-                drawerTab === "review"
-                  ? "border-b-2 border-[var(--accent)] text-[var(--accent)]"
-                  : "text-[var(--text-dim)] hover:text-[var(--text)]"
-              }`}
-            >
-              Review
-            </button>
-            <button
-              onClick={() => setDrawerTab("logs")}
-              className={`flex-1 px-4 py-2 text-sm font-medium transition ${
-                drawerTab === "logs"
-                  ? "border-b-2 border-[var(--accent)] text-[var(--accent)]"
-                  : "text-[var(--text-dim)] hover:text-[var(--text)]"
-              }`}
-            >
-              Logs
-            </button>
+          <div className="flex shrink-0 border-b border-[var(--border)]" role="tablist" aria-label="Task detail sections">
+            {(["info", "activity", "logs"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                id={`task-tab-${tab}`}
+                aria-selected={drawerTab === tab}
+                aria-controls={`task-panel-${tab}`}
+                tabIndex={drawerTab === tab ? 0 : -1}
+                onClick={() => setDrawerTab(tab)}
+                className={`min-h-11 flex-1 px-4 py-2 text-sm font-medium capitalize transition ${
+                  drawerTab === tab
+                    ? "border-b-2 border-[var(--accent)] text-[var(--accent)]"
+                    : "text-[var(--text-dim)] hover:text-[var(--text)]"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
           </div>
 
           {/* Tab content */}
           {drawerTab === "info" ? (
-            <div className="space-y-4 p-4">
+            <div id="task-panel-info" role="tabpanel" aria-labelledby="task-tab-info" className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pb-24">
               {/* Model */}
               <ModelSection
                 card={card}
@@ -1312,16 +1561,18 @@ function Drawer({ card, onClose, onAction, onResume, loadingAction, policyDefaul
               </div>
             </div>
           ) : drawerTab === "activity" ? (
-            <ActivityTab cardId={card.id} isActive={drawerTab === "activity"} />
-          ) : drawerTab === "logs" ? (
-            <LogsTab cardId={card.id} isActive={drawerTab === "logs"} />
+            <div id="task-panel-activity" role="tabpanel" aria-labelledby="task-tab-activity" className="min-h-0 flex-1">
+              <ActivityTab cardId={card.id} isActive={drawerTab === "activity"} />
+            </div>
           ) : (
-            <ReviewTab cardId={card.id} isActive={drawerTab === "review"} cardStatus={card.status} />
+            <div id="task-panel-logs" role="tabpanel" aria-labelledby="task-tab-logs" className="min-h-0 flex-1">
+              <LogsTab cardId={card.id} isActive={drawerTab === "logs"} />
+            </div>
           )}
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2 border-t border-[var(--border)] p-4">
+        <div className="sticky bottom-0 z-10 flex gap-2 border-t border-[var(--border)] bg-[var(--panel)] p-4">
           {RESETTABLE_STATUSES.includes(card.status) || ACTIVE_STATUSES.includes(card.status) ? (
             <>
               {card.metadata?.resume_available ? (
@@ -1369,6 +1620,7 @@ function Drawer({ card, onClose, onAction, onResume, loadingAction, policyDefaul
               </button>
             </>
           )}
+        </div>
         </div>
       </div>
     </>
