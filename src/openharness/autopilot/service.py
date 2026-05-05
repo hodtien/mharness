@@ -109,6 +109,9 @@ _DEFAULT_AUTOPILOT_POLICY = {
         "max_turns": 12,
         "max_parallel_runs": 2,
         "rebase_strategy": "on_conflict",
+        "pr_branch_sync_strategy": "rebase",
+        "max_branch_sync_attempts": 2,
+        "allow_force_push_pr_branch": False,
         "permission_mode": "full_auto",
         "host_mode": "self_hosted",
         "use_worktree": True,
@@ -1341,8 +1344,53 @@ class RepoAutopilotStore:
                             metadata={"attempt_count": attempt_count, "head_branch": head_branch},
                         )
 
+                    push_ok, push_stage, push_summary = self._push_pr_branch_with_sync(
+                        working_cwd,
+                        base_branch=base_branch,
+                        head_branch=head_branch,
+                        policies=policies,
+                        card_id=card.id,
+                    )
+                    if not push_ok:
+                        _repair_stages = {"branch_sync_conflict", "branch_push_rejected"}
+                        is_repairable = push_stage in _repair_stages
+                        self.update_status(
+                            card.id,
+                            status="repairing" if is_repairable else "failed",
+                            note=push_summary,
+                            metadata_updates={
+                                "last_failure_stage": push_stage,
+                                "last_failure_summary": push_summary,
+                                "manual_intervention_required": is_repairable,
+                                "human_gate_pending": is_repairable,
+                            },
+                        )
+                        self.append_journal(
+                            kind="branch_sync_failed",
+                            summary=f"{card.title}: {push_summary}",
+                            task_id=card.id,
+                            metadata={
+                                "stage": push_stage,
+                                "base_branch": base_branch,
+                                "head_branch": head_branch,
+                                "attempt_count": attempt_count,
+                            },
+                        )
+                        if issue_number is not None:
+                            self._comment_on_issue(
+                                issue_number, self._comment_terminal_failure(push_summary)
+                            )
+                        return RepoRunResult(
+                            card_id=card.id,
+                            status="repairing" if is_repairable else "failed",
+                            assistant_summary=assistant_summary,
+                            run_report_path=str(current_run_report),
+                            verification_report_path=str(current_verification_report),
+                            verification_steps=verification_steps,
+                            attempt_count=attempt_count,
+                            worktree_path=str(working_cwd),
+                        )
                     try:
-                        self._git_push_branch(working_cwd, head_branch)
                         pr_info = self._upsert_pull_request(
                             card,
                             head_branch=head_branch,
@@ -1351,7 +1399,7 @@ class RepoAutopilotStore:
                             verification_report_path=current_verification_report,
                         )
                     except Exception as exc:
-                        summary = f"Failed to push branch or upsert PR: {exc}"
+                        summary = f"Failed to upsert PR: {exc}"
                         self.update_status(
                             card.id,
                             status="failed",
@@ -1373,7 +1421,7 @@ class RepoAutopilotStore:
                             verification_report_path=str(current_verification_report),
                             verification_steps=verification_steps,
                             attempt_count=attempt_count,
-                            worktree_path=str(worktree_info.path),
+                            worktree_path=str(working_cwd),
                         )
 
                     linked_pr_number = int(pr_info.get("number"))
@@ -1907,6 +1955,21 @@ class RepoAutopilotStore:
             return "on_conflict"
         return strategy
 
+    def _pr_branch_sync_strategy(self, policies: dict[str, Any]) -> str:
+        execution = dict(policies.get("autopilot", {}).get("execution", {}))
+        strategy = _safe_text(execution.get("pr_branch_sync_strategy")) or "rebase"
+        if strategy not in {"none", "rebase"}:
+            return "rebase"
+        return strategy
+
+    def _max_branch_sync_attempts(self, policies: dict[str, Any]) -> int:
+        execution = dict(policies.get("autopilot", {}).get("execution", {}))
+        return max(int(execution.get("max_branch_sync_attempts", 2) or 2), 1)
+
+    def _allow_force_push_pr_branch(self, policies: dict[str, Any]) -> bool:
+        execution = dict(policies.get("autopilot", {}).get("execution", {}))
+        return bool(execution.get("allow_force_push_pr_branch", False))
+
     def _head_branch(self, card: RepoTaskCard, policies: dict[str, Any]) -> str:
         github_policy = dict(policies.get("autopilot", {}).get("github", {}))
         prefix = _safe_text(github_policy.get("pr_branch_prefix")) or "autopilot/"
@@ -1971,8 +2034,23 @@ class RepoAutopilotStore:
         self._run_git(["commit", "-m", message], cwd=cwd, check=True)
         return True
 
-    def _git_push_branch(self, cwd: Path, branch: str) -> None:
-        self._run_git(["push", "-u", "origin", branch], cwd=cwd, check=True)
+    def _git_push_branch(self, cwd: Path, branch: str, *, force_with_lease: bool = False) -> None:
+        args = ["push", "-u"]
+        if force_with_lease:
+            args.append("--force-with-lease")
+        self._run_git([*args, "origin", branch], cwd=cwd, check=True)
+
+    def _is_non_fast_forward_error(self, exc: Exception) -> bool:
+        text = str(exc).lower()
+        return any(
+            phrase in text
+            for phrase in (
+                "non-fast-forward",
+                "fetch first",
+                "failed to push some refs",
+                "[rejected]",
+            )
+        )
 
     def _pull_base_branch(self, *, base_branch: str, cwd: Path | None = None) -> None:
         target = cwd or self._cwd
@@ -2071,6 +2149,95 @@ class RepoAutopilotStore:
         )
         if should_rebase:
             self._rebase_head_onto_base(cwd, base_branch=base_branch, card_id=card_id)
+
+    def _sync_pr_branch_before_push(
+        self,
+        cwd: Path,
+        *,
+        base_branch: str,
+        head_branch: str,
+        policies: dict[str, Any],
+        card_id: str | None = None,
+    ) -> tuple[bool, str, str]:
+        strategy = self._pr_branch_sync_strategy(policies)
+        if strategy == "none":
+            return True, "branch_sync_skipped", "PR branch sync disabled."
+        self._run_git(["fetch", "origin", base_branch], cwd=cwd, check=True)
+        self._run_git(["fetch", "origin", head_branch], cwd=cwd)
+        self._run_git(["checkout", head_branch], cwd=cwd, check=True)
+        for attempt in range(1, self._max_branch_sync_attempts(policies) + 1):
+            success = self._rebase_head_onto_base(cwd, base_branch=base_branch, card_id=card_id)
+            if success:
+                summary = f"Synced {head_branch} onto origin/{base_branch}."
+                self.append_journal(
+                    kind="branch_sync_done",
+                    summary=summary,
+                    task_id=card_id,
+                    metadata={
+                        "base_branch": base_branch,
+                        "head_branch": head_branch,
+                        "attempt_count": attempt,
+                    },
+                )
+                return True, "branch_sync_done", summary
+            if attempt < self._max_branch_sync_attempts(policies):
+                self._run_git(["fetch", "origin", base_branch], cwd=cwd, check=True)
+        summary = f"Could not rebase {head_branch} onto origin/{base_branch}."
+        self.append_journal(
+            kind="branch_sync_conflict",
+            summary=summary,
+            task_id=card_id,
+            metadata={
+                "base_branch": base_branch,
+                "head_branch": head_branch,
+                "attempt_count": self._max_branch_sync_attempts(policies),
+            },
+        )
+        return False, "branch_sync_conflict", summary
+
+    def _push_pr_branch_with_sync(
+        self,
+        cwd: Path,
+        *,
+        base_branch: str,
+        head_branch: str,
+        policies: dict[str, Any],
+        card_id: str | None = None,
+    ) -> tuple[bool, str, str]:
+        ok, stage, summary = self._sync_pr_branch_before_push(
+            cwd,
+            base_branch=base_branch,
+            head_branch=head_branch,
+            policies=policies,
+            card_id=card_id,
+        )
+        if not ok:
+            return ok, stage, summary
+        try:
+            self._git_push_branch(cwd, head_branch)
+            return True, "branch_push_done", f"Pushed {head_branch}."
+        except Exception as exc:
+            if not self._is_non_fast_forward_error(exc):
+                return False, "branch_push_failed", str(exc)
+            ok, stage, summary = self._sync_pr_branch_before_push(
+                cwd,
+                base_branch=base_branch,
+                head_branch=head_branch,
+                policies=policies,
+                card_id=card_id,
+            )
+            if not ok:
+                return ok, stage, summary
+            try:
+                self._git_push_branch(cwd, head_branch)
+                return True, "branch_push_done", f"Pushed {head_branch} after sync."
+            except Exception as retry_exc:
+                if not self._is_non_fast_forward_error(retry_exc):
+                    return False, "branch_push_failed", str(retry_exc)
+                if self._allow_force_push_pr_branch(policies):
+                    self._git_push_branch(cwd, head_branch, force_with_lease=True)
+                    return True, "branch_force_push_done", f"Force-with-lease pushed {head_branch}."
+                return False, "branch_push_rejected", str(retry_exc)
 
     def rebase_inflight_worktrees(
         self,

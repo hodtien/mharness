@@ -812,8 +812,12 @@ def test_autopilot_run_card_opens_pr_and_waits_for_ci(tmp_path: Path, monkeypatc
         lambda self, cwd, message: True,
     )
     monkeypatch.setattr(
-        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch",
-        lambda self, cwd, branch: None,
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
+            True,
+            "branch_push_done",
+            f"Pushed {head_branch}.",
+        ),
     )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
@@ -936,8 +940,12 @@ def test_autopilot_run_card_repairs_after_local_verification_failure(
         lambda self, cwd, message: True,
     )
     monkeypatch.setattr(
-        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch",
-        lambda self, cwd, branch: None,
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
+            True,
+            "branch_push_done",
+            f"Pushed {head_branch}.",
+        ),
     )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
@@ -1041,8 +1049,12 @@ def test_autopilot_run_card_reuses_existing_branch_progress(tmp_path: Path, monk
         lambda self, cwd, *, base_branch: True,
     )
     monkeypatch.setattr(
-        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch",
-        lambda self, cwd, branch: pushed.__setitem__("called", True),
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
+            pushed.__setitem__("called", True) or True,
+            "branch_push_done",
+            f"Pushed {head_branch}.",
+        ),
     )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
@@ -2993,3 +3005,390 @@ def test_card_model_precedes_policy_agent_model(tmp_path: Path, monkeypatch) -> 
     result = asyncio.run(store.run_card(card.id, model=None))
     assert result.status == "completed"
     assert used_models[0] == "card-model"
+
+
+# ---------------------------------------------------------------------------
+# Branch-sync tests
+# ---------------------------------------------------------------------------
+
+_FAKE_WORKTREE_SLUG = "wt"
+
+
+def _fake_run_card_common_patches(monkeypatch, *, worktree: Path) -> None:
+    """Patch the shared boilerplate needed for run_card to reach the push step."""
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None, agent_id=None):
+        return SimpleNamespace(path=worktree)
+
+    async def fake_remove_worktree(self, slug):
+        return True
+
+    async def fake_run_agent_prompt(
+        self, prompt, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
+        return "Implemented changes."
+
+    def fake_run_verification_steps(self, policies, *, cwd=None):
+        return [RepoVerificationStep(command="uv run pytest -q", returncode=0, status="success")]
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt", fake_run_agent_prompt
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        fake_run_verification_steps,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_commit_all",
+        lambda self, cwd, message: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: False,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+
+def test_branch_sync_runs_before_push(tmp_path: Path, monkeypatch) -> None:
+    """_push_pr_branch_with_sync must be called before _upsert_pull_request."""
+    import asyncio
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Sync before push", body="")
+
+    call_order: list[str] = []
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
+            call_order.append("sync") or (True, "branch_push_done", f"Pushed {head_branch}.")
+        ),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
+        lambda self, card, *, head_branch, base_branch, run_report_path, verification_report_path: (
+            call_order.append("upsert") or {"number": 1, "url": "https://example/pr/1"}
+        ),
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number, policies):
+        return (
+            "success",
+            "ok",
+            {"url": "https://example/pr/1", "labels": [], "isDraft": False},
+            [],
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    _fake_run_card_common_patches(monkeypatch, worktree=worktree)
+
+    result = asyncio.run(store.run_card(card.id))
+    assert result.status == "completed"
+    assert call_order == ["sync", "upsert"], f"unexpected order: {call_order}"
+
+
+def test_branch_sync_non_fast_forward_retry_succeeds(tmp_path: Path, monkeypatch) -> None:
+    """If push is rejected with non-fast-forward, sync retries and second push succeeds."""
+    import asyncio
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="NFF retry", body="")
+
+    fetch_calls: list[str] = []
+    push_calls: list[int] = []
+
+    def fake_run_git(self, args, *, cwd=None, check=False):
+        import subprocess as sp
+
+        result = sp.CompletedProcess(args, 0, stdout="", stderr="")
+        if args[:2] == ["push", "-u"]:
+            push_calls.append(1)
+            if len(push_calls) == 1:
+                result = sp.CompletedProcess(args, 1, stdout="", stderr="non-fast-forward")
+                if check:
+                    raise RuntimeError("non-fast-forward")
+        elif args[0] == "fetch":
+            fetch_calls.append(args[-1])
+        return result
+
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_git", fake_run_git)
+
+    # Use real _push_pr_branch_with_sync / _sync_pr_branch_before_push but mock rebase
+    def fake_rebase(self, cwd, *, base_branch, card_id=None):
+        return True
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._rebase_head_onto_base", fake_rebase
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
+        lambda self, card, *, head_branch, base_branch, run_report_path, verification_report_path: {
+            "number": 5,
+            "url": "https://example/pr/5",
+        },
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number, policies):
+        return (
+            "success",
+            "ok",
+            {"url": "https://example/pr/5", "labels": [], "isDraft": False},
+            [],
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    _fake_run_card_common_patches(monkeypatch, worktree=worktree)
+    # Override _sync_worktree_to_base to be a no-op AND _run_git above handles fetch/push.
+    # _push_pr_branch_with_sync calls _git_push_branch which calls _run_git.
+    # The second _run_git push call must succeed (returncode 0).
+
+    result = asyncio.run(store.run_card(card.id))
+    assert result.status == "completed"
+    assert len(push_calls) >= 2, f"expected at least 2 push attempts, got {push_calls}"
+
+
+def test_branch_sync_conflict_puts_card_in_repairing(tmp_path: Path, monkeypatch) -> None:
+    """When rebase fails on PR branch sync, card becomes repairing with human_gate_pending."""
+    import asyncio
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Conflict repair", body="")
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
+            False,
+            "branch_sync_conflict",
+            f"Could not rebase {head_branch} onto origin/{base_branch}.",
+        ),
+    )
+    _fake_run_card_common_patches(monkeypatch, worktree=worktree)
+
+    result = asyncio.run(store.run_card(card.id))
+    assert result.status == "repairing"
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.metadata.get("human_gate_pending") is True
+    assert updated.metadata.get("manual_intervention_required") is True
+    assert updated.metadata.get("last_failure_stage") == "branch_sync_conflict"
+
+
+def test_branch_sync_no_force_push_by_default(tmp_path: Path, monkeypatch) -> None:
+    """With default policy, --force and --force-with-lease are never used in _git_push_branch."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    force_used: list[bool] = []
+
+    def fake_git_push_branch(self, cwd, branch, *, force_with_lease: bool = False):
+        force_used.append(force_with_lease)
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch", fake_git_push_branch
+    )
+
+    # Verify the default policy has allow_force_push_pr_branch == False
+    policies = store.load_policies()
+    assert store._allow_force_push_pr_branch(policies) is False
+
+    # Simulate push_pr_branch_with_sync with successful sync so no force path is taken
+    def fake_rebase(self, cwd, *, base_branch, card_id=None):
+        return True
+
+    def fake_run_git(self, args, *, cwd=None, check=False):
+        import subprocess as sp
+
+        return sp.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_git", fake_run_git)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._rebase_head_onto_base", fake_rebase
+    )
+
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    ok, stage, summary = store._push_pr_branch_with_sync(
+        worktree,
+        base_branch="main",
+        head_branch="autopilot/ap-test",
+        policies=policies,
+        card_id=None,
+    )
+    assert ok is True
+    assert all(not f for f in force_used), f"force_with_lease was used: {force_used}"
+
+
+def test_branch_sync_force_with_lease_when_policy_allows(tmp_path: Path, monkeypatch) -> None:
+    """With allow_force_push_pr_branch=True, --force-with-lease is used after retry failure."""
+    import subprocess as sp
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    force_used: list[bool] = []
+    push_attempt: list[int] = []
+
+    def fake_git_push_branch(self, cwd, branch, *, force_with_lease: bool = False):
+        force_used.append(force_with_lease)
+        push_attempt.append(1)
+        if len(push_attempt) <= 2:
+            raise RuntimeError("non-fast-forward")
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch", fake_git_push_branch
+    )
+
+    def fake_rebase(self, cwd, *, base_branch, card_id=None):
+        return True
+
+    def fake_run_git(self, args, *, cwd=None, check=False):
+        return sp.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_git", fake_run_git)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._rebase_head_onto_base", fake_rebase
+    )
+
+    policies = store.load_policies()
+    policies["autopilot"]["execution"]["allow_force_push_pr_branch"] = True
+
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    ok, stage, summary = store._push_pr_branch_with_sync(
+        worktree,
+        base_branch="main",
+        head_branch="autopilot/ap-force",
+        policies=policies,
+        card_id=None,
+    )
+    assert ok is True
+    assert stage == "branch_force_push_done"
+    assert any(f for f in force_used), "expected --force-with-lease to have been used"
+
+
+def test_branch_sync_force_policy_does_not_force_on_other_retry_errors(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import subprocess as sp
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    force_used: list[bool] = []
+    push_attempt: list[int] = []
+
+    def fake_git_push_branch(self, cwd, branch, *, force_with_lease: bool = False):
+        force_used.append(force_with_lease)
+        push_attempt.append(1)
+        if len(push_attempt) == 1:
+            raise RuntimeError("non-fast-forward")
+        raise RuntimeError("remote hook declined")
+
+    def fake_rebase(self, cwd, *, base_branch, card_id=None):
+        return True
+
+    def fake_run_git(self, args, *, cwd=None, check=False):
+        return sp.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch", fake_git_push_branch
+    )
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_git", fake_run_git)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._rebase_head_onto_base", fake_rebase
+    )
+
+    policies = store.load_policies()
+    policies["autopilot"]["execution"]["allow_force_push_pr_branch"] = True
+
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    ok, stage, summary = store._push_pr_branch_with_sync(
+        worktree,
+        base_branch="main",
+        head_branch="autopilot/ap-force",
+        policies=policies,
+        card_id=None,
+    )
+    assert ok is False
+    assert stage == "branch_push_failed"
+    assert "remote hook declined" in summary
+    assert all(not force for force in force_used)
+
+
+def test_existing_pr_card_conflicting_branch_passes_through_ci(tmp_path: Path, monkeypatch) -> None:
+    """_process_existing_pr_card with a green CI moves to completed with human_gate_pending."""
+    import asyncio
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #42: existing PR",
+        body="",
+        source_ref="pr:42",
+        metadata={"linked_pr_number": 42},
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number, policies):
+        return (
+            "success",
+            "All remote checks passed.",
+            {"url": "https://example/pr/42", "labels": [], "isDraft": False},
+            [],
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: False,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    result = asyncio.run(store.run_card(card.id))
+    assert result.status == "completed"
+    assert result.pr_number == 42
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.metadata.get("human_gate_pending") is True
