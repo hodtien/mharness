@@ -3177,6 +3177,7 @@ def test_branch_sync_non_fast_forward_retry_succeeds(tmp_path: Path, monkeypatch
 
     fetch_calls: list[str] = []
     push_calls: list[int] = []
+    remote_rebases: list[str] = []
 
     def fake_run_git(self, args, *, cwd=None, check=False):
         import subprocess as sp
@@ -3198,8 +3199,16 @@ def test_branch_sync_non_fast_forward_retry_succeeds(tmp_path: Path, monkeypatch
     def fake_rebase(self, cwd, *, base_branch, card_id=None):
         return True
 
+    def fake_remote_rebase(self, cwd, *, remote_branch, card_id=None):
+        remote_rebases.append(remote_branch)
+        return True
+
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._rebase_head_onto_base", fake_rebase
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._rebase_head_onto_remote_branch",
+        fake_remote_rebase,
     )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
@@ -3228,6 +3237,7 @@ def test_branch_sync_non_fast_forward_retry_succeeds(tmp_path: Path, monkeypatch
     result = asyncio.run(store.run_card(card.id))
     assert result.status == "completed"
     assert len(push_calls) >= 2, f"expected at least 2 push attempts, got {push_calls}"
+    assert "origin/autopilot/ap-" in remote_rebases[0]
 
 
 def test_branch_sync_conflict_puts_card_in_repairing(tmp_path: Path, monkeypatch) -> None:

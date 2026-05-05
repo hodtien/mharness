@@ -2124,6 +2124,32 @@ class RepoAutopilotStore:
         )
         return False
 
+    def _rebase_head_onto_remote_branch(
+        self, cwd: Path, *, remote_branch: str, card_id: str | None = None
+    ) -> bool:
+        completed = self._run_git(["rebase", remote_branch], cwd=cwd)
+        if completed.returncode == 0:
+            self.append_journal(
+                kind="remote_branch_rebase_done",
+                summary=f"Rebased worktree onto {remote_branch}",
+                task_id=card_id,
+                metadata={"remote_branch": remote_branch, "worktree_path": str(cwd)},
+            )
+            return True
+        self._run_git(["rebase", "--abort"], cwd=cwd)
+        message = (completed.stderr or completed.stdout or "git rebase failed").strip()
+        self.append_journal(
+            kind="remote_branch_rebase_conflict",
+            summary=f"Rebase onto {remote_branch} failed; branch requires manual repair",
+            task_id=card_id,
+            metadata={
+                "remote_branch": remote_branch,
+                "worktree_path": str(cwd),
+                "message": message,
+            },
+        )
+        return False
+
     def _sync_worktree_to_base(
         self,
         cwd: Path,
@@ -2162,11 +2188,23 @@ class RepoAutopilotStore:
         strategy = self._pr_branch_sync_strategy(policies)
         if strategy == "none":
             return True, "branch_sync_skipped", "PR branch sync disabled."
-        self._run_git(["fetch", "origin", base_branch], cwd=cwd, check=True)
-        self._run_git(["fetch", "origin", head_branch], cwd=cwd)
         self._run_git(["checkout", head_branch], cwd=cwd, check=True)
         for attempt in range(1, self._max_branch_sync_attempts(policies) + 1):
-            success = self._rebase_head_onto_base(cwd, base_branch=base_branch, card_id=card_id)
+            self._run_git(["fetch", "origin", base_branch], cwd=cwd, check=True)
+            remote_head = self._run_git(["fetch", "origin", head_branch], cwd=cwd)
+            success = True
+            if remote_head.returncode == 0:
+                success = self._rebase_head_onto_remote_branch(
+                    cwd,
+                    remote_branch=f"origin/{head_branch}",
+                    card_id=card_id,
+                )
+            if success:
+                success = self._rebase_head_onto_base(
+                    cwd,
+                    base_branch=base_branch,
+                    card_id=card_id,
+                )
             if success:
                 summary = f"Synced {head_branch} onto origin/{base_branch}."
                 self.append_journal(
