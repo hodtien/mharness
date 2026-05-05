@@ -130,6 +130,52 @@ describe("PipelinePage", () => {
     expect(screen.getByText("Add docs")).toBeTruthy();
   });
 
+  it("shows queued cards in the Queue column", async () => {
+    const queueCards = [
+      {
+        id: "card-queued-1",
+        title: "Queue visibility check",
+        status: "queued",
+        source_kind: "manual_idea",
+        score: 80,
+        created_at: Date.now() / 1000 - 600,
+        updated_at: Date.now() / 1000 - 300,
+      },
+      {
+        id: "card-accepted-1",
+        title: "Accepted queue item",
+        status: "accepted",
+        source_kind: "manual_idea",
+        score: 75,
+        created_at: Date.now() / 1000 - 1200,
+        updated_at: Date.now() / 1000 - 900,
+      },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards: queueCards, updated_at: 0 }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: [] }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    await screen.findByText("Queue");
+    expect(screen.getByText("Queue visibility check")).toBeTruthy();
+    expect(screen.getByText("Accepted queue item")).toBeTruthy();
+  });
+
   it("opens drawer on card click and shows action buttons", async () => {
     vi.stubGlobal(
       "fetch",
@@ -153,7 +199,7 @@ describe("PipelinePage", () => {
     const cardTitle = await screen.findByText("Add login form");
     fireEvent.click(cardTitle);
 
-    expect(await screen.findByRole("dialog", { name: /card detail/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /add login form/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Accept$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Reject$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Retry$/i })).toBeTruthy();
