@@ -1,67 +1,8 @@
 {
-  "generated_at": 1777962046.021882,
+  "generated_at": 1777984149.7012181,
   "repo_name": "my-harness",
   "repo_path": "/Users/hodtien/harness/my-harness",
-  "focus": {
-    "id": "ap-93f7fa1a",
-    "title": "[P9.10] Rebase strategy cho in-flight worktrees",
-    "body": "## Mục tiêu\nKhi card A merge vào main, card B đang chạy trên worktree cũ base → cần rebase để tránh merge conflict.\n\n## Phân tích hiện tại\n- Mỗi worktree branch từ main tại thời điểm create\n- Khi card A merge → main advance → card B worktree stale\n- Card B push branch → PR có conflict với new main\n- Hiện tại không có auto-rebase mechanism\n\n## Giải pháp đề xuất\n1. Sau mỗi _pull_base_branch() (khi card merge xong):\n   - List active worktrees qua count_active_cards()\n   - Cho mỗi active worktree: schedule git fetch origin main + git rebase origin/main\n   - Nếu rebase conflict → abort rebase, journal warning, để card tự handle khi verify\n2. Rebase KHÔNG bắt buộc thành công — nếu fail thì card verify step sẽ phát hiện conflict\n3. Async: rebase chạy background, không block main flow\n4. Lock: cần RepoFileLock per-worktree ('card-{id}.lock') khi rebase\n\n## Alternative đơn giản hơn (recommended cho v1):\n- KHÔNG auto-rebase\n- Khi card push branch → nếu PR có conflict → repair step detect và rebase\n- Đã có repair loop → tận dụng existing mechanism\n- Chỉ cần journal entry 'base_advanced' để track\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/service.py — post-merge notification, optional rebase\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu  \n- test_base_advance_journals_notification: card A merge → journal 'base_advanced' cho active cards\n- test_rebase_conflict_non_fatal: rebase fails → journal warning, card continues\n\nSpawn agents: planner (chọn strategy v1 vs full) → tdd-guide → code-reviewer.\nDepends on: P9.3, P9.8.",
-    "status": "repairing",
-    "source_kind": "manual_idea",
-    "source_ref": "",
-    "score": 100,
-    "score_reasons": [
-      "source=manual_idea",
-      "direct user-driven input",
-      "recently updated"
-    ],
-    "labels": [
-      "advanced",
-      "backend",
-      "parallel"
-    ],
-    "created_at": 1777831886.9036999,
-    "updated_at": 1777961312.298651,
-    "metadata": {
-      "last_note": "repairing failed run",
-      "url": "",
-      "execution_model": "oclaude-coder",
-      "assistant_summary_preview": "Let me first understand the current state and run verification to see what's happening. The branch already contains the intended v1 journal-only implementation. I’m running the relevant tests and lint now to confirm it’s actually good in this worktree.The code itself looks intact; the only failur...",
-      "human_gate_pending": false,
-      "verification_failed": true,
-      "attempt_count": 5,
-      "max_attempts": 5,
-      "linked_pr_number": 72,
-      "linked_pr_url": "https://github.com/hodtien/mharness/pull/72",
-      "head_branch": "autopilot/ap-93f7fa1a",
-      "last_ci_conclusion": "failed",
-      "last_ci_summary": "Python tests (3.10)=FAILURE; Python tests (3.11)=FAILURE",
-      "last_failure_stage": "",
-      "last_failure_summary": "",
-      "verification_steps": [
-        {
-          "command": "uv run pytest -q",
-          "status": "skipped",
-          "returncode": -1
-        },
-        {
-          "command": "uv run ruff check src tests scripts",
-          "status": "success",
-          "returncode": 0
-        },
-        {
-          "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
-          "status": "success",
-          "returncode": 0
-        },
-        {
-          "command": "agent:code-reviewer (diff vs main)",
-          "status": "error",
-          "returncode": 1
-        }
-      ]
-    }
-  },
+  "focus": null,
   "counts": {
     "queued": 0,
     "accepted": 0,
@@ -69,11 +10,11 @@
     "running": 0,
     "verifying": 0,
     "pr_open": 0,
-    "waiting_ci": 1,
-    "repairing": 1,
+    "waiting_ci": 0,
+    "repairing": 0,
     "completed": 14,
     "merged": 58,
-    "failed": 0,
+    "failed": 2,
     "rejected": 18,
     "superseded": 0
   },
@@ -99,129 +40,8 @@
     "running": [],
     "verifying": [],
     "pr_open": [],
-    "waiting_ci": [
-      {
-        "id": "ap-5d3976a2",
-        "title": "[P9.11] Integration test: 2 cards chạy song song end-to-end",
-        "body": "## Mục tiêu\nTest tích hợp đảm bảo 2 autopilot cards có thể chạy song song không conflict.\n\n## Test scenarios\n1. test_two_cards_claim_different_cards:\n   - Enqueue 3 cards\n   - 2 workers gọi pick_and_claim_card() đồng thời\n   - Mỗi worker nhận card khác nhau\n   - Không card nào bị claim 2 lần\n\n2. test_two_cards_run_in_parallel_worktrees:\n   - 2 cards claimed\n   - Mỗi card tạo worktree riêng (slug khác nhau)\n   - Cả 2 chạy đồng thời không conflict\n   - Registry reflect cả 2 đang running\n\n3. test_capacity_gate_blocks_third_card:\n   - max_parallel_runs=2\n   - 2 cards đang running\n   - run_next() cho card thứ 3 → blocked (409)\n   - Card 1 finish → run_next() cho card 3 → OK\n\n4. test_merge_one_does_not_corrupt_other:\n   - Card A merge → _pull_base_branch()\n   - Card B vẫn running → không bị ảnh hưởng\n   - Registry vẫn correct\n\n5. test_crash_cleanup_does_not_affect_sibling:\n   - Card A crash → worktree cleanup\n   - Card B vẫn running bình thường\n\n## Files cần sửa\n- NEW: tests/test_autopilot/test_parallel_execution.py\n\n## Mock strategy\n- Mock _run_agent_prompt, _run_gh, git commands\n- Dùng real file system (tmp_path) cho registry + journal + worktree dirs\n- Dùng threading cho concurrent execution\n\nSpawn agents: tdd-guide (viết toàn bộ test scenarios) → code-reviewer.\nDepends on: P9.1, P9.2, P9.3, P9.7, P9.8, P9.9.",
-        "status": "waiting_ci",
-        "source_kind": "manual_idea",
-        "source_ref": "",
-        "score": 100,
-        "score_reasons": [
-          "source=manual_idea",
-          "direct user-driven input",
-          "recently updated"
-        ],
-        "labels": [
-          "parallel",
-          "testing"
-        ],
-        "created_at": 1777831907.458444,
-        "updated_at": 1777962045.998707,
-        "metadata": {
-          "last_note": "Pushed validated fast-forward update to PR #73 after non-fast-forward failure",
-          "url": "",
-          "execution_model": "oclaude-coder",
-          "assistant_summary_preview": "Now I have enough context. The file already has tests 1 & 2. I need to add tests 3, 4, and 5. Let me implement them: Now let's run all the parallel execution tests to see if they work:The tests in worktree directory were not discovered because they are missing from the main repo. Let me copy them...",
-          "human_gate_pending": false,
-          "verification_failed": false,
-          "attempt_count": 4,
-          "max_attempts": 5,
-          "linked_pr_number": 73,
-          "linked_pr_url": "https://github.com/hodtien/mharness/pull/73",
-          "head_branch": "autopilot/ap-5d3976a2",
-          "last_ci_conclusion": "failed",
-          "last_ci_summary": "Python tests (3.10)=FAILURE; Python tests (3.11)=FAILURE",
-          "last_failure_stage": "",
-          "last_failure_summary": "",
-          "verification_steps": [
-            {
-              "command": "uv run pytest -q",
-              "status": "skipped",
-              "returncode": 1
-            },
-            {
-              "command": "uv run ruff check src tests scripts",
-              "status": "skipped",
-              "returncode": 1
-            },
-            {
-              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
-              "status": "success",
-              "returncode": 0
-            },
-            {
-              "command": "agent:code-reviewer (diff vs main)",
-              "status": "success",
-              "returncode": 0
-            }
-          ]
-        }
-      }
-    ],
-    "repairing": [
-      {
-        "id": "ap-93f7fa1a",
-        "title": "[P9.10] Rebase strategy cho in-flight worktrees",
-        "body": "## Mục tiêu\nKhi card A merge vào main, card B đang chạy trên worktree cũ base → cần rebase để tránh merge conflict.\n\n## Phân tích hiện tại\n- Mỗi worktree branch từ main tại thời điểm create\n- Khi card A merge → main advance → card B worktree stale\n- Card B push branch → PR có conflict với new main\n- Hiện tại không có auto-rebase mechanism\n\n## Giải pháp đề xuất\n1. Sau mỗi _pull_base_branch() (khi card merge xong):\n   - List active worktrees qua count_active_cards()\n   - Cho mỗi active worktree: schedule git fetch origin main + git rebase origin/main\n   - Nếu rebase conflict → abort rebase, journal warning, để card tự handle khi verify\n2. Rebase KHÔNG bắt buộc thành công — nếu fail thì card verify step sẽ phát hiện conflict\n3. Async: rebase chạy background, không block main flow\n4. Lock: cần RepoFileLock per-worktree ('card-{id}.lock') khi rebase\n\n## Alternative đơn giản hơn (recommended cho v1):\n- KHÔNG auto-rebase\n- Khi card push branch → nếu PR có conflict → repair step detect và rebase\n- Đã có repair loop → tận dụng existing mechanism\n- Chỉ cần journal entry 'base_advanced' để track\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/service.py — post-merge notification, optional rebase\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu  \n- test_base_advance_journals_notification: card A merge → journal 'base_advanced' cho active cards\n- test_rebase_conflict_non_fatal: rebase fails → journal warning, card continues\n\nSpawn agents: planner (chọn strategy v1 vs full) → tdd-guide → code-reviewer.\nDepends on: P9.3, P9.8.",
-        "status": "repairing",
-        "source_kind": "manual_idea",
-        "source_ref": "",
-        "score": 100,
-        "score_reasons": [
-          "source=manual_idea",
-          "direct user-driven input",
-          "recently updated"
-        ],
-        "labels": [
-          "advanced",
-          "backend",
-          "parallel"
-        ],
-        "created_at": 1777831886.9036999,
-        "updated_at": 1777961312.298651,
-        "metadata": {
-          "last_note": "repairing failed run",
-          "url": "",
-          "execution_model": "oclaude-coder",
-          "assistant_summary_preview": "Let me first understand the current state and run verification to see what's happening. The branch already contains the intended v1 journal-only implementation. I’m running the relevant tests and lint now to confirm it’s actually good in this worktree.The code itself looks intact; the only failur...",
-          "human_gate_pending": false,
-          "verification_failed": true,
-          "attempt_count": 5,
-          "max_attempts": 5,
-          "linked_pr_number": 72,
-          "linked_pr_url": "https://github.com/hodtien/mharness/pull/72",
-          "head_branch": "autopilot/ap-93f7fa1a",
-          "last_ci_conclusion": "failed",
-          "last_ci_summary": "Python tests (3.10)=FAILURE; Python tests (3.11)=FAILURE",
-          "last_failure_stage": "",
-          "last_failure_summary": "",
-          "verification_steps": [
-            {
-              "command": "uv run pytest -q",
-              "status": "skipped",
-              "returncode": -1
-            },
-            {
-              "command": "uv run ruff check src tests scripts",
-              "status": "success",
-              "returncode": 0
-            },
-            {
-              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
-              "status": "success",
-              "returncode": 0
-            },
-            {
-              "command": "agent:code-reviewer (diff vs main)",
-              "status": "error",
-              "returncode": 1
-            }
-          ]
-        }
-      }
-    ],
+    "waiting_ci": [],
+    "repairing": [],
     "completed": [
       {
         "id": "ap-e732a7bf",
@@ -4204,7 +4024,127 @@
         }
       }
     ],
-    "failed": [],
+    "failed": [
+      {
+        "id": "ap-93f7fa1a",
+        "title": "[P9.10] Rebase strategy cho in-flight worktrees",
+        "body": "## Mục tiêu\nKhi card A merge vào main, card B đang chạy trên worktree cũ base → cần rebase để tránh merge conflict.\n\n## Phân tích hiện tại\n- Mỗi worktree branch từ main tại thời điểm create\n- Khi card A merge → main advance → card B worktree stale\n- Card B push branch → PR có conflict với new main\n- Hiện tại không có auto-rebase mechanism\n\n## Giải pháp đề xuất\n1. Sau mỗi _pull_base_branch() (khi card merge xong):\n   - List active worktrees qua count_active_cards()\n   - Cho mỗi active worktree: schedule git fetch origin main + git rebase origin/main\n   - Nếu rebase conflict → abort rebase, journal warning, để card tự handle khi verify\n2. Rebase KHÔNG bắt buộc thành công — nếu fail thì card verify step sẽ phát hiện conflict\n3. Async: rebase chạy background, không block main flow\n4. Lock: cần RepoFileLock per-worktree ('card-{id}.lock') khi rebase\n\n## Alternative đơn giản hơn (recommended cho v1):\n- KHÔNG auto-rebase\n- Khi card push branch → nếu PR có conflict → repair step detect và rebase\n- Đã có repair loop → tận dụng existing mechanism\n- Chỉ cần journal entry 'base_advanced' để track\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/service.py — post-merge notification, optional rebase\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu  \n- test_base_advance_journals_notification: card A merge → journal 'base_advanced' cho active cards\n- test_rebase_conflict_non_fatal: rebase fails → journal warning, card continues\n\nSpawn agents: planner (chọn strategy v1 vs full) → tdd-guide → code-reviewer.\nDepends on: P9.3, P9.8.",
+        "status": "failed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [
+          "advanced",
+          "backend",
+          "parallel"
+        ],
+        "created_at": 1777831886.9036999,
+        "updated_at": 1777983768.505169,
+        "metadata": {
+          "last_note": "repair rounds exhausted",
+          "url": "",
+          "execution_model": "oclaude-coder",
+          "assistant_summary_preview": "Now let me check where `_handle_base_branch_advanced` is called after merge:Made the smallest fix to keep this v1 behavior aligned with the “recommended simpler strategy”: ### What changed - In `src/openharness/autopilot/service.py`, post-merge handling now calls `_handle_base_branch_advanced(......",
+          "human_gate_pending": true,
+          "verification_failed": false,
+          "attempt_count": 5,
+          "max_attempts": 5,
+          "linked_pr_number": 72,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/72",
+          "head_branch": "autopilot/ap-93f7fa1a",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "Python tests (3.10)=SUCCESS; Python tests (3.11)=SUCCESS; Python quality=SUCCESS; Frontend typecheck=SUCCESS",
+          "last_failure_stage": "repair_exhausted",
+          "last_failure_summary": "repair rounds exhausted",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "failed",
+              "returncode": 1
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-5d3976a2",
+        "title": "[P9.11] Integration test: 2 cards chạy song song end-to-end",
+        "body": "## Mục tiêu\nTest tích hợp đảm bảo 2 autopilot cards có thể chạy song song không conflict.\n\n## Test scenarios\n1. test_two_cards_claim_different_cards:\n   - Enqueue 3 cards\n   - 2 workers gọi pick_and_claim_card() đồng thời\n   - Mỗi worker nhận card khác nhau\n   - Không card nào bị claim 2 lần\n\n2. test_two_cards_run_in_parallel_worktrees:\n   - 2 cards claimed\n   - Mỗi card tạo worktree riêng (slug khác nhau)\n   - Cả 2 chạy đồng thời không conflict\n   - Registry reflect cả 2 đang running\n\n3. test_capacity_gate_blocks_third_card:\n   - max_parallel_runs=2\n   - 2 cards đang running\n   - run_next() cho card thứ 3 → blocked (409)\n   - Card 1 finish → run_next() cho card 3 → OK\n\n4. test_merge_one_does_not_corrupt_other:\n   - Card A merge → _pull_base_branch()\n   - Card B vẫn running → không bị ảnh hưởng\n   - Registry vẫn correct\n\n5. test_crash_cleanup_does_not_affect_sibling:\n   - Card A crash → worktree cleanup\n   - Card B vẫn running bình thường\n\n## Files cần sửa\n- NEW: tests/test_autopilot/test_parallel_execution.py\n\n## Mock strategy\n- Mock _run_agent_prompt, _run_gh, git commands\n- Dùng real file system (tmp_path) cho registry + journal + worktree dirs\n- Dùng threading cho concurrent execution\n\nSpawn agents: tdd-guide (viết toàn bộ test scenarios) → code-reviewer.\nDepends on: P9.1, P9.2, P9.3, P9.7, P9.8, P9.9.",
+        "status": "failed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 100,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "recently updated"
+        ],
+        "labels": [
+          "parallel",
+          "testing"
+        ],
+        "created_at": 1777831907.458444,
+        "updated_at": 1777984149.6776881,
+        "metadata": {
+          "last_note": "1 verification gate(s) failed",
+          "url": "",
+          "execution_model": "oclaude-coder",
+          "assistant_summary_preview": "Let me run the verification commands to see the current state: All verification commands pass! Let me check what the previous failure was about:Done — no code changes were needed. ### What changed - The requested integration test file already exists at `tests/test_autopilot/test_parallel_executio...",
+          "human_gate_pending": true,
+          "verification_failed": true,
+          "attempt_count": 5,
+          "max_attempts": 5,
+          "linked_pr_number": 73,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/73",
+          "head_branch": "autopilot/ap-5d3976a2",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "Python tests (3.10)=SUCCESS; Python tests (3.11)=SUCCESS; Python quality=SUCCESS; Frontend typecheck=SUCCESS",
+          "last_failure_stage": "local_verification_failed",
+          "last_failure_summary": "agent:code-reviewer (diff vs main) rc=1",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "failed",
+              "returncode": 1
+            }
+          ]
+        }
+      }
+    ],
     "rejected": [
       {
         "id": "ap-000584f0",
@@ -4842,125 +4782,6 @@
     "superseded": []
   },
   "cards": [
-    {
-      "id": "ap-93f7fa1a",
-      "title": "[P9.10] Rebase strategy cho in-flight worktrees",
-      "body": "## Mục tiêu\nKhi card A merge vào main, card B đang chạy trên worktree cũ base → cần rebase để tránh merge conflict.\n\n## Phân tích hiện tại\n- Mỗi worktree branch từ main tại thời điểm create\n- Khi card A merge → main advance → card B worktree stale\n- Card B push branch → PR có conflict với new main\n- Hiện tại không có auto-rebase mechanism\n\n## Giải pháp đề xuất\n1. Sau mỗi _pull_base_branch() (khi card merge xong):\n   - List active worktrees qua count_active_cards()\n   - Cho mỗi active worktree: schedule git fetch origin main + git rebase origin/main\n   - Nếu rebase conflict → abort rebase, journal warning, để card tự handle khi verify\n2. Rebase KHÔNG bắt buộc thành công — nếu fail thì card verify step sẽ phát hiện conflict\n3. Async: rebase chạy background, không block main flow\n4. Lock: cần RepoFileLock per-worktree ('card-{id}.lock') khi rebase\n\n## Alternative đơn giản hơn (recommended cho v1):\n- KHÔNG auto-rebase\n- Khi card push branch → nếu PR có conflict → repair step detect và rebase\n- Đã có repair loop → tận dụng existing mechanism\n- Chỉ cần journal entry 'base_advanced' để track\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/service.py — post-merge notification, optional rebase\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu  \n- test_base_advance_journals_notification: card A merge → journal 'base_advanced' cho active cards\n- test_rebase_conflict_non_fatal: rebase fails → journal warning, card continues\n\nSpawn agents: planner (chọn strategy v1 vs full) → tdd-guide → code-reviewer.\nDepends on: P9.3, P9.8.",
-      "status": "repairing",
-      "source_kind": "manual_idea",
-      "source_ref": "",
-      "score": 100,
-      "score_reasons": [
-        "source=manual_idea",
-        "direct user-driven input",
-        "recently updated"
-      ],
-      "labels": [
-        "advanced",
-        "backend",
-        "parallel"
-      ],
-      "created_at": 1777831886.9036999,
-      "updated_at": 1777961312.298651,
-      "metadata": {
-        "last_note": "repairing failed run",
-        "url": "",
-        "execution_model": "oclaude-coder",
-        "assistant_summary_preview": "Let me first understand the current state and run verification to see what's happening. The branch already contains the intended v1 journal-only implementation. I’m running the relevant tests and lint now to confirm it’s actually good in this worktree.The code itself looks intact; the only failur...",
-        "human_gate_pending": false,
-        "verification_failed": true,
-        "attempt_count": 5,
-        "max_attempts": 5,
-        "linked_pr_number": 72,
-        "linked_pr_url": "https://github.com/hodtien/mharness/pull/72",
-        "head_branch": "autopilot/ap-93f7fa1a",
-        "last_ci_conclusion": "failed",
-        "last_ci_summary": "Python tests (3.10)=FAILURE; Python tests (3.11)=FAILURE",
-        "last_failure_stage": "",
-        "last_failure_summary": "",
-        "verification_steps": [
-          {
-            "command": "uv run pytest -q",
-            "status": "skipped",
-            "returncode": -1
-          },
-          {
-            "command": "uv run ruff check src tests scripts",
-            "status": "success",
-            "returncode": 0
-          },
-          {
-            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
-            "status": "success",
-            "returncode": 0
-          },
-          {
-            "command": "agent:code-reviewer (diff vs main)",
-            "status": "error",
-            "returncode": 1
-          }
-        ]
-      }
-    },
-    {
-      "id": "ap-5d3976a2",
-      "title": "[P9.11] Integration test: 2 cards chạy song song end-to-end",
-      "body": "## Mục tiêu\nTest tích hợp đảm bảo 2 autopilot cards có thể chạy song song không conflict.\n\n## Test scenarios\n1. test_two_cards_claim_different_cards:\n   - Enqueue 3 cards\n   - 2 workers gọi pick_and_claim_card() đồng thời\n   - Mỗi worker nhận card khác nhau\n   - Không card nào bị claim 2 lần\n\n2. test_two_cards_run_in_parallel_worktrees:\n   - 2 cards claimed\n   - Mỗi card tạo worktree riêng (slug khác nhau)\n   - Cả 2 chạy đồng thời không conflict\n   - Registry reflect cả 2 đang running\n\n3. test_capacity_gate_blocks_third_card:\n   - max_parallel_runs=2\n   - 2 cards đang running\n   - run_next() cho card thứ 3 → blocked (409)\n   - Card 1 finish → run_next() cho card 3 → OK\n\n4. test_merge_one_does_not_corrupt_other:\n   - Card A merge → _pull_base_branch()\n   - Card B vẫn running → không bị ảnh hưởng\n   - Registry vẫn correct\n\n5. test_crash_cleanup_does_not_affect_sibling:\n   - Card A crash → worktree cleanup\n   - Card B vẫn running bình thường\n\n## Files cần sửa\n- NEW: tests/test_autopilot/test_parallel_execution.py\n\n## Mock strategy\n- Mock _run_agent_prompt, _run_gh, git commands\n- Dùng real file system (tmp_path) cho registry + journal + worktree dirs\n- Dùng threading cho concurrent execution\n\nSpawn agents: tdd-guide (viết toàn bộ test scenarios) → code-reviewer.\nDepends on: P9.1, P9.2, P9.3, P9.7, P9.8, P9.9.",
-      "status": "waiting_ci",
-      "source_kind": "manual_idea",
-      "source_ref": "",
-      "score": 100,
-      "score_reasons": [
-        "source=manual_idea",
-        "direct user-driven input",
-        "recently updated"
-      ],
-      "labels": [
-        "parallel",
-        "testing"
-      ],
-      "created_at": 1777831907.458444,
-      "updated_at": 1777962045.998707,
-      "metadata": {
-        "last_note": "Pushed validated fast-forward update to PR #73 after non-fast-forward failure",
-        "url": "",
-        "execution_model": "oclaude-coder",
-        "assistant_summary_preview": "Now I have enough context. The file already has tests 1 & 2. I need to add tests 3, 4, and 5. Let me implement them: Now let's run all the parallel execution tests to see if they work:The tests in worktree directory were not discovered because they are missing from the main repo. Let me copy them...",
-        "human_gate_pending": false,
-        "verification_failed": false,
-        "attempt_count": 4,
-        "max_attempts": 5,
-        "linked_pr_number": 73,
-        "linked_pr_url": "https://github.com/hodtien/mharness/pull/73",
-        "head_branch": "autopilot/ap-5d3976a2",
-        "last_ci_conclusion": "failed",
-        "last_ci_summary": "Python tests (3.10)=FAILURE; Python tests (3.11)=FAILURE",
-        "last_failure_stage": "",
-        "last_failure_summary": "",
-        "verification_steps": [
-          {
-            "command": "uv run pytest -q",
-            "status": "skipped",
-            "returncode": 1
-          },
-          {
-            "command": "uv run ruff check src tests scripts",
-            "status": "skipped",
-            "returncode": 1
-          },
-          {
-            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
-            "status": "success",
-            "returncode": 0
-          },
-          {
-            "command": "agent:code-reviewer (diff vs main)",
-            "status": "success",
-            "returncode": 0
-          }
-        ]
-      }
-    },
     {
       "id": "ap-e732a7bf",
       "title": "[P2.2] Backend: PATCH /api/modes — thay đổi modes runtime",
@@ -8940,6 +8761,125 @@
       }
     },
     {
+      "id": "ap-93f7fa1a",
+      "title": "[P9.10] Rebase strategy cho in-flight worktrees",
+      "body": "## Mục tiêu\nKhi card A merge vào main, card B đang chạy trên worktree cũ base → cần rebase để tránh merge conflict.\n\n## Phân tích hiện tại\n- Mỗi worktree branch từ main tại thời điểm create\n- Khi card A merge → main advance → card B worktree stale\n- Card B push branch → PR có conflict với new main\n- Hiện tại không có auto-rebase mechanism\n\n## Giải pháp đề xuất\n1. Sau mỗi _pull_base_branch() (khi card merge xong):\n   - List active worktrees qua count_active_cards()\n   - Cho mỗi active worktree: schedule git fetch origin main + git rebase origin/main\n   - Nếu rebase conflict → abort rebase, journal warning, để card tự handle khi verify\n2. Rebase KHÔNG bắt buộc thành công — nếu fail thì card verify step sẽ phát hiện conflict\n3. Async: rebase chạy background, không block main flow\n4. Lock: cần RepoFileLock per-worktree ('card-{id}.lock') khi rebase\n\n## Alternative đơn giản hơn (recommended cho v1):\n- KHÔNG auto-rebase\n- Khi card push branch → nếu PR có conflict → repair step detect và rebase\n- Đã có repair loop → tận dụng existing mechanism\n- Chỉ cần journal entry 'base_advanced' để track\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/service.py — post-merge notification, optional rebase\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu  \n- test_base_advance_journals_notification: card A merge → journal 'base_advanced' cho active cards\n- test_rebase_conflict_non_fatal: rebase fails → journal warning, card continues\n\nSpawn agents: planner (chọn strategy v1 vs full) → tdd-guide → code-reviewer.\nDepends on: P9.3, P9.8.",
+      "status": "failed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [
+        "advanced",
+        "backend",
+        "parallel"
+      ],
+      "created_at": 1777831886.9036999,
+      "updated_at": 1777983768.505169,
+      "metadata": {
+        "last_note": "repair rounds exhausted",
+        "url": "",
+        "execution_model": "oclaude-coder",
+        "assistant_summary_preview": "Now let me check where `_handle_base_branch_advanced` is called after merge:Made the smallest fix to keep this v1 behavior aligned with the “recommended simpler strategy”: ### What changed - In `src/openharness/autopilot/service.py`, post-merge handling now calls `_handle_base_branch_advanced(......",
+        "human_gate_pending": true,
+        "verification_failed": false,
+        "attempt_count": 5,
+        "max_attempts": 5,
+        "linked_pr_number": 72,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/72",
+        "head_branch": "autopilot/ap-93f7fa1a",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "Python tests (3.10)=SUCCESS; Python tests (3.11)=SUCCESS; Python quality=SUCCESS; Frontend typecheck=SUCCESS",
+        "last_failure_stage": "repair_exhausted",
+        "last_failure_summary": "repair rounds exhausted",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "failed",
+            "returncode": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-5d3976a2",
+      "title": "[P9.11] Integration test: 2 cards chạy song song end-to-end",
+      "body": "## Mục tiêu\nTest tích hợp đảm bảo 2 autopilot cards có thể chạy song song không conflict.\n\n## Test scenarios\n1. test_two_cards_claim_different_cards:\n   - Enqueue 3 cards\n   - 2 workers gọi pick_and_claim_card() đồng thời\n   - Mỗi worker nhận card khác nhau\n   - Không card nào bị claim 2 lần\n\n2. test_two_cards_run_in_parallel_worktrees:\n   - 2 cards claimed\n   - Mỗi card tạo worktree riêng (slug khác nhau)\n   - Cả 2 chạy đồng thời không conflict\n   - Registry reflect cả 2 đang running\n\n3. test_capacity_gate_blocks_third_card:\n   - max_parallel_runs=2\n   - 2 cards đang running\n   - run_next() cho card thứ 3 → blocked (409)\n   - Card 1 finish → run_next() cho card 3 → OK\n\n4. test_merge_one_does_not_corrupt_other:\n   - Card A merge → _pull_base_branch()\n   - Card B vẫn running → không bị ảnh hưởng\n   - Registry vẫn correct\n\n5. test_crash_cleanup_does_not_affect_sibling:\n   - Card A crash → worktree cleanup\n   - Card B vẫn running bình thường\n\n## Files cần sửa\n- NEW: tests/test_autopilot/test_parallel_execution.py\n\n## Mock strategy\n- Mock _run_agent_prompt, _run_gh, git commands\n- Dùng real file system (tmp_path) cho registry + journal + worktree dirs\n- Dùng threading cho concurrent execution\n\nSpawn agents: tdd-guide (viết toàn bộ test scenarios) → code-reviewer.\nDepends on: P9.1, P9.2, P9.3, P9.7, P9.8, P9.9.",
+      "status": "failed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 100,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "recently updated"
+      ],
+      "labels": [
+        "parallel",
+        "testing"
+      ],
+      "created_at": 1777831907.458444,
+      "updated_at": 1777984149.6776881,
+      "metadata": {
+        "last_note": "1 verification gate(s) failed",
+        "url": "",
+        "execution_model": "oclaude-coder",
+        "assistant_summary_preview": "Let me run the verification commands to see the current state: All verification commands pass! Let me check what the previous failure was about:Done — no code changes were needed. ### What changed - The requested integration test file already exists at `tests/test_autopilot/test_parallel_executio...",
+        "human_gate_pending": true,
+        "verification_failed": true,
+        "attempt_count": 5,
+        "max_attempts": 5,
+        "linked_pr_number": 73,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/73",
+        "head_branch": "autopilot/ap-5d3976a2",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "Python tests (3.10)=SUCCESS; Python tests (3.11)=SUCCESS; Python quality=SUCCESS; Frontend typecheck=SUCCESS",
+        "last_failure_stage": "local_verification_failed",
+        "last_failure_summary": "agent:code-reviewer (diff vs main) rc=1",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "failed",
+            "returncode": 1
+          }
+        ]
+      }
+    },
+    {
       "id": "ap-000584f0",
       "title": "GitHub PR #8: Claude/review repo code m vtiq",
       "body": "",
@@ -9574,119 +9514,14 @@
   ],
   "journal": [
     {
-      "timestamp": 1777946367.68276,
-      "kind": "run_finished",
-      "summary": "Agent run finished for [P9.10] Rebase strategy cho in-flight worktrees",
-      "task_id": "ap-93f7fa1a",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-93f7fa1a-attempt-02-run.md",
-        "attempt_count": 2
-      }
-    },
-    {
-      "timestamp": 1777946367.692568,
-      "kind": "status_verifying",
-      "summary": "verifying: [P9.10] Rebase strategy cho in-flight worktrees (running verification gates)",
-      "task_id": "ap-93f7fa1a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777946375.831619,
-      "kind": "existing_progress_detected",
-      "summary": "[P9.11] Integration test: 2 cards chạy song song end-to-end: reusing existing local branch progress",
-      "task_id": "ap-5d3976a2",
-      "metadata": {
-        "attempt_count": 2,
-        "head_branch": "autopilot/ap-5d3976a2"
-      }
-    },
-    {
-      "timestamp": 1777946382.041136,
-      "kind": "status_waiting_ci",
-      "summary": "waiting_ci: [P9.11] Integration test: 2 cards chạy song song end-to-end (waiting for remote CI on PR #73)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777946383.865341,
-      "kind": "status_waiting_ci",
-      "summary": "waiting_ci: [P9.11] Integration test: 2 cards chạy song song end-to-end (remote CI status: failed)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777946383.900264,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (remote CI failed; retrying)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777946383.917409,
-      "kind": "ci_failed_retry",
-      "summary": "[P9.11] Integration test: 2 cards chạy song song end-to-end: remote CI failed, retrying",
-      "task_id": "ap-5d3976a2",
-      "metadata": {
-        "pr_number": 73,
-        "attempt_count": 2
-      }
-    },
-    {
-      "timestamp": 1777946385.5943801,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (repairing failed run)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777946402.5654678,
+      "timestamp": 1777975180.399519,
       "kind": "status_repairing",
       "summary": "repairing: [P9.10] Rebase strategy cho in-flight worktrees (local verification failed; retrying)",
       "task_id": "ap-93f7fa1a",
       "metadata": {}
     },
     {
-      "timestamp": 1777946402.5809321,
-      "kind": "verification_failed",
-      "summary": "[P9.10] Rebase strategy cho in-flight worktrees: local verification failed, retrying",
-      "task_id": "ap-93f7fa1a",
-      "metadata": {
-        "attempt_count": 2
-      }
-    },
-    {
-      "timestamp": 1777946403.2228942,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.10] Rebase strategy cho in-flight worktrees (repairing failed run)",
-      "task_id": "ap-93f7fa1a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777946478.9605849,
-      "kind": "run_finished",
-      "summary": "Agent run finished for [P9.10] Rebase strategy cho in-flight worktrees",
-      "task_id": "ap-93f7fa1a",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-93f7fa1a-attempt-03-run.md",
-        "attempt_count": 3
-      }
-    },
-    {
-      "timestamp": 1777946478.977002,
-      "kind": "status_verifying",
-      "summary": "verifying: [P9.10] Rebase strategy cho in-flight worktrees (running verification gates)",
-      "task_id": "ap-93f7fa1a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777948309.439958,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.10] Rebase strategy cho in-flight worktrees (local verification failed; retrying)",
-      "task_id": "ap-93f7fa1a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777948309.489783,
+      "timestamp": 1777975180.4248161,
       "kind": "verification_failed",
       "summary": "[P9.10] Rebase strategy cho in-flight worktrees: local verification failed, retrying",
       "task_id": "ap-93f7fa1a",
@@ -9695,28 +9530,99 @@
       }
     },
     {
-      "timestamp": 1777948316.3748229,
+      "timestamp": 1777975181.164642,
       "kind": "status_repairing",
       "summary": "repairing: [P9.10] Rebase strategy cho in-flight worktrees (repairing failed run)",
       "task_id": "ap-93f7fa1a",
       "metadata": {}
     },
     {
-      "timestamp": 1777951911.0055768,
-      "kind": "status_rejected",
-      "summary": "rejected: [P9.10] Rebase strategy cho in-flight worktrees (Human gate: CRITICAL review found P9.10 only journals base_advanced; missing ...)",
+      "timestamp": 1777975266.359074,
+      "kind": "run_finished",
+      "summary": "Agent run finished for [P9.10] Rebase strategy cho in-flight worktrees",
+      "task_id": "ap-93f7fa1a",
+      "metadata": {
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-93f7fa1a-attempt-04-run.md",
+        "attempt_count": 4
+      }
+    },
+    {
+      "timestamp": 1777975266.369123,
+      "kind": "status_verifying",
+      "summary": "verifying: [P9.10] Rebase strategy cho in-flight worktrees (running verification gates)",
       "task_id": "ap-93f7fa1a",
       "metadata": {}
     },
     {
-      "timestamp": 1777951911.043723,
-      "kind": "status_rejected",
-      "summary": "rejected: [P9.11] Integration test: 2 cards chạy song song end-to-end (Human gate: HIGH review found P9.11 test is mostly mocked and not true end-to...)",
-      "task_id": "ap-5d3976a2",
+      "timestamp": 1777975320.952307,
+      "kind": "status_repairing",
+      "summary": "repairing: [P9.10] Rebase strategy cho in-flight worktrees (local verification failed; retrying)",
+      "task_id": "ap-93f7fa1a",
       "metadata": {}
     },
     {
-      "timestamp": 1777960970.477623,
+      "timestamp": 1777975320.9776142,
+      "kind": "verification_failed",
+      "summary": "[P9.10] Rebase strategy cho in-flight worktrees: local verification failed, retrying",
+      "task_id": "ap-93f7fa1a",
+      "metadata": {
+        "attempt_count": 4
+      }
+    },
+    {
+      "timestamp": 1777975321.8924649,
+      "kind": "status_repairing",
+      "summary": "repairing: [P9.10] Rebase strategy cho in-flight worktrees (repairing failed run)",
+      "task_id": "ap-93f7fa1a",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777975418.9068391,
+      "kind": "run_finished",
+      "summary": "Agent run finished for [P9.10] Rebase strategy cho in-flight worktrees",
+      "task_id": "ap-93f7fa1a",
+      "metadata": {
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-93f7fa1a-attempt-05-run.md",
+        "attempt_count": 5
+      }
+    },
+    {
+      "timestamp": 1777975418.923811,
+      "kind": "status_verifying",
+      "summary": "verifying: [P9.10] Rebase strategy cho in-flight worktrees (running verification gates)",
+      "task_id": "ap-93f7fa1a",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777975477.830624,
+      "kind": "status_failed",
+      "summary": "failed: [P9.10] Rebase strategy cho in-flight worktrees (1 verification gate(s) failed)",
+      "task_id": "ap-93f7fa1a",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777975477.853625,
+      "kind": "verification_failed",
+      "summary": "[P9.10] Rebase strategy cho in-flight worktrees: 1 verification gate(s) failed",
+      "task_id": "ap-93f7fa1a",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777983768.448747,
+      "kind": "status_preparing",
+      "summary": "preparing: [P9.10] Rebase strategy cho in-flight worktrees (preparing isolated worktree)",
+      "task_id": "ap-93f7fa1a",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777983768.513088,
+      "kind": "status_failed",
+      "summary": "failed: [P9.10] Rebase strategy cho in-flight worktrees (repair rounds exhausted)",
+      "task_id": "ap-93f7fa1a",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777983768.546011,
       "kind": "worktree_cleanup",
       "summary": "Removed stale worktree for terminal card ap-5d3976a2",
       "task_id": "ap-5d3976a2",
@@ -9725,58 +9631,61 @@
       }
     },
     {
-      "timestamp": 1777960970.720876,
-      "kind": "worktree_cleanup",
-      "summary": "Removed stale worktree for terminal card ap-93f7fa1a",
-      "task_id": "ap-93f7fa1a",
-      "metadata": {
-        "worktree_slug": "autopilot/ap-93f7fa1a"
-      }
-    },
-    {
-      "timestamp": 1777961007.79598,
-      "kind": "status_queued",
-      "summary": "queued: [P9.10] Rebase strategy cho in-flight worktrees (retry after manual fix commit c2bb14c)",
-      "task_id": "ap-93f7fa1a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777961007.832682,
-      "kind": "status_queued",
-      "summary": "queued: [P9.11] Integration test: 2 cards chạy song song end-to-end (retry after manual fix commit c2bb14c)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777961311.459682,
-      "kind": "status_preparing",
-      "summary": "preparing: [P9.10] Rebase strategy cho in-flight worktrees (preparing isolated worktree)",
-      "task_id": "ap-93f7fa1a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777961311.587313,
+      "timestamp": 1777983768.777335,
       "kind": "status_preparing",
       "summary": "preparing: [P9.11] Integration test: 2 cards chạy song song end-to-end (preparing isolated worktree)",
       "task_id": "ap-5d3976a2",
       "metadata": {}
     },
     {
-      "timestamp": 1777961312.285016,
+      "timestamp": 1777983769.98167,
       "kind": "status_repairing",
       "summary": "repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (repairing failed run)",
       "task_id": "ap-5d3976a2",
       "metadata": {}
     },
     {
-      "timestamp": 1777961312.302999,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.10] Rebase strategy cho in-flight worktrees (repairing failed run)",
-      "task_id": "ap-93f7fa1a",
+      "timestamp": 1777983840.298251,
+      "kind": "run_finished",
+      "summary": "Agent run finished for [P9.11] Integration test: 2 cards chạy song song end-to-end",
+      "task_id": "ap-5d3976a2",
+      "metadata": {
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-5d3976a2-attempt-03-run.md",
+        "attempt_count": 3
+      }
+    },
+    {
+      "timestamp": 1777983840.326745,
+      "kind": "status_verifying",
+      "summary": "verifying: [P9.11] Integration test: 2 cards chạy song song end-to-end (running verification gates)",
+      "task_id": "ap-5d3976a2",
       "metadata": {}
     },
     {
-      "timestamp": 1777961649.292747,
+      "timestamp": 1777983905.212123,
+      "kind": "status_repairing",
+      "summary": "repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (local verification failed; retrying)",
+      "task_id": "ap-5d3976a2",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777983905.2431731,
+      "kind": "verification_failed",
+      "summary": "[P9.11] Integration test: 2 cards chạy song song end-to-end: local verification failed, retrying",
+      "task_id": "ap-5d3976a2",
+      "metadata": {
+        "attempt_count": 3
+      }
+    },
+    {
+      "timestamp": 1777983906.324029,
+      "kind": "status_repairing",
+      "summary": "repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (repairing failed run)",
+      "task_id": "ap-5d3976a2",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777983977.753624,
       "kind": "run_finished",
       "summary": "Agent run finished for [P9.11] Integration test: 2 cards chạy song song end-to-end",
       "task_id": "ap-5d3976a2",
@@ -9786,23 +9695,56 @@
       }
     },
     {
-      "timestamp": 1777961649.305742,
+      "timestamp": 1777983977.772876,
       "kind": "status_verifying",
       "summary": "verifying: [P9.11] Integration test: 2 cards chạy song song end-to-end (running verification gates)",
       "task_id": "ap-5d3976a2",
       "metadata": {}
     },
     {
-      "timestamp": 1777961653.467675,
-      "kind": "status_failed",
-      "summary": "failed: [P9.11] Integration test: 2 cards chạy song song end-to-end (Failed to push branch or upsert PR: To https://github.com/hodtien/mharness.gi...)",
+      "timestamp": 1777984021.545813,
+      "kind": "status_repairing",
+      "summary": "repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (local verification failed; retrying)",
       "task_id": "ap-5d3976a2",
       "metadata": {}
     },
     {
-      "timestamp": 1777962046.002997,
-      "kind": "status_waiting_ci",
-      "summary": "waiting_ci: [P9.11] Integration test: 2 cards chạy song song end-to-end (Pushed validated fast-forward update to PR #73 after non-fast-forward failure)",
+      "timestamp": 1777984021.576139,
+      "kind": "verification_failed",
+      "summary": "[P9.11] Integration test: 2 cards chạy song song end-to-end: local verification failed, retrying",
+      "task_id": "ap-5d3976a2",
+      "metadata": {
+        "attempt_count": 4
+      }
+    },
+    {
+      "timestamp": 1777984022.600747,
+      "kind": "status_repairing",
+      "summary": "repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (repairing failed run)",
+      "task_id": "ap-5d3976a2",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777984104.359218,
+      "kind": "run_finished",
+      "summary": "Agent run finished for [P9.11] Integration test: 2 cards chạy song song end-to-end",
+      "task_id": "ap-5d3976a2",
+      "metadata": {
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-5d3976a2-attempt-05-run.md",
+        "attempt_count": 5
+      }
+    },
+    {
+      "timestamp": 1777984104.377524,
+      "kind": "status_verifying",
+      "summary": "verifying: [P9.11] Integration test: 2 cards chạy song song end-to-end (running verification gates)",
+      "task_id": "ap-5d3976a2",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1777984149.686313,
+      "kind": "status_failed",
+      "summary": "failed: [P9.11] Integration test: 2 cards chạy song song end-to-end (1 verification gate(s) failed)",
       "task_id": "ap-5d3976a2",
       "metadata": {}
     }
@@ -9812,5 +9754,5 @@
     "verification": "/Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml",
     "release": "/Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
   },
-  "active_context": "# Active Repo Context\n\nGenerated at: 2026-05-05 06:20:46 UTC\n\n## Current Task Focus\n- [repairing] [P9.10] Rebase strategy cho in-flight worktrees (manual_idea, score=100)\n- Detail: ## Mục tiêu Khi card A merge vào main, card B đang chạy trên worktree cũ base → cần rebase để tránh merge conflict. ## Phân tích hiện tại - Mỗi worktree branch từ main tại thời điểm create - Khi card A merge → main ad...\n\n## In Progress\n- [repairing] ap-93f7fa1a [P9.10] Rebase strategy cho in-flight worktrees (manual_idea)\n- [waiting_ci] ap-5d3976a2 [P9.11] Integration test: 2 cards chạy song song end-to-end (manual_idea)\n\n## Next Up\n- No queued items.\n\n## Recently Completed\n- ap-b6a2705c [P9.9] Worktree cleanup finally block\n- ap-e8d98ed7 [P9.6] Frontend: Card detail + model dropdown\n- ap-bd344eb2 [P9.8] Capacity-based concurrency gate thay already_running\n- ap-a0665b96 [P9.7] Configurable max_parallel_runs policy\n- ap-960d5957 [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model\n\n## Recent Failures\n- [rejected] ap-000584f0 GitHub PR #8: Claude/review repo code m vtiq\n- [rejected] ap-0cca6f22 GitHub PR #34: Windows startup fails with ModuleNotFoundError: No module named 'fcnt…\n- [rejected] ap-c6657d82 GitHub PR #61: feat(tools): add structured GitTool with schema-enforced safety\n- [rejected] ap-87a69305 GitHub PR #62: feat(skills): add runtime skill activation\n- [rejected] ap-2a747fb4 GitHub PR #68: feat(memory): integrate optional PowerMem retrieval into system prompt\n\n## Recent Repo Journal\n- 05-05 06:08 status_preparing: preparing: [P9.10] Rebase strategy cho in-flight worktrees (preparing isolated worktree)\n- 05-05 06:08 status_preparing: preparing: [P9.11] Integration test: 2 cards chạy song song end-to-end (preparing isolated worktree)\n- 05-05 06:08 status_repairing: repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (repairing failed run)\n- 05-05 06:08 status_repairing: repairing: [P9.10] Rebase strategy cho in-flight worktrees (repairing failed run)\n- 05-05 06:14 run_finished: Agent run finished for [P9.11] Integration test: 2 cards chạy song song end-to-end\n- 05-05 06:14 status_verifying: verifying: [P9.11] Integration test: 2 cards chạy song song end-to-end (running verification gates)\n- 05-05 06:14 status_failed: failed: [P9.11] Integration test: 2 cards chạy song song end-to-end (Failed to push branch or upsert PR: To https://github.com/hodtien/mharness.gi...)\n- 05-05 06:20 status_waiting_ci: waiting_ci: [P9.11] Integration test: 2 cards chạy song song end-to-end (Pushed validated fast-forward update to PR #73 after non-fast-forward failure)\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
+  "active_context": "# Active Repo Context\n\nGenerated at: 2026-05-05 12:29:09 UTC\n\n## Current Task Focus\n- No active repo task focus yet.\n\n## In Progress\n- None.\n\n## Next Up\n- No queued items.\n\n## Recently Completed\n- ap-b6a2705c [P9.9] Worktree cleanup finally block\n- ap-e8d98ed7 [P9.6] Frontend: Card detail + model dropdown\n- ap-bd344eb2 [P9.8] Capacity-based concurrency gate thay already_running\n- ap-a0665b96 [P9.7] Configurable max_parallel_runs policy\n- ap-960d5957 [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model\n\n## Recent Failures\n- [failed] ap-5d3976a2 [P9.11] Integration test: 2 cards chạy song song end-to-end\n- [failed] ap-93f7fa1a [P9.10] Rebase strategy cho in-flight worktrees\n- [rejected] ap-000584f0 GitHub PR #8: Claude/review repo code m vtiq\n- [rejected] ap-0cca6f22 GitHub PR #34: Windows startup fails with ModuleNotFoundError: No module named 'fcnt…\n- [rejected] ap-c6657d82 GitHub PR #61: feat(tools): add structured GitTool with schema-enforced safety\n\n## Recent Repo Journal\n- 05-05 12:26 run_finished: Agent run finished for [P9.11] Integration test: 2 cards chạy song song end-to-end\n- 05-05 12:26 status_verifying: verifying: [P9.11] Integration test: 2 cards chạy song song end-to-end (running verification gates)\n- 05-05 12:27 status_repairing: repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (local verification failed; retrying)\n- 05-05 12:27 verification_failed: [P9.11] Integration test: 2 cards chạy song song end-to-end: local verification failed, retrying\n- 05-05 12:27 status_repairing: repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (repairing failed run)\n- 05-05 12:28 run_finished: Agent run finished for [P9.11] Integration test: 2 cards chạy song song end-to-end\n- 05-05 12:28 status_verifying: verifying: [P9.11] Integration test: 2 cards chạy song song end-to-end (running verification gates)\n- 05-05 12:29 status_failed: failed: [P9.11] Integration test: 2 cards chạy song song end-to-end (1 verification gate(s) failed)\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
 }
