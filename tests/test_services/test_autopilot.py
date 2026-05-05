@@ -1649,6 +1649,61 @@ def _green_pr_snapshot(pr_number: int) -> tuple[str, str, dict, list]:
     )
 
 
+def test_local_code_review_zero_max_turns_disables_turn_limit(tmp_path: Path, monkeypatch) -> None:
+    import asyncio
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Review no turn limit", body="")
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        store,
+        "_run_git",
+        lambda args, *, cwd=None, check=False: subprocess.CompletedProcess(
+            args,
+            0,
+            stdout="diff --git a/src/example.py b/src/example.py\n",
+            stderr="",
+        ),
+    )
+
+    async def fake_run_agent_prompt(
+        prompt,
+        *,
+        model,
+        max_turns,
+        permission_mode,
+        cwd=None,
+        stream=None,
+        checkpoint_card_id=None,
+        checkpoint_phase=None,
+        checkpoint_attempt=1,
+        resume_messages=None,
+        phase=None,
+    ):
+        seen["max_turns"] = max_turns
+        return "Severity: NONE"
+
+    monkeypatch.setattr(store, "_run_agent_prompt", fake_run_agent_prompt)
+
+    step = asyncio.run(
+        store._run_code_review_step(
+            card,
+            cwd=worktree,
+            base_branch="main",
+            policies={"verification": {"code_review": {"max_turns": 0}}},
+            model="test-model",
+        )
+    )
+
+    assert step.status == "success"
+    assert seen["max_turns"] is None
+
+
 def test_remote_code_review_step_skips_when_disabled(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

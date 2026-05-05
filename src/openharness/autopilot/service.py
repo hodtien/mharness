@@ -3578,7 +3578,8 @@ class RepoAutopilotStore:
         review_cfg = (policies.get("verification") or {}).get("code_review") or {}
         max_chars = int(review_cfg.get("max_diff_chars", 80000))
         block_on = {str(s).lower() for s in review_cfg.get("block_on", ["critical"])}
-        max_turns = int(review_cfg.get("max_turns", 6))
+        raw_turns = review_cfg.get("max_turns", 0)
+        max_turns: int | None = None if raw_turns in (None, "", 0) else int(raw_turns)
 
         try:
             diff_text = (
