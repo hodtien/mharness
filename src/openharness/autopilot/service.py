@@ -1608,6 +1608,14 @@ class RepoAutopilotStore:
                                     task_id=card.id,
                                     metadata={"pr_number": linked_pr_number},
                                 )
+                        try:
+                            self._journal_base_advanced_for_active_cards(base_branch=base_branch, merged_card_id=card.id)
+                        except Exception as exc:
+                            self.append_journal(
+                                kind="base_advanced_warning",
+                                summary=f"failed to journal base_advanced after merge: {exc}",
+                                task_id=card.id,
+                            )
                         return RepoRunResult(
                             card_id=card.id,
                             status="merged",
@@ -1974,6 +1982,18 @@ class RepoAutopilotStore:
     def _install_editable(self, *, cwd: Path | None = None) -> None:
         target = cwd or self._cwd
         self._run_command(["uv", "pip", "install", "-e", "."], cwd=target, timeout=120, check=True)
+
+    def _journal_base_advanced_for_active_cards(self, *, base_branch: str, merged_card_id: str) -> None:
+        registry = self._load_registry()
+        for card in registry.cards:
+            if card.id == merged_card_id or card.status not in self._ACTIVE_STATUSES:
+                continue
+            self.append_journal(
+                kind="base_advanced",
+                summary=f"Base branch {base_branch} advanced while card {card.id} is active",
+                task_id=card.id,
+                metadata={"base_branch": base_branch, "status": card.status, "merged_card_id": merged_card_id},
+            )
 
     def _git_branch_has_progress(self, cwd: Path, *, base_branch: str) -> bool:
         completed = self._run_git(
@@ -2742,6 +2762,14 @@ class RepoAutopilotStore:
                         task_id=card.id,
                         metadata={"pr_number": pr_number},
                     )
+            try:
+                self._journal_base_advanced_for_active_cards(base_branch=self._base_branch(policies), merged_card_id=card.id)
+            except Exception as exc:
+                self.append_journal(
+                    kind="base_advanced_warning",
+                    summary=f"failed to journal base_advanced after merge: {exc}",
+                    task_id=card.id,
+                )
             return RepoRunResult(
                 card_id=card.id,
                 status="merged",

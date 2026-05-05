@@ -2446,6 +2446,89 @@ def test_rebase_inflight_worktrees_updates_active_cards(tmp_path: Path, monkeypa
     assert (["rebase", "origin/main"], active_wt) in calls
     assert any(entry.kind == "rebase_done" and entry.task_id == active.id for entry in entries)
 
+def test_journal_base_advance_for_active_cards(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    merged, _ = store.enqueue_card(source_kind="manual_idea", title="Merged", body="body")
+    active, _ = store.enqueue_card(source_kind="manual_idea", title="Active", body="body")
+    queued, _ = store.enqueue_card(source_kind="manual_idea", title="Queued", body="body")
+    store.update_status(merged.id, status="merged")
+    store.update_status(active.id, status="running")
+    store.update_status(queued.id, status="queued")
+
+    store._journal_base_advanced_for_active_cards(base_branch="main", merged_card_id=merged.id)
+
+    entries = store.load_journal(limit=20)
+    matches = [entry for entry in entries if entry.kind == "base_advanced"]
+    assert len(matches) == 1
+    assert matches[0].task_id == active.id
+    assert matches[0].metadata == {"base_branch": "main", "status": "running", "merged_card_id": merged.id}
+
+
+def test_base_advance_journals_notification(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    merged, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #90: Existing autopilot PR",
+        body="open",
+        source_ref="pr:90",
+    )
+    active, _ = store.enqueue_card(source_kind="manual_idea", title="Active follow-up", body="body")
+    store.update_status(active.id, status="running")
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        return _green_pr_snapshot(pr_number)
+
+    async def fake_remote_review(self, card, pr_number, *, policies, model, base_branch="main", stream=None, checkpoint_attempt=1):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=0,
+            status="success",
+            stdout="Severity: NONE",
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci",
+        fake_wait_for_pr_ci,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pull_base_branch",
+        lambda self, *, base_branch: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._install_editable",
+        lambda self: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(merged.id))
+    entries = store.load_journal(limit=20)
+    matches = [entry for entry in entries if entry.kind == "base_advanced" and entry.task_id == active.id]
+
+    assert result.status == "merged"
+    assert len(matches) == 1
+    assert matches[0].metadata == {"base_branch": "main", "status": "running", "merged_card_id": merged.id}
+
 
 def test_install_editable_runs_uv_pip_install(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
