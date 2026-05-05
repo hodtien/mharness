@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import subprocess
+
 import pytest
 
 from openharness.swarm.worktree import (
+    WorktreeManager,
     _flatten_slug,
     _worktree_branch,
     validate_worktree_slug,
@@ -128,3 +132,53 @@ def test_worktree_branch_with_slash():
 def test_worktree_branch_prefix():
     branch = _worktree_branch("anything")
     assert branch.startswith("worktree-")
+
+
+def _init_repo_with_webui_dist(repo):
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+    (repo / "README.md").write_text("test\n")
+    dist = repo / "frontend" / "webui" / "dist"
+    dist.mkdir(parents=True)
+    (dist / "index.html").write_text("<html></html>\n")
+    subprocess.run(["git", "add", "README.md"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=repo, check=True, capture_output=True)
+    return dist
+
+
+def test_create_worktree_symlinks_webui_dist(tmp_path):
+    repo = tmp_path / "repo"
+    dist = _init_repo_with_webui_dist(repo)
+
+    manager = WorktreeManager(base_dir=tmp_path / "worktrees")
+    worktree = asyncio.run(manager.create_worktree(repo, "autopilot/ap-test"))
+
+    linked_dist = worktree.path / "frontend" / "webui" / "dist"
+    assert linked_dist.is_symlink()
+    assert linked_dist.resolve() == dist.resolve()
+
+
+def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    _init_repo_with_webui_dist(repo)
+    manager = WorktreeManager(base_dir=tmp_path / "worktrees")
+    worktree = asyncio.run(manager.create_worktree(repo, "autopilot/ap-test"))
+    calls: list[tuple[str, ...]] = []
+
+    async def fake_run_git(*args, cwd):
+        calls.append(args)
+        if args[:2] == ("rev-parse", "--git-common-dir"):
+            return 0, str(repo / ".git"), ""
+        if args[:3] == ("worktree", "remove", "--force") and cwd == repo:
+            return 1, "", "busy"
+        if args[:3] == ("worktree", "remove", "--force") and cwd == manager.base_dir:
+            return 0, "", ""
+        return 0, "", ""
+
+    monkeypatch.setattr("openharness.swarm.worktree._run_git", fake_run_git)
+
+    assert asyncio.run(manager.remove_worktree("autopilot/ap-test")) is True
+    assert calls[-1][:3] == ("worktree", "remove", "--force")
+    assert calls[-1][3] == str(worktree.path)
