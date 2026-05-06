@@ -199,6 +199,19 @@ The Web UI auth model is intentionally minimal. Read this section.
 - **Landscape works**, but the bottom-sheet modals assume portrait —
   rotate back to portrait when an approval pops up.
 
+## New in the Web UI
+
+The Web UI now includes the main workflows that used to be easier to reach from the terminal:
+
+- **History / Resume** — browse past sessions, open a transcript, and resume a session from the same state.
+- **Mode toggles** — switch permission mode, effort, passes, fast mode, vim keybindings, output style, and theme from the browser.
+- **Settings** — manage providers, models, and agents without editing local config files by hand.
+- **Pipeline dashboard** — view autopilot cards in a kanban-style dashboard, move work through the pipeline, and submit new ideas.
+- **Auto review** — inspect review state, see pipeline progress, and follow the review/verification flow from the UI.
+
+For the detailed settings guide, see [`WEBUI-SETTINGS.md`](./WEBUI-SETTINGS.md).
+For the pipeline workflow, see [`WEBUI-PIPELINE.md`](./WEBUI-PIPELINE.md).
+
 ## Troubleshooting
 
 | Symptom                                 | Likely cause / fix                                                                 |
