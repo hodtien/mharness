@@ -161,14 +161,15 @@ def test_create_worktree_symlinks_webui_dist(tmp_path):
     assert linked_dist.resolve() == dist.resolve()
 
 
-def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, monkeypatch):
+async def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, monkeypatch):
     # Use a real git repo so we can get real worktree paths, but mock all
     # _run_git calls so the test is fully deterministic cross-platform.
+    # NOTE: This test must be async to work correctly with asyncio_mode="auto".
     repo = tmp_path / "repo"
     _init_repo_with_webui_dist(repo)
 
     manager = WorktreeManager(base_dir=tmp_path / "worktrees")
-    worktree = asyncio.run(manager.create_worktree(repo, "autopilot/ap-test"))
+    worktree = await manager.create_worktree(repo, "autopilot/ap-test")
     worktree_path = worktree.path
 
     # Resolve canonical paths once (handles macOS /var → /private/var)
@@ -198,12 +199,7 @@ def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, mon
 
     monkeypatch.setattr(_wt_mod, "_run_git", fake_run_git)
 
-    # Verify the monkeypatch is active before calling remove_worktree
-    assert _wt_mod._run_git is fake_run_git, (
-        f"Monkeypatch failed: _wt_mod._run_git is {_wt_mod._run_git!r}, expected fake_run_git"
-    )
-
-    result = asyncio.run(manager.remove_worktree("autopilot/ap-test"))
+    result = await manager.remove_worktree("autopilot/ap-test")
     all_call_args = [a for a, _c in calls]
     assert result is True, f"Expected True, got {result!r}. All calls: {all_call_args}"
 
