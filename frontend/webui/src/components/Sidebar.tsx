@@ -46,8 +46,8 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
   }, [tasks.length]);
 
   const content = (
-    <div className="flex h-full w-72 flex-col gap-4 overflow-y-auto border-r border-[var(--border)] bg-[var(--panel)] p-4">
-      <nav aria-label="Primary" className="flex flex-col gap-1">
+    <div className="flex h-full w-72 flex-col gap-3 overflow-y-auto border-r border-[var(--border)] bg-[var(--panel)] p-3">
+      <nav aria-label="Primary" className="flex flex-col gap-2">
         <NavItem to="/chat" label="Chat" icon="💬" onClose={onClose} />
         <NavItem to="/history" label="History" icon="🕘" onClose={onClose} />
         <NavItem to="/autopilot" label="Autopilot" icon="🤖" onClose={onClose} />
@@ -72,42 +72,42 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
         }
       >
         {settingsCollapsed ? (
-          <div className="flex gap-2 text-[11px]">
+          <div className="sidebar-settings-grid">
             <NavLink
               to="/settings/modes"
               className={({ isActive }) =>
-                `flex items-center gap-1 rounded-md border px-2 py-1 transition ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)] text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"}`
+                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)]"}`
               }
               onClick={onClose}
             >
-              🎚️
+              <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>🎚️</span>
             </NavLink>
             <NavLink
               to="/settings/provider"
               className={({ isActive }) =>
-                `flex items-center gap-1 rounded-md border px-2 py-1 transition ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)] text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"}`
+                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)]"}`
               }
               onClick={onClose}
             >
-              🔌
+              <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>🔌</span>
             </NavLink>
             <NavLink
               to="/settings/models"
               className={({ isActive }) =>
-                `flex items-center gap-1 rounded-md border px-2 py-1 transition ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)] text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"}`
+                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)]"}`
               }
               onClick={onClose}
             >
-              🧠
+              <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>🧠</span>
             </NavLink>
             <NavLink
               to="/settings/agents"
               className={({ isActive }) =>
-                `flex items-center gap-1 rounded-md border px-2 py-1 transition ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)] text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"}`
+                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)]"}`
               }
               onClick={onClose}
             >
-              🤖
+              <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>🤖</span>
             </NavLink>
           </div>
         ) : (
@@ -129,7 +129,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
         </div>
 
         <div className="sidebar-status-subsection">
-          <div className="sidebar-status-subsection-title">Access</div>
+          <div className="sidebar-section-title">Access</div>
           <StatusField label="Auth" value={appState?.auth_status} tone={appState?.auth_status === "ok" ? "success" : "danger"} />
           <StatusField label="MCP" value={`${appState?.mcp_connected ?? 0} ok / ${appState?.mcp_failed ?? 0} fail`} tone={(appState?.mcp_failed ?? 0) > 0 ? "danger" : "success"} />
         </div>
@@ -286,14 +286,14 @@ function NavItem({
       end
       onClick={onClose}
       className={({ isActive }) =>
-        `flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition ${
+        `sidebar-nav-link flex items-center gap-1.5 rounded-md border px-2 text-[13px] transition ${
           isActive
             ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
             : "border-transparent text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
         }`
       }
     >
-      <span aria-hidden="true">{icon}</span>
+      <span aria-hidden="true" className="sidebar-nav-icon">{icon}</span>
       <span>{label}</span>
     </NavLink>
   );
@@ -302,10 +302,10 @@ function NavItem({
 function Section({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
     <div>
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-dim)]">
+      <div className="sidebar-section-title">
         {title}
       </div>
-      <div className="flex flex-col gap-1.5">{children}</div>
+      <div className="flex flex-col gap-2">{children}</div>
     </div>
   );
 }
