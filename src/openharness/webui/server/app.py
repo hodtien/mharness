@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from openharness.config.projects import ProjectRegistry
 from openharness.webui.server.config import WebUIConfig
 from openharness.webui.server.routes import agents as agents_routes
 from openharness.webui.server.routes import cron as cron_routes
@@ -125,7 +126,19 @@ def create_app(
     app = FastAPI(title="OpenHarness Web UI", version="0.1.0")
 
     resolved_token = token or generate_token()
-    resolved_cwd = Path(cwd).expanduser().resolve() if cwd else Path.cwd()
+    explicit_cwd = cwd is not None
+    resolved_cwd = Path(cwd).expanduser().resolve() if explicit_cwd else Path.cwd()
+
+    registry = ProjectRegistry()
+    active_project = registry.ensure_default(resolved_cwd)
+    if explicit_cwd:
+        active_project_id = active_project.id if active_project.path == resolved_cwd else None
+    elif active_project is not None:
+        resolved_cwd = active_project.path
+        active_project_id = active_project.id
+    else:
+        active_project_id = None
+
     app.state.webui = WebUIState(
         token=resolved_token,
         cwd=resolved_cwd,
@@ -133,6 +146,7 @@ def create_app(
         api_format=api_format,
         permission_mode=permission_mode,
         extra_meta=dict(extra_meta or {}),
+        active_project_id=active_project_id,
     )
     app.state.webui_session_manager = SessionManager(
         WebUIConfig(
@@ -141,7 +155,8 @@ def create_app(
             model=model,
             api_format=api_format,
             permission_mode=permission_mode,
-        )
+        ),
+        app=app,
     )
 
     app.include_router(health_routes.router)

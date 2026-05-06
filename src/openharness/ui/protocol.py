@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from openharness.state.app_state import AppState
 from openharness.bridge.manager import BridgeSessionRecord
@@ -24,6 +24,7 @@ class FrontendRequest(BaseModel):
         "apply_select_command",
         "interrupt",
         "shutdown",
+        "project_switched",
     ]
     line: str | None = None
     command: str | None = None
@@ -66,6 +67,8 @@ class TaskSnapshot(BaseModel):
 class BackendEvent(BaseModel):
     """One event sent from the Python backend to the React frontend."""
 
+    model_config = ConfigDict(extra="allow")
+
     type: Literal[
         "ready",
         "state_snapshot",
@@ -85,6 +88,7 @@ class BackendEvent(BaseModel):
         "swarm_status",
         "error",
         "shutdown",
+        "project_switched",
     ]
     select_options: list[dict[str, Any]] | None = None
     message: str | None = None
@@ -109,6 +113,8 @@ class BackendEvent(BaseModel):
     plan_mode: str | None = None
     swarm_teammates: list[dict[str, Any]] | None = None
     swarm_notifications: list[dict[str, Any]] | None = None
+    project_id: str | None = None
+    project_path: str | None = None
 
     @classmethod
     def ready(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from dataclasses import asdict
 from pathlib import Path
 
@@ -16,7 +18,11 @@ from openharness.services.projects import (
     list_projects,
     update_project,
 )
-from openharness.webui.server.state import require_token
+from openharness.ui.protocol import BackendEvent
+from openharness.webui.server.sessions import SessionManager
+from openharness.webui.server.state import WebUIState, get_session_manager, get_state, require_token
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/projects",
@@ -73,8 +79,31 @@ def delete_project_endpoint(project_id: str) -> dict[str, bool]:
 
 
 @router.post("/{project_id}/activate")
-def activate_project_endpoint(project_id: str) -> dict[str, object]:
+async def activate_project_endpoint(
+    project_id: str,
+    state: "WebUIState" = Depends(get_state),
+    manager: SessionManager = Depends(get_session_manager),
+) -> dict[str, object]:
     project = activate_project(project_id)
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    state.switch_project(project)
+    manager._config.cwd = str(state.cwd)
+    await _broadcast_project_switched(manager, state.cwd, project.id)
+
     return {"ok": True, "project": asdict(project)}
+
+
+async def _broadcast_project_switched(manager: SessionManager, project_path: Path, project_id: str) -> None:
+    """Emit a project_switched event to every active WebSocket session."""
+    event = BackendEvent(type="project_switched", project_id=project_id, project_path=str(project_path))
+    for entry in manager.entries():
+        host = entry.host
+        emit = getattr(host, "_emit", None)
+        if emit is None:
+            continue
+        try:
+            await emit(event)
+        except Exception as exc:  # pragma: no cover - transport failure
+            log.debug("project_switched broadcast failed: %s", exc)
