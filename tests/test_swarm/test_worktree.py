@@ -181,7 +181,6 @@ async def test_remove_worktree_returns_true_for_existing_worktree(tmp_path):
 async def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path):
     """Unit test: when repo-root git worktree remove fails, fallback to base_dir cwd succeeds."""
     from unittest.mock import patch
-    import openharness.swarm.worktree as _wt_mod
 
     repo = tmp_path / "repo"
     _init_repo_with_webui_dist(repo)
@@ -207,7 +206,9 @@ async def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_pat
             return 0, "", ""
         return 0, "", ""
 
-    with patch("openharness.swarm.worktree._run_git", side_effect=fake_run_git):
+    # Patch the function's globals directly to guarantee interception, avoiding
+    # any potential sys.modules duplication issues on CI.
+    with patch.dict(_ORIGINAL_REMOVE_WORKTREE.__globals__, {"_run_git": fake_run_git}):
         result = await _ORIGINAL_REMOVE_WORKTREE(manager, "autopilot/ap-test")
     
     all_call_args = [a for a, _c in calls]
