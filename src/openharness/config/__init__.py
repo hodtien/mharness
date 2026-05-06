@@ -9,6 +9,11 @@ from openharness.config.paths import (
     get_data_dir,
     get_logs_dir,
 )
+from openharness.config.projects import (
+    Project,
+    ProjectRegistry,
+    get_projects_registry_path,
+)
 from openharness.config.settings import (
     ProviderProfile,
     Settings,
@@ -21,6 +26,8 @@ from openharness.config.settings import (
 
 __all__ = [
     "ProviderProfile",
+    "Project",
+    "ProjectRegistry",
     "Settings",
     "auth_source_provider_name",
     "default_auth_source_for_provider",
@@ -29,6 +36,7 @@ __all__ = [
     "get_config_file_path",
     "get_data_dir",
     "get_logs_dir",
+    "get_projects_registry_path",
     "load_settings",
     "save_settings",
 ]
