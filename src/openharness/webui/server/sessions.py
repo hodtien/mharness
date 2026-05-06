@@ -6,11 +6,15 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from openharness.ui.backend_host import BackendHostConfig
 from openharness.webui.server.bridge import WebSocketBackendHost
 from openharness.webui.server.config import WebUIConfig
+
+if TYPE_CHECKING:  # pragma: no cover
+    from fastapi import FastAPI
 
 log = logging.getLogger(__name__)
 
@@ -27,9 +31,10 @@ class SessionEntry:
 class SessionManager:
     """Lightweight registry of active WebSocket sessions."""
 
-    def __init__(self, config: WebUIConfig) -> None:
+    def __init__(self, config: WebUIConfig, app: "FastAPI | None" = None) -> None:
         self._config = config
         self._sessions: dict[str, SessionEntry] = {}
+        self.app = app
 
     def create_session(
         self,

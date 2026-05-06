@@ -18,6 +18,7 @@ from fastapi import Cookie, Depends, Header, HTTPException, Query, Request, stat
 if TYPE_CHECKING:  # pragma: no cover - type-only imports
     from openharness.bridge.manager import BridgeSessionManager
     from openharness.tasks.manager import BackgroundTaskManager
+    from openharness.services.projects import Project as ServiceProject
 
 
 @dataclass
@@ -30,6 +31,13 @@ class WebUIState:
     api_format: str | None = None
     permission_mode: str | None = None
     extra_meta: dict[str, object] = field(default_factory=dict)
+    active_project_id: str | None = None
+
+    def switch_project(self, project: "ServiceProject") -> None:
+        """Switch to the given project, updating cwd and active_project_id."""
+        self.cwd = Path(project.path).resolve()
+        self.active_project_id = project.id
+
 
 
 def generate_token() -> str:

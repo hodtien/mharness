@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from openharness.services.projects import (
@@ -16,7 +18,12 @@ from openharness.services.projects import (
     list_projects,
     update_project,
 )
-from openharness.webui.server.state import require_token
+from openharness.ui.protocol import BackendEvent
+from openharness.webui.server.config import WebUIConfig
+from openharness.webui.server.sessions import SessionManager
+from openharness.webui.server.state import WebUIState, get_session_manager, get_state, require_token
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/projects",
@@ -73,8 +80,47 @@ def delete_project_endpoint(project_id: str) -> dict[str, bool]:
 
 
 @router.post("/{project_id}/activate")
-def activate_project_endpoint(project_id: str) -> dict[str, object]:
+async def activate_project_endpoint(
+    project_id: str,
+    request: Request,
+    state: "WebUIState" = Depends(get_state),
+    manager: SessionManager = Depends(get_session_manager),
+) -> dict[str, object]:
     project = activate_project(project_id)
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    # Update WebUIState
+    state.switch_project(project)
+
+    # Recreate SessionManager with new cwd
+    new_config = WebUIConfig(
+        token=state.token,
+        cwd=str(project.path),
+        model=state.model,
+        api_format=state.api_format,
+        permission_mode=state.permission_mode,
+    )
+    new_manager = SessionManager(new_config, app=request.app)
+
+    # Update the app state with the new manager
+    request.app.state.webui_session_manager = new_manager
+
+    # Broadcast project_switched event to all connected clients
+    await _broadcast_project_switched(new_manager, project.path, project.id)
+
     return {"ok": True, "project": asdict(project)}
+
+
+async def _broadcast_project_switched(manager: SessionManager, project_path: Path, project_id: str) -> None:
+    """Emit a project_switched event to every active WebSocket session."""
+    event = BackendEvent(type="project_switched", project_id=project_id, project_path=str(project_path))
+    for entry in manager.entries():
+        host = entry.host
+        emit = getattr(host, "_emit", None)
+        if emit is None:
+            continue
+        try:
+            await emit(event)
+        except Exception as exc:  # pragma: no cover - transport failure
+            log.debug("project_switched broadcast failed: %s", exc)
