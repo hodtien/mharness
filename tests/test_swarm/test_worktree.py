@@ -170,15 +170,21 @@ def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, mon
     worktree_path = tmp_path / "worktrees" / "autopilot+ap-test"
     worktree_path.mkdir(parents=True)
 
+    # Resolve once so comparisons work cross-platform (macOS /var → /private/var)
+    fake_repo_r = fake_repo.resolve()
+    base_dir_r = manager.base_dir.resolve()
+
     calls: list[tuple[tuple[str, ...], Path]] = []
 
     async def fake_run_git(*args: str, cwd: Path) -> tuple[int, str, str]:
         calls.append((args, cwd))
         if args[:2] == ("rev-parse", "--git-common-dir"):
-            return 0, str(fake_repo / ".git"), ""
-        if args[:3] == ("worktree", "remove", "--force") and cwd == fake_repo:
+            # Return resolved path so remove_worktree's Path(...).resolve().parent == fake_repo_r
+            return 0, str(fake_repo_r / ".git"), ""
+        cwd_r = Path(cwd).resolve()
+        if args[:3] == ("worktree", "remove", "--force") and cwd_r == fake_repo_r:
             return 1, "", "busy"
-        if args[:3] == ("worktree", "remove", "--force") and cwd == manager.base_dir:
+        if args[:3] == ("worktree", "remove", "--force") and cwd_r == base_dir_r:
             return 0, "", ""
         return 0, "", ""
 
@@ -190,5 +196,5 @@ def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, mon
     assert len(remove_calls) >= 2, f"Expected ≥2 remove calls (repo + fallback), got {remove_calls}"
     # Last remove call must be the fallback (cwd=base_dir)
     last_args, last_cwd = remove_calls[-1]
-    assert last_cwd == manager.base_dir
+    assert Path(last_cwd).resolve() == base_dir_r
     assert last_args[3] == str(worktree_path)
