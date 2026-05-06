@@ -1789,6 +1789,11 @@ class RepoAutopilotStore:
         Returns IDs of recovered cards. Stuck cards happen when the cron tick
         is killed mid-run (timeout, crash, kill -9) — leaving the registry in
         an active status with no live process to drive it.
+
+        Cards in ``waiting_ci`` or ``pr_open`` with a linked PR are handled
+        specially: the remote PR state is checked so the card can be advanced
+        to ``merged`` (if already merged) or kept in ``waiting_ci`` (if still
+        open) instead of blindly resetting to ``queued`` and losing context.
         """
         active_states = {"preparing", "running", "verifying", "waiting_ci", "repairing"}
         now = time.time()
@@ -1800,8 +1805,10 @@ class RepoAutopilotStore:
             if now - updated_at <= self.STUCK_CARD_STALE_SECONDS:
                 continue
             stale_minutes = int((now - updated_at) / 60)
-            note = f"auto-recovered: status={card.status} stale for {stale_minutes}m"
             try:
+                target_status, note, extra_meta = self._resolve_stuck_card_recovery(
+                    card, stale_minutes
+                )
                 ckpt = load_latest_checkpoint(self._runs_dir, card.id)
                 metadata_updates: dict[str, Any] = {
                     "stuck_recovery": {
@@ -1810,7 +1817,8 @@ class RepoAutopilotStore:
                         "recovered_at": now,
                     },
                 }
-                if ckpt is not None and ckpt.has_pending_continuation:
+                metadata_updates.update(extra_meta)
+                if target_status == "queued" and ckpt is not None and ckpt.has_pending_continuation:
                     metadata_updates.update(
                         {
                             "resume_available": True,
@@ -1819,7 +1827,7 @@ class RepoAutopilotStore:
                     )
                 self.update_status(
                     card.id,
-                    status="queued",
+                    status=target_status,
                     note=note,
                     metadata_updates=metadata_updates,
                 )
@@ -1836,6 +1844,63 @@ class RepoAutopilotStore:
                     task_id=card.id,
                 )
         return recovered
+
+    def _resolve_stuck_card_recovery(
+        self, card: RepoTaskCard, stale_minutes: int
+    ) -> tuple[str, str, dict[str, Any]]:
+        """Decide target status for a stuck card based on its PR state.
+
+        Returns ``(target_status, note, extra_metadata_updates)``.
+        """
+        pr_linked_states = {"waiting_ci", "pr_open"}
+        linked_pr = self._linked_pr_number(card)
+
+        if card.status not in pr_linked_states or linked_pr is None:
+            return (
+                "queued",
+                f"auto-recovered: status={card.status} stale for {stale_minutes}m",
+                {},
+            )
+
+        try:
+            snapshot = self._pr_status_snapshot(linked_pr)
+        except Exception:
+            return (
+                "queued",
+                f"auto-recovered: status={card.status} stale for {stale_minutes}m (PR #{linked_pr} unreachable)",
+                {"linked_pr_number": None, "linked_pr_url": ""},
+            )
+
+        pr_state = _safe_text(snapshot.get("state")).upper()
+        pr_head = _safe_text(snapshot.get("headRefName"))
+        expected_head = _safe_text(card.metadata.get("head_branch"))
+
+        if pr_head and expected_head and pr_head != expected_head:
+            return (
+                "queued",
+                f"auto-recovered: PR #{linked_pr} branch mismatch ({pr_head} != {expected_head}), stale for {stale_minutes}m",
+                {"linked_pr_number": None, "linked_pr_url": "", "human_gate_pending": False, "verification_failed": False},
+            )
+
+        if pr_state == "MERGED":
+            return (
+                "merged",
+                f"auto-recovered: PR #{linked_pr} already merged (stale {stale_minutes}m in {card.status})",
+                {"human_gate_pending": False},
+            )
+
+        if pr_state == "OPEN":
+            return (
+                "waiting_ci",
+                f"auto-recovered: PR #{linked_pr} still open, resuming CI watch (stale {stale_minutes}m)",
+                {},
+            )
+
+        return (
+            "queued",
+            f"auto-recovered: PR #{linked_pr} state={pr_state}, stale for {stale_minutes}m",
+            {"linked_pr_number": None, "linked_pr_url": "", "human_gate_pending": False, "verification_failed": False},
+        )
 
     async def _cleanup_stale_worktrees(self) -> list[str]:
         worktree_manager = WorktreeManager()
@@ -2644,7 +2709,7 @@ class RepoAutopilotStore:
                     "--repo",
                     self._current_repo_full_name(),
                     "--json",
-                    "number,url,isDraft,labels,headRefName,baseRefName,mergeStateStatus,reviewDecision,statusCheckRollup",
+                    "state,number,url,isDraft,labels,headRefName,baseRefName,mergeStateStatus,reviewDecision,statusCheckRollup",
                 ],
                 cwd=self._cwd,
             )

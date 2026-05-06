@@ -540,6 +540,130 @@ def test_autopilot_tick_does_not_recover_fresh_active_card(tmp_path: Path) -> No
     assert "stuck_recovery" not in refreshed.metadata
 
 
+def test_recover_stuck_waiting_ci_with_open_pr(tmp_path: Path, monkeypatch) -> None:
+    """A waiting_ci card whose linked PR is still OPEN stays in waiting_ci."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Waiting CI card",
+        body="PR is still open",
+    )
+    registry = store._load_registry()
+    target = next(c for c in registry.cards if c.id == card.id)
+    target.status = "waiting_ci"
+    target.updated_at = time.time() - (store.STUCK_CARD_STALE_SECONDS + 60)
+    target.metadata["linked_pr_number"] = 42
+    target.metadata["head_branch"] = "autopilot/test-branch"
+    store._save_registry(registry)
+
+    monkeypatch.setattr(
+        store,
+        "_pr_status_snapshot",
+        lambda pr_number: {"state": "OPEN", "headRefName": "autopilot/test-branch"},
+    )
+
+    recovered = store._recover_stuck_cards()
+    assert card.id in recovered
+    refreshed = store.get_card(card.id)
+    assert refreshed.status == "waiting_ci"
+    assert refreshed.metadata["stuck_recovery"]["from_status"] == "waiting_ci"
+
+
+def test_recover_stuck_waiting_ci_with_merged_pr(tmp_path: Path, monkeypatch) -> None:
+    """A waiting_ci card whose linked PR is MERGED transitions to merged."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Already merged card",
+        body="PR was merged externally",
+    )
+    registry = store._load_registry()
+    target = next(c for c in registry.cards if c.id == card.id)
+    target.status = "waiting_ci"
+    target.updated_at = time.time() - (store.STUCK_CARD_STALE_SECONDS + 60)
+    target.metadata["linked_pr_number"] = 99
+    target.metadata["head_branch"] = "autopilot/merged-branch"
+    store._save_registry(registry)
+
+    monkeypatch.setattr(
+        store,
+        "_pr_status_snapshot",
+        lambda pr_number: {"state": "MERGED", "headRefName": "autopilot/merged-branch"},
+    )
+
+    recovered = store._recover_stuck_cards()
+    assert card.id in recovered
+    refreshed = store.get_card(card.id)
+    assert refreshed.status == "merged"
+    assert refreshed.metadata["human_gate_pending"] is False
+
+
+def test_recover_stuck_waiting_ci_with_branch_mismatch(tmp_path: Path, monkeypatch) -> None:
+    """A waiting_ci card whose linked PR points to a different branch resets to queued."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Wrong PR card",
+        body="PR number belongs to different branch",
+    )
+    registry = store._load_registry()
+    target = next(c for c in registry.cards if c.id == card.id)
+    target.status = "waiting_ci"
+    target.updated_at = time.time() - (store.STUCK_CARD_STALE_SECONDS + 60)
+    target.metadata["linked_pr_number"] = 92
+    target.metadata["head_branch"] = "autopilot/ap-cbf8a49e"
+    store._save_registry(registry)
+
+    monkeypatch.setattr(
+        store,
+        "_pr_status_snapshot",
+        lambda pr_number: {"state": "MERGED", "headRefName": "codex/harden-path-rules"},
+    )
+
+    recovered = store._recover_stuck_cards()
+    assert card.id in recovered
+    refreshed = store.get_card(card.id)
+    assert refreshed.status == "queued"
+    assert refreshed.metadata.get("linked_pr_number") is None
+    assert refreshed.metadata.get("verification_failed") is False
+
+
+def test_recover_stuck_waiting_ci_with_unreachable_pr(tmp_path: Path, monkeypatch) -> None:
+    """A waiting_ci card whose linked PR cannot be fetched resets to queued."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Unreachable PR card",
+        body="gh CLI fails",
+    )
+    registry = store._load_registry()
+    target = next(c for c in registry.cards if c.id == card.id)
+    target.status = "waiting_ci"
+    target.updated_at = time.time() - (store.STUCK_CARD_STALE_SECONDS + 60)
+    target.metadata["linked_pr_number"] = 999
+    target.metadata["head_branch"] = "autopilot/missing"
+    store._save_registry(registry)
+
+    def raise_on_snapshot(pr_number):
+        raise RuntimeError("gh: Could not resolve to a PullRequest")
+
+    monkeypatch.setattr(store, "_pr_status_snapshot", raise_on_snapshot)
+
+    recovered = store._recover_stuck_cards()
+    assert card.id in recovered
+    refreshed = store.get_card(card.id)
+    assert refreshed.status == "queued"
+    assert refreshed.metadata.get("linked_pr_number") is None
+
+
 def test_worktree_cleanup_on_exception(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -1405,7 +1529,7 @@ def test_pr_status_snapshot_uses_repo_qualified_view(tmp_path: Path, monkeypatch
         "--repo",
         "hodtien/mharness",
         "--json",
-        "number,url,isDraft,labels,headRefName,baseRefName,mergeStateStatus,reviewDecision,statusCheckRollup",
+        "state,number,url,isDraft,labels,headRefName,baseRefName,mergeStateStatus,reviewDecision,statusCheckRollup",
     ]
 
 
