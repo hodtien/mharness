@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -13,6 +14,10 @@ from openharness.swarm.worktree import (
     _worktree_branch,
     validate_worktree_slug,
 )
+
+# Capture the original remove_worktree at module-import time, before any test
+# can patch it at the class level (autopilot tests do this).
+_ORIGINAL_REMOVE_WORKTREE = WorktreeManager.remove_worktree
 
 
 # ---------------------------------------------------------------------------
@@ -160,25 +165,61 @@ def test_create_worktree_symlinks_webui_dist(tmp_path):
     assert linked_dist.resolve() == dist.resolve()
 
 
-def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, monkeypatch):
+async def test_remove_worktree_returns_true_for_existing_worktree(tmp_path):
+    """Integration test: remove_worktree succeeds for a properly created worktree."""
     repo = tmp_path / "repo"
     _init_repo_with_webui_dist(repo)
-    manager = WorktreeManager(base_dir=tmp_path / "worktrees")
-    worktree = asyncio.run(manager.create_worktree(repo, "autopilot/ap-test"))
-    calls: list[tuple[str, ...]] = []
 
-    async def fake_run_git(*args, cwd):
-        calls.append(args)
+    manager = WorktreeManager(base_dir=tmp_path / "worktrees")
+    worktree = await manager.create_worktree(repo, "autopilot/ap-test")
+    assert worktree.path.exists()
+
+    result = await manager.remove_worktree("autopilot/ap-test")
+    assert result is True
+
+
+async def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path):
+    """Unit test: when repo-root git worktree remove fails, fallback to base_dir cwd succeeds."""
+    from unittest.mock import patch
+
+    repo = tmp_path / "repo"
+    _init_repo_with_webui_dist(repo)
+
+    manager = WorktreeManager(base_dir=tmp_path / "worktrees")
+    worktree = await manager.create_worktree(repo, "autopilot/ap-test")
+    worktree_path = worktree.path
+
+    repo_r = repo.resolve()
+    base_dir_r = manager.base_dir.resolve()
+    git_common_path = str((repo_r / ".git").resolve())
+
+    calls: list[tuple[tuple[str, ...], Path]] = []
+
+    async def fake_run_git(*args: str, cwd: Path) -> tuple[int, str, str]:
+        calls.append((args, cwd))
         if args[:2] == ("rev-parse", "--git-common-dir"):
-            return 0, str(repo / ".git"), ""
-        if args[:3] == ("worktree", "remove", "--force") and cwd == repo:
-            return 1, "", "busy"
-        if args[:3] == ("worktree", "remove", "--force") and cwd == manager.base_dir:
+            return 0, git_common_path, ""
+        cwd_r = Path(cwd).resolve()
+        if args[:3] == ("worktree", "remove", "--force") and cwd_r == repo_r:
+            return 1, "", "fatal: busy"
+        if args[:3] == ("worktree", "remove", "--force") and cwd_r == base_dir_r:
             return 0, "", ""
         return 0, "", ""
 
-    monkeypatch.setattr("openharness.swarm.worktree._run_git", fake_run_git)
+    # Patch the function's globals directly to guarantee interception, avoiding
+    # any potential sys.modules duplication issues on CI.
+    with patch.dict(_ORIGINAL_REMOVE_WORKTREE.__globals__, {"_run_git": fake_run_git}):
+        result = await _ORIGINAL_REMOVE_WORKTREE(manager, "autopilot/ap-test")
+    
+    all_call_args = [a for a, _c in calls]
+    assert result is True, f"Expected True, got {result!r}. All calls: {all_call_args}"
 
-    assert asyncio.run(manager.remove_worktree("autopilot/ap-test")) is True
-    assert calls[-1][:3] == ("worktree", "remove", "--force")
-    assert calls[-1][3] == str(worktree.path)
+    remove_calls = [(a, c) for a, c in calls if a[:3] == ("worktree", "remove", "--force")]
+    assert len(remove_calls) >= 2, (
+        f"Expected ≥2 remove calls (repo + fallback), got {remove_calls}. "
+        f"All calls: {all_call_args}. "
+        f"repo_r={repo_r!r}, base_dir_r={base_dir_r!r}"
+    )
+    last_args, last_cwd = remove_calls[-1]
+    assert Path(last_cwd).resolve() == base_dir_r
+    assert last_args[3] == str(worktree_path)
