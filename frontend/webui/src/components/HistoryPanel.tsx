@@ -165,10 +165,11 @@ export default function HistoryPanel({
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<HistorySession | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
   const [debouncedSearchText, setDebouncedSearchText] = useState("");
   const [selectedModel, setSelectedModel] = useState<string>("");
-  
+
   // Debounce search text with 300ms delay
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -261,12 +262,31 @@ export default function HistoryPanel({
     [onResumeFromDrawer],
   );
 
+  const handleCopy = useCallback(
+    (session: HistorySession) => {
+      const ms = session.created_at < 1e12 ? session.created_at * 1000 : session.created_at;
+      const createdAtStr = new Date(ms).toLocaleString();
+      const text = [
+        session.summary || "(no summary)",
+        `Model: ${session.model || "—"}`,
+        `Messages: ${session.message_count}`,
+        `Created: ${createdAtStr}`,
+      ].join("\n");
+
+      navigator.clipboard.writeText(text).then(() => {
+        setCopiedId(session.session_id);
+        setTimeout(() => setCopiedId(null), 1500);
+      });
+    },
+    [],
+  );
+
   // Extract unique models from sessions
   const uniqueModels = Array.from(new Set(sessions.map(s => s.model).filter(Boolean))).sort();
 
   // Filter sessions based on search text and selected model
   const filteredSessions = sessions.filter((session) => {
-    const matchesSearch = !debouncedSearchText || 
+    const matchesSearch = !debouncedSearchText ||
       session.summary.toLowerCase().includes(debouncedSearchText.toLowerCase());
     const matchesModel = !selectedModel || session.model === selectedModel;
     return matchesSearch && matchesModel;
@@ -401,6 +421,15 @@ export default function HistoryPanel({
                           </div>
                         </div>
                         <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(session)}
+                            disabled={isBusy}
+                            className="rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs hover:bg-[var(--accent-strong)]/20 disabled:opacity-50"
+                            title="Copy session info"
+                          >
+                            {copiedId === session.session_id ? "✓" : "📋"}
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleDetailSelect(session)}
