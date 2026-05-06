@@ -952,6 +952,50 @@ async def test_execute_tool_call_normalizes_ide_suffix_before_hooks(tmp_path: Pa
 
 
 @pytest.mark.asyncio
+async def test_execute_tool_call_normalizes_repeated_ide_suffix(tmp_path: Path):
+    recorder = _RecordingHookExecutor()
+    registry = ToolRegistry()
+    registry.register(GlobTool())
+
+    result = await _execute_tool_call(
+        QueryContext(
+            api_client=_NoopApiClient(),
+            tool_registry=registry,
+            permission_checker=PermissionChecker(PermissionSettings(mode=PermissionMode.FULL_AUTO)),
+            cwd=tmp_path,
+            model="claude-test",
+            system_prompt="system",
+            max_tokens=1,
+            max_turns=1,
+            hook_executor=recorder,  # type: ignore[arg-type]
+        ),
+        "glob_ide_ide",
+        "toolu_glob",
+        {"pattern": "*.txt"},
+    )
+
+    pre_tool_calls = [call for call in recorder.calls if call[0] == HookEvent.PRE_TOOL_USE]
+    assert result.is_error is False
+    assert pre_tool_calls[0][1]["tool_name"] == "glob"
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_call_does_not_strip_suffix_only_tool_name(tmp_path: Path):
+    registry = ToolRegistry()
+    registry.register(GlobTool())
+
+    result = await _execute_tool_call(
+        _tool_context(tmp_path, registry, PermissionSettings(mode=PermissionMode.FULL_AUTO)),
+        "_ide",
+        "toolu_glob",
+        {"pattern": "*.txt"},
+    )
+
+    assert result.is_error is True
+    assert "Unknown tool: _ide" in result.content
+
+
+@pytest.mark.asyncio
 async def test_execute_tool_call_does_not_strip_ide_inside_tool_name(tmp_path: Path):
     registry = ToolRegistry()
     registry.register(GlobTool())
