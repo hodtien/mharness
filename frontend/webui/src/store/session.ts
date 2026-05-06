@@ -56,10 +56,12 @@ interface SessionStore {
   todoMarkdown: string | null;
   planMode: string | null;
   swarm: SwarmInfo | null;
+  sessionId: string | null;
   /** The session ID that was resumed (shown in Transcript banner). */
   resumedFrom: string | null;
   // setters
   setStatus: (s: "connecting" | "open" | "closed", detail?: string) => void;
+  setSessionId: (id: string | null) => void;
   setResumedFrom: (id: string | null) => void;
   ingest: (evt: BackendEvent) => void;
   appendUser: (text: string) => void;
@@ -83,7 +85,10 @@ export const useSession = create<SessionStore>((set, get) => ({
   todoMarkdown: null,
   planMode: null,
   swarm: null,
+  sessionId: null,
   resumedFrom: null,
+
+  setSessionId: (id) => set({ sessionId: id }),
 
   setStatus: (s, detail) =>
     set(() => {
@@ -126,6 +131,7 @@ export const useSession = create<SessionStore>((set, get) => ({
       todoMarkdown: null,
       planMode: null,
       swarm: null,
+      sessionId: null,
       resumedFrom: null,
     }),
 

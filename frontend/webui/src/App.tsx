@@ -58,7 +58,7 @@ export function AppLayout({ onInterrupt, onResumeSession }: LayoutProps) {
 
 export default function App() {
   const wsRef = useRef<WsHandle | null>(null);
-  const { setStatus, ingest, appendUser, setResumedFrom } = useSession();
+  const { setStatus, setSessionId, ingest, appendUser, setResumedFrom } = useSession();
 
   const setupSession = useCallback(
     async (resumeId?: string) => {
@@ -67,6 +67,7 @@ export default function App() {
         if (resumeId) {
           setResumedFrom(resumeId);
         }
+        setSessionId(result.session_id);
         const ws = openWebSocket(result.session_id, ingest, setStatus);
         wsRef.current = ws;
       } catch (err) {
@@ -74,17 +75,18 @@ export default function App() {
         useSession.getState().setError(String(err));
       }
     },
-    [ingest, setStatus, setResumedFrom],
+    [ingest, setStatus, setSessionId, setResumedFrom],
   );
 
   const reconnectWithSession = useCallback(
     (newSessionId: string, resumeId?: string) => {
       wsRef.current?.close();
       if (resumeId) setResumedFrom(resumeId);
+      setSessionId(newSessionId);
       const ws = openWebSocket(newSessionId, ingest, setStatus);
       wsRef.current = ws;
     },
-    [ingest, setStatus, setResumedFrom],
+    [ingest, setStatus, setSessionId, setResumedFrom],
   );
 
   const resumeSession = useCallback(
