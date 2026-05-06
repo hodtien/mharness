@@ -709,9 +709,9 @@ describe("PipelinePage", () => {
 
   it("Activity tab: shows filter pills and filters entries by kind", async () => {
     const sampleEntries = [
+      { timestamp: 1002, kind: "ci_failure", summary: "CI failed", task_id: "card-queued-1", metadata: {} },
       { timestamp: 1000, kind: "ci_check", summary: "CI passed", task_id: "card-queued-1", metadata: {} },
       { timestamp: 1001, kind: "agent_started", summary: "Agent kicked off", task_id: "card-queued-1", metadata: {} },
-      { timestamp: 1002, kind: "ci_failure", summary: "CI failed", task_id: "card-queued-1", metadata: {} },
     ];
 
     vi.stubGlobal(
@@ -872,5 +872,104 @@ describe("PipelinePage", () => {
     expect(icons.filter((i) => i === "✅").length).toBeGreaterThan(0);
     expect(icons.filter((i) => i === "⚠️").length).toBeGreaterThan(0);
     expect(icons.filter((i) => i === "🟡").length).toBeGreaterThan(0);
+  });
+
+  it("Activity tab: entries are sorted ascending by timestamp and grouped by kind", async () => {
+    const sampleEntries = [
+      { timestamp: 2000, kind: "ci_failure", summary: "Second CI failure", task_id: "card-1", metadata: {} },
+      { timestamp: 1000, kind: "ci_check", summary: "First CI check", task_id: "card-1", metadata: {} },
+      { timestamp: 3000, kind: "agent_started", summary: "Agent started", task_id: "card-1", metadata: {} },
+      { timestamp: 1500, kind: "ci_check", summary: "Second CI check", task_id: "card-1", metadata: {} },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards: sampleCards, updated_at: 0 }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: sampleEntries }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("Add login form"));
+    fireEvent.click(await screen.findByRole("button", { name: /^Activity$/i }));
+
+    // Three blocks: ci_check (2 entries), ci_failure (1), agent_started (1)
+    const blocks = await screen.findAllByTestId("activity-entry-group");
+    expect(blocks).toHaveLength(3);
+
+    // ci_check block is first (timestamp 1000)
+    expect(blocks[0].textContent).toContain("ci_check");
+    expect(blocks[0].textContent).toContain("2");
+    // ci_failure block is second (timestamp 2000)
+    expect(blocks[1].textContent).toContain("ci_failure");
+    expect(blocks[1].textContent).toContain("1");
+    // agent_started block is third (timestamp 3000)
+    expect(blocks[2].textContent).toContain("agent_started");
+    expect(blocks[2].textContent).toContain("1");
+
+    // All individual entries visible (expanded by default since ≤3 entries)
+    expect(screen.getByText("First CI check")).toBeTruthy();
+    expect(screen.getByText("Second CI check")).toBeTruthy();
+    expect(screen.getByText("Second CI failure")).toBeTruthy();
+    expect(screen.getByText("Agent started")).toBeTruthy();
+  });
+
+  it("Activity tab: block with >3 entries starts collapsed", async () => {
+    const sampleEntries = Array.from({ length: 5 }, (_, i) => ({
+      timestamp: 1000 + i,
+      kind: "agent_started",
+      summary: `Agent started #${i + 1}`,
+      task_id: "card-1",
+      metadata: {},
+    }));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards: sampleCards, updated_at: 0 }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: sampleEntries }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("Add login form"));
+    fireEvent.click(await screen.findByRole("button", { name: /^Activity$/i }));
+
+    const blocks = await screen.findAllByTestId("activity-entry-group");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].textContent).toContain("agent_started");
+    expect(blocks[0].textContent).toContain("5");
+    expect(blocks[0].textContent).toContain("▶");
+
+    // Entries are NOT visible when collapsed
+    expect(screen.queryByText("Agent started #1")).toBeNull();
+
+    // Click to expand
+    fireEvent.click(blocks[0]);
+    await waitFor(() => {
+      expect(screen.getByText("Agent started #1")).toBeTruthy();
+    });
+    expect(blocks[0].textContent).toContain("▼");
   });
 });

@@ -399,6 +399,27 @@ function relativeAge(timestamp: number): string {
   return `${Math.floor(diff / 604800)}w ago`;
 }
 
+function formatTimestamp(timestamp: number): string {
+  const d = new Date(timestamp * 1000);
+  const h = d.getHours().toString().padStart(2, "0");
+  const m = d.getMinutes().toString().padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+function buildActivityGroups(entries: JournalEntry[]): JournalEntry[][] {
+  const sorted = [...entries].sort((a, b) => a.timestamp - b.timestamp);
+  const groups: JournalEntry[][] = [];
+  for (const entry of sorted) {
+    const last = groups[groups.length - 1];
+    if (last && last[last.length - 1].kind === entry.kind) {
+      last.push(entry);
+    } else {
+      groups.push([entry]);
+    }
+  }
+  return groups;
+}
+
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
 function Card({ card, onClick }: { card: PipelineCard; onClick: () => void }) {
@@ -493,6 +514,53 @@ function TruncatedText({ text }: { text: string }) {
 
 // ─── Activity Tab ──────────────────────────────────────────────────────────────
 
+interface ActivityEntryGroupProps {
+  entries: JournalEntry[];
+}
+
+function ActivityEntryGroup({ entries }: ActivityEntryGroupProps) {
+  const collapsed = entries.length > 3;
+  const [expanded, setExpanded] = useState(!collapsed);
+  const timestamp = formatTimestamp(entries[0].timestamp);
+  const kind = entries[0].kind;
+  const count = entries.length;
+
+  return (
+    <div className="rounded-md border border-[var(--border)] bg-[var(--panel-2)]" data-testid="activity-entry-group">
+      <button
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--panel)]"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span className="shrink-0 font-mono text-[var(--text-dim)]">
+          {expanded ? "▼" : "▶"}
+        </span>
+        <span className="font-mono text-[var(--text-dim)]">
+          [{timestamp}] {kind} ({count})
+        </span>
+      </button>
+      {expanded && (
+        <div className="space-y-2 border-t border-[var(--border)] p-3">
+          {entries.map((entry, entryIdx) => (
+            <div key={entryIdx} className="flex gap-3 text-sm" data-testid="activity-item">
+              <span className="shrink-0 mt-0.5 text-base" data-testid="activity-item-icon">
+                {kindIcon(entry.kind)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <TruncatedText text={entry.summary} />
+                  <span className="shrink-0 text-[10px] text-[var(--text-dim)]">
+                    {relativeAge(entry.timestamp)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export type ActivityFilter = "all" | "failures" | "ci" | "agent" | "git";
 
 export const ACTIVITY_FILTERS: { id: ActivityFilter; label: string }[] = [
@@ -576,6 +644,7 @@ function ActivityTab({ cardId, isActive }: ActivityTabProps) {
   }
 
   const filteredEntries = entries.filter((e) => matchesActivityFilter(e.kind, activeFilter));
+  const groupedEntries = useMemo(() => buildActivityGroups(filteredEntries), [filteredEntries]);
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -605,24 +674,9 @@ function ActivityTab({ cardId, isActive }: ActivityTabProps) {
       ) : (
         <div className="flex-1 overflow-y-auto p-4 min-h-0">
           <div className="space-y-2">
-          {filteredEntries.map((entry, idx) => (
-            <div key={idx} className="flex gap-3 text-sm" data-testid="activity-item">
-              <span
-                className="shrink-0 mt-0.5 text-base"
-                data-testid="activity-item-icon"
-              >
-                {kindIcon(entry.kind)}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <TruncatedText text={entry.summary} />
-                  <span className="shrink-0 text-[10px] text-[var(--text-dim)]">
-                    {relativeAge(entry.timestamp)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          ))}
+            {groupedEntries.map((group, idx) => (
+              <ActivityEntryGroup key={idx} entries={group} />
+            ))}
           </div>
         </div>
       )}
