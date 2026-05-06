@@ -10,11 +10,7 @@
  * the commented integration tests become active once vitest is set up.
  */
 
-import { formatRelativeTime } from "./HistoryPanel";
-
-// ---------------------------------------------------------------------------
-// Pure-function unit tests (no DOM required, safe in any test runner)
-// ---------------------------------------------------------------------------
+import { formatRelativeTime, getDateGroupLabel, groupSessionsByDate } from "./HistoryPanel";
 
 describe("formatRelativeTime", () => {
   const nowSeconds = Math.floor(Date.now() / 1000);
@@ -50,6 +46,95 @@ describe("formatRelativeTime", () => {
   });
 });
 
+describe("getDateGroupLabel", () => {
+  test("returns 'Today' for sessions created today", () => {
+    const now = Date.now() / 1000;
+    expect(getDateGroupLabel(now)).toBe("Today");
+  });
+
+  test("returns 'Yesterday' for sessions from yesterday", () => {
+    const yesterday = Math.floor(Date.now() / 1000) - 86400;
+    expect(getDateGroupLabel(yesterday)).toBe("Yesterday");
+  });
+
+  test("returns 'X days ago' for 2-6 days", () => {
+    expect(getDateGroupLabel(Math.floor(Date.now() / 1000) - 2 * 86400)).toBe("2 days ago");
+    expect(getDateGroupLabel(Math.floor(Date.now() / 1000) - 6 * 86400)).toBe("6 days ago");
+  });
+
+  test("returns 'Last week' for 7-13 days", () => {
+    expect(getDateGroupLabel(Math.floor(Date.now() / 1000) - 7 * 86400)).toBe("Last week");
+    expect(getDateGroupLabel(Math.floor(Date.now() / 1000) - 13 * 86400)).toBe("Last week");
+  });
+
+  test("returns formatted date for older sessions", () => {
+    const oldDate = new Date("2024-01-15T12:00:00Z");
+    const result = getDateGroupLabel(oldDate.getTime() / 1000);
+    expect(result).toMatch(/Jan 15, 2024/);
+  });
+
+  test("returns 'Unknown' for invalid timestamps", () => {
+    expect(getDateGroupLabel(0)).toBe("Unknown");
+    expect(getDateGroupLabel(NaN)).toBe("Unknown");
+  });
+});
+
+describe("groupSessionsByDate", () => {
+  test("groups sessions by date with correct order", () => {
+    const now = Math.floor(Date.now() / 1000);
+    const sessions = [
+      { session_id: "s3", summary: "old", model: "m", message_count: 1, created_at: now - 30 * 86400 },
+      { session_id: "s1", summary: "recent", model: "m", message_count: 1, created_at: now - 3600 },
+      { session_id: "s2", summary: "yesterday", model: "m", message_count: 1, created_at: now - 86400 },
+    ];
+
+    const groups = groupSessionsByDate(sessions);
+
+    expect(groups[0].label).toBe("Today");
+    expect(groups[0].sessions).toHaveLength(1);
+    expect(groups[0].sessions[0].session_id).toBe("s1");
+
+    expect(groups[1].label).toBe("Yesterday");
+    expect(groups[1].sessions).toHaveLength(1);
+    expect(groups[1].sessions[0].session_id).toBe("s2");
+
+    // Old sessions should be in last group
+    expect(groups[groups.length - 1].label).not.toBe("Today");
+    expect(groups[groups.length - 1].label).not.toBe("Yesterday");
+  });
+
+  test("handles multiple sessions in same group", () => {
+    const now = Math.floor(Date.now() / 1000);
+    const sessions = [
+      { session_id: "s1", summary: "t1", model: "m", message_count: 1, created_at: now - 3600 },
+      { session_id: "s2", summary: "t2", model: "m", message_count: 1, created_at: now - 7200 },
+    ];
+
+    const groups = groupSessionsByDate(sessions);
+
+    expect(groups[0].label).toBe("Today");
+    expect(groups[0].sessions).toHaveLength(2);
+  });
+
+  test("returns empty array for empty input", () => {
+    const groups = groupSessionsByDate([]);
+    expect(groups).toHaveLength(0);
+  });
+
+  test("sorts sessions within each group by created_at descending", () => {
+    const now = Math.floor(Date.now() / 1000);
+    const sessions = [
+      { session_id: "older", summary: "o", model: "m", message_count: 1, created_at: now - 3600 },
+      { session_id: "newer", summary: "n", model: "m", message_count: 1, created_at: now - 1800 },
+    ];
+
+    const groups = groupSessionsByDate(sessions);
+
+    expect(groups[0].sessions[0].session_id).toBe("newer");
+    expect(groups[0].sessions[1].session_id).toBe("older");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // 60-char truncation logic (isolated)
 // ---------------------------------------------------------------------------
@@ -67,7 +152,7 @@ describe("60-char truncation rule", () => {
   test("truncates strings longer than 60 chars and appends ellipsis", () => {
     const long = "A".repeat(65);
     const result = truncate(long);
-    expect(result).toHaveLength(62); // 60 chars + '…' (3 bytes, 1 code point)
+    expect(result).toHaveLength(61); // 60 chars + '…' (1 code point)
     expect(result.endsWith("…")).toBe(true);
     expect(result.startsWith("A".repeat(60))).toBe(true);
   });

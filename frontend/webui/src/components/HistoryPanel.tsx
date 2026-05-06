@@ -57,6 +57,102 @@ export function formatRelativeTime(createdAt: number): string {
   return `${diffDays}d ago`;
 }
 
+/**
+ * Returns a group label for a session timestamp:
+ * - "Today" for sessions created today
+ * - "Yesterday" for sessions created yesterday
+ * - "X days ago" for 2-6 days
+ * - "Last week" for 7-13 days
+ * - Formatted date (e.g., "Jan 15, 2024") for older sessions
+ */
+export function getDateGroupLabel(createdAt: number): string {
+  if (!createdAt || !Number.isFinite(createdAt)) return "Unknown";
+
+  const ms = createdAt < 1e12 ? createdAt * 1000 : createdAt;
+  const now = new Date();
+  const sessionDate = new Date(ms);
+
+  // Reset hours to compare dates only
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const sessionStart = new Date(
+    sessionDate.getFullYear(),
+    sessionDate.getMonth(),
+    sessionDate.getDate(),
+  );
+
+  const diffDays = Math.floor(
+    (todayStart.getTime() - sessionStart.getTime()) / (24 * 3600 * 1000),
+  );
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays >= 2 && diffDays <= 6) return `${diffDays} days ago`;
+  if (diffDays >= 7 && diffDays <= 13) return "Last week";
+
+  // For older sessions, format as date
+  return sessionDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+interface SessionGroup {
+  label: string;
+  sessions: HistorySession[];
+}
+
+/**
+ * Group sessions by date for display with sticky headers.
+ */
+export function groupSessionsByDate(sessions: HistorySession[]): SessionGroup[] {
+  const groups = new Map<string, HistorySession[]>();
+
+  // Sort sessions by created_at descending (newest first)
+  const sorted = [...sessions].sort((a, b) => b.created_at - a.created_at);
+
+  for (const session of sorted) {
+    const label = getDateGroupLabel(session.created_at);
+    const existing = groups.get(label);
+    if (existing) {
+      existing.push(session);
+    } else {
+      groups.set(label, [session]);
+    }
+  }
+
+  // Convert map to array, preserving chronological order
+  const result: SessionGroup[] = [];
+  const labelOrder = [
+    "Today",
+    "Yesterday",
+    "2 days ago",
+    "3 days ago",
+    "4 days ago",
+    "5 days ago",
+    "6 days ago",
+    "Last week",
+  ];
+
+  // Add known labels first
+  for (const label of labelOrder) {
+    const sessions = groups.get(label);
+    if (sessions) {
+      result.push({ label, sessions });
+      groups.delete(label);
+    }
+  }
+
+  // Add remaining groups (older dates) sorted by first session timestamp
+  const remaining = Array.from(groups.entries())
+    .map(([label, sessions]) => ({ label, sessions }))
+    .sort((a, b) => b.sessions[0].created_at - a.sessions[0].created_at);
+
+  result.push(...remaining);
+
+  return result;
+}
+
 export default function HistoryPanel({
   endpoint = HISTORY_ENDPOINT,
   onResume,
@@ -210,68 +306,77 @@ export default function HistoryPanel({
       ) : null}
 
       {sessions.length > 0 ? (
-        <ul className="flex flex-1 flex-col gap-2 overflow-y-auto">
-          {sessions.map((session) => {
-            const isBusy = busyId === session.session_id;
-            const summary = session.summary || "(no summary)";
-            const displaySummary =
-              summary.length > 60 ? `${summary.slice(0, 60)}…` : summary;
-            return (
-              <li
-                key={session.session_id}
-                className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium" title={summary}>
-                      {displaySummary}
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--text-dim)]">
-                      <span
-                        title="Model"
-                        className="rounded bg-[var(--accent-strong)]/20 px-1.5 py-0.5 text-[10px] font-medium text-[var(--text)]"
-                      >
-                        {session.model || "—"}
-                      </span>
-                      <span title="Message count">
-                        {session.message_count} msg
-                      </span>
-                      <span title="Created at">
-                        {formatRelativeTime(session.created_at)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleDetailSelect(session)}
-                      disabled={isBusy}
-                      className="rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs hover:bg-[var(--accent-strong)]/20 disabled:opacity-50"
+        <div className="flex flex-1 flex-col overflow-y-auto">
+          {groupSessionsByDate(sessions).map((group) => (
+            <div key={group.label} className="flex flex-col">
+              <div className="sticky top-0 z-10 bg-[var(--panel-2)] px-2 py-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">
+                {group.label}
+              </div>
+              <ul className="flex flex-col gap-2 px-2 pb-4">
+                {group.sessions.map((session) => {
+                  const isBusy = busyId === session.session_id;
+                  const summary = session.summary || "(no summary)";
+                  const displaySummary =
+                    summary.length > 60 ? `${summary.slice(0, 60)}…` : summary;
+                  return (
+                    <li
+                      key={session.session_id}
+                      className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3"
                     >
-                      View
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleResume(session)}
-                      disabled={isBusy}
-                      className="rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs hover:bg-[var(--accent-strong)]/20 disabled:opacity-50"
-                    >
-                      Resume
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(session)}
-                      disabled={isBusy}
-                      className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-xs text-red-200 hover:bg-red-500/20 disabled:opacity-50"
-                    >
-                      {isBusy ? "Deleting…" : "Delete"}
-                    </button>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium" title={summary}>
+                            {displaySummary}
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--text-dim)]">
+                            <span
+                              title="Model"
+                              className="rounded bg-[var(--accent-strong)]/20 px-1.5 py-0.5 text-[10px] font-medium text-[var(--text)]"
+                            >
+                              {session.model || "—"}
+                            </span>
+                            <span title="Message count">
+                              {session.message_count} msg
+                            </span>
+                            <span title="Created at">
+                              {formatRelativeTime(session.created_at)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleDetailSelect(session)}
+                            disabled={isBusy}
+                            className="rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs hover:bg-[var(--accent-strong)]/20 disabled:opacity-50"
+                          >
+                            View
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleResume(session)}
+                            disabled={isBusy}
+                            className="rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs hover:bg-[var(--accent-strong)]/20 disabled:opacity-50"
+                          >
+                            Resume
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(session)}
+                            disabled={isBusy}
+                            className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-xs text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                          >
+                            {isBusy ? "Deleting…" : "Delete"}
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
       ) : null}
     </section>
     <HistoryDetailDrawer
