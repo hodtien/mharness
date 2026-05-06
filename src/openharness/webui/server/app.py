@@ -126,12 +126,14 @@ def create_app(
     app = FastAPI(title="OpenHarness Web UI", version="0.1.0")
 
     resolved_token = token or generate_token()
-    resolved_cwd = Path(cwd).expanduser().resolve() if cwd else Path.cwd()
+    explicit_cwd = cwd is not None
+    resolved_cwd = Path(cwd).expanduser().resolve() if explicit_cwd else Path.cwd()
 
-    # Ensure a default project exists; load the active project if any.
     registry = ProjectRegistry()
     active_project = registry.ensure_default(resolved_cwd)
-    if active_project is not None:
+    if explicit_cwd:
+        active_project_id = active_project.id if active_project.path == resolved_cwd else None
+    elif active_project is not None:
         resolved_cwd = active_project.path
         active_project_id = active_project.id
     else:
