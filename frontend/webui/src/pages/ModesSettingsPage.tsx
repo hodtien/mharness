@@ -147,15 +147,48 @@ export default function ModesSettingsPage() {
         </Section>
 
         <Section title="Passes" description="Number of agent passes, from 1 to 5.">
-          <input
-            aria-label="Passes"
-            type="number"
-            min={1}
-            max={5}
-            value={passesInput}
-            onChange={(event) => updatePasses(event.target.value)}
-            className="w-28 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[var(--text)] outline-none focus:border-cyan-400/60"
-          />
+          <div className="flex items-center gap-4">
+            <div className="inline-flex items-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-2)]">
+              <button
+                type="button"
+                aria-label="Decrease passes"
+                onClick={() => updatePasses(String(Math.max(1, Number(passesInput) - 1)))}
+                disabled={Number(passesInput) <= 1}
+                className="px-3 py-2 text-[var(--text-dim)] transition-colors hover:bg-[var(--border)] hover:text-[var(--text)] disabled:opacity-50 disabled:hover:bg-transparent"
+              >
+                -
+              </button>
+              <input
+                aria-label="Passes"
+                type="number"
+                min={1}
+                max={5}
+                value={passesInput}
+                onChange={(event) => updatePasses(event.target.value)}
+                className="w-12 bg-transparent px-1 py-2 text-center text-[var(--text)] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <button
+                type="button"
+                aria-label="Increase passes"
+                onClick={() => updatePasses(String(Math.min(5, Number(passesInput) + 1)))}
+                disabled={Number(passesInput) >= 5}
+                className="px-3 py-2 text-[var(--text-dim)] transition-colors hover:bg-[var(--border)] hover:text-[var(--text)] disabled:opacity-50 disabled:hover:bg-transparent"
+              >
+                +
+              </button>
+            </div>
+            
+            <div className="flex gap-1.5" aria-hidden="true">
+              {[1, 2, 3, 4, 5].map((dot) => (
+                <div
+                  key={dot}
+                  className={`h-2 w-2 rounded-full transition-colors ${
+                    dot <= Number(passesInput) ? "bg-cyan-400" : "bg-[var(--border)]"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
         </Section>
 
         <Section title="Fast Mode">
