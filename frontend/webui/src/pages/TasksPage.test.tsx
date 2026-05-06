@@ -264,3 +264,70 @@ describe("TasksPage review badge", () => {
     });
   });
 });
+
+// ─── Log viewer enhancements ──────────────────────────────────────────────────
+
+describe("TasksPage log viewer", () => {
+  it("shows a copy log button when logs are present", async () => {
+    mockFetch([RUNNING_TASK]);
+    render(<TasksPage />);
+    await waitFor(() => expect(screen.getByText("Running task")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Running task"));
+
+    expect(await screen.findByRole("button", { name: /Copy log/i })).toBeTruthy();
+  });
+
+  it("copies logs to clipboard when copy button is clicked", async () => {
+    mockFetch([RUNNING_TASK]);
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextMock,
+      },
+    });
+
+    render(<TasksPage />);
+    await waitFor(() => expect(screen.getByText("Running task")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Running task"));
+
+    const copyButton = await screen.findByRole("button", { name: /Copy log/i });
+    fireEvent.click(copyButton);
+
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("line1\nline2");
+    });
+
+    expect(await screen.findByText(/✓ Copied/i)).toBeTruthy();
+  });
+
+  it("uses terminal-style dark background for log display", async () => {
+    mockFetch([RUNNING_TASK]);
+    render(<TasksPage />);
+    await waitFor(() => expect(screen.getByText("Running task")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Running task"));
+
+    // Check that log container has dark terminal styling
+    const logContainer = await screen.findByText("line1");
+    const preElement = logContainer.closest("pre");
+    expect(preElement).toBeTruthy();
+    expect(preElement?.className).toContain("bg-zinc-900");
+  });
+
+  it("polls logs every 2 seconds for running tasks", async () => {
+    const setIntervalSpy = vi.spyOn(window, "setInterval");
+    mockFetch([RUNNING_TASK]);
+
+    render(<TasksPage />);
+    await waitFor(() => expect(screen.getByText("Running task")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Running task"));
+
+    await waitFor(() => expect(screen.getByText("line1")).toBeTruthy());
+
+    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 2000);
+    setIntervalSpy.mockRestore();
+  });
+});

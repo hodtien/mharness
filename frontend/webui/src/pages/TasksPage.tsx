@@ -185,7 +185,11 @@ function LogViewer({ taskId, status, onStop, stopping }: LogViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [userScrolled, setUserScrolled] = useState(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLPreElement>(null);
   const isRunning = status === "running";
 
   const fetchOutput = useCallback(async () => {
@@ -205,17 +209,57 @@ function LogViewer({ taskId, status, onStop, stopping }: LogViewerProps) {
   useEffect(() => {
     fetchOutput();
     if (isRunning) {
-      const interval = setInterval(fetchOutput, 3000);
+      const interval = setInterval(fetchOutput, 2000); // Poll every 2s for running jobs
       return () => clearInterval(interval);
     }
   }, [fetchOutput, isRunning]);
 
-  // Auto-scroll to bottom when lines change (only when running)
+  // Auto-scroll to bottom when lines change (only when running and user hasn't scrolled up)
   useEffect(() => {
-    if (isRunning && bottomRef.current && typeof bottomRef.current.scrollIntoView === "function") {
+    if (isRunning && !userScrolled && bottomRef.current && typeof bottomRef.current.scrollIntoView === "function") {
       bottomRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [lines.length, isRunning]);
+  }, [lines.length, isRunning, userScrolled]);
+
+  // Detect user scroll
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
+      
+      if (isAtBottom) {
+        setUserScrolled(false);
+        setShowScrollButton(false);
+      } else {
+        setUserScrolled(true);
+        setShowScrollButton(true);
+      }
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToBottom = () => {
+    if (bottomRef.current && typeof bottomRef.current.scrollIntoView === "function") {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+    setUserScrolled(false);
+    setShowScrollButton(false);
+  };
+
+  const copyLogs = async () => {
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy logs:", err);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -224,15 +268,25 @@ function LogViewer({ taskId, status, onStop, stopping }: LogViewerProps) {
           Output log
           {refreshing && <span className="ml-1 opacity-60">· refreshing</span>}
         </span>
-        {isRunning && (
-          <button
-            onClick={onStop}
-            disabled={stopping}
-            className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-1 text-xs font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-40"
-          >
-            {stopping ? "Stopping…" : "Stop"}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {lines.length > 0 && (
+            <button
+              onClick={copyLogs}
+              className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1 text-xs font-medium text-[var(--text-dim)] transition hover:border-[var(--accent)]/40 hover:text-[var(--text)]"
+            >
+              {copySuccess ? "✓ Copied" : "Copy log"}
+            </button>
+          )}
+          {isRunning && (
+            <button
+              onClick={onStop}
+              disabled={stopping}
+              className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-1 text-xs font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-40"
+            >
+              {stopping ? "Stopping…" : "Stop"}
+            </button>
+          )}
+        </div>
       </div>
 
       {loading && lines.length === 0 ? (
@@ -244,14 +298,28 @@ function LogViewer({ taskId, status, onStop, stopping }: LogViewerProps) {
           {error}
         </div>
       ) : (
-        <pre className="max-h-80 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3 font-mono text-[11px] leading-relaxed text-[var(--text)]">
-          {lines.length === 0 ? (
-            <span className="text-[var(--text-dim)]">No output yet.</span>
-          ) : (
-            lines.map((line, i) => <div key={i}>{line}</div>)
+        <div className="relative">
+          <pre
+            ref={containerRef}
+            className="max-h-80 overflow-auto rounded-lg border border-zinc-700 bg-zinc-900 p-3 font-mono text-xs leading-relaxed text-zinc-100"
+          >
+            {lines.length === 0 ? (
+              <span className="text-zinc-500">No output yet.</span>
+            ) : (
+              lines.map((line, i) => <div key={i}>{line}</div>)
+            )}
+            <div ref={bottomRef} />
+          </pre>
+          {showScrollButton && (
+            <button
+              onClick={scrollToBottom}
+              className="absolute bottom-4 right-4 rounded-md border border-[var(--accent)]/40 bg-[var(--accent)]/20 px-3 py-1.5 text-xs font-medium text-[var(--accent)] shadow-lg transition hover:bg-[var(--accent)]/30"
+              aria-label="Scroll to bottom"
+            >
+              ↓ Scroll to bottom
+            </button>
           )}
-          <div ref={bottomRef} />
-        </pre>
+        </div>
       )}
     </div>
   );
