@@ -7,7 +7,7 @@ import logging
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from openharness.services.projects import (
@@ -19,7 +19,6 @@ from openharness.services.projects import (
     update_project,
 )
 from openharness.ui.protocol import BackendEvent
-from openharness.webui.server.config import WebUIConfig
 from openharness.webui.server.sessions import SessionManager
 from openharness.webui.server.state import WebUIState, get_session_manager, get_state, require_token
 
@@ -82,7 +81,6 @@ def delete_project_endpoint(project_id: str) -> dict[str, bool]:
 @router.post("/{project_id}/activate")
 async def activate_project_endpoint(
     project_id: str,
-    request: Request,
     state: "WebUIState" = Depends(get_state),
     manager: SessionManager = Depends(get_session_manager),
 ) -> dict[str, object]:
@@ -90,24 +88,9 @@ async def activate_project_endpoint(
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-    # Update WebUIState
     state.switch_project(project)
-
-    # Recreate SessionManager with new cwd
-    new_config = WebUIConfig(
-        token=state.token,
-        cwd=str(project.path),
-        model=state.model,
-        api_format=state.api_format,
-        permission_mode=state.permission_mode,
-    )
-    new_manager = SessionManager(new_config, app=request.app)
-
-    # Update the app state with the new manager
-    request.app.state.webui_session_manager = new_manager
-
-    # Broadcast project_switched event to all connected clients
-    await _broadcast_project_switched(new_manager, project.path, project.id)
+    manager._config.cwd = str(state.cwd)
+    await _broadcast_project_switched(manager, state.cwd, project.id)
 
     return {"ok": True, "project": asdict(project)}
 

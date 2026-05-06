@@ -138,6 +138,47 @@ class TestActivateEndpoint:
         data = r.json()
         assert data["active_project_id"] == project_id
 
+    def test_activate_preserves_session_manager_config(self, client, tmp_path) -> None:
+        manager = client.app.state.webui_session_manager
+        manager._config.base_url = "https://api.example.test"
+        manager._config.api_key = "sk-test"
+        manager._config.system_prompt = "Use project context"
+
+        project_dir = tmp_path / "preserve-config"
+        project_dir.mkdir()
+        cr = client.post("/api/projects", json={"name": "PreserveConfig", "path": str(project_dir)})
+        project_id = cr.json()["id"]
+        r = client.post(f"/api/projects/{project_id}/activate")
+
+        assert r.status_code == 200
+        assert client.app.state.webui_session_manager is manager
+        assert manager._config.cwd == str(project_dir.resolve())
+        assert manager._config.base_url == "https://api.example.test"
+        assert manager._config.api_key == "sk-test"
+        assert manager._config.system_prompt == "Use project context"
+
+    def test_activate_broadcasts_project_switch_to_existing_sessions(self, client, tmp_path, monkeypatch) -> None:
+        manager = client.app.state.webui_session_manager
+        entry = manager.create_session()
+        events = []
+
+        async def fake_emit(event):
+            events.append(event)
+
+        monkeypatch.setattr(entry.host, "_emit", fake_emit)
+        project_dir = tmp_path / "broadcast-switch"
+        project_dir.mkdir()
+        cr = client.post("/api/projects", json={"name": "BroadcastSwitch", "path": str(project_dir)})
+        project_id = cr.json()["id"]
+        r = client.post(f"/api/projects/{project_id}/activate")
+
+        assert r.status_code == 200
+        assert client.app.state.webui_session_manager is manager
+        assert len(events) == 1
+        assert events[0].type == "project_switched"
+        assert events[0].project_id == project_id
+        assert events[0].project_path == str(project_dir.resolve())
+
 
 class TestValidationErrors:
     def test_create_requires_name(self, client, tmp_path) -> None:
