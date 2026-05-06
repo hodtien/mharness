@@ -164,6 +164,78 @@ describe("60-char truncation rule", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Copy text formatting
+// ---------------------------------------------------------------------------
+
+describe("Copy text formatting", () => {
+  test("formats session data as plain text with all fields", () => {
+    const session = {
+      session_id: "test-123",
+      summary: "Test session summary",
+      model: "gpt-4o",
+      message_count: 42,
+      created_at: 1704067200, // 2024-01-01 00:00:00 UTC (in seconds)
+    };
+
+    const ms = session.created_at < 1e12 ? session.created_at * 1000 : session.created_at;
+    const createdAtStr = new Date(ms).toLocaleString();
+    const text = [
+      session.summary || "(no summary)",
+      `Model: ${session.model || "—"}`,
+      `Messages: ${session.message_count}`,
+      `Created: ${createdAtStr}`,
+    ].join("\n");
+
+    expect(text).toContain("Test session summary");
+    expect(text).toContain("Model: gpt-4o");
+    expect(text).toContain("Messages: 42");
+    expect(text).toContain("Created:");
+  });
+
+  test("handles missing summary with fallback", () => {
+    const session = {
+      session_id: "test-456",
+      summary: "",
+      model: "claude-3",
+      message_count: 10,
+      created_at: Date.now() / 1000,
+    };
+
+    const ms = session.created_at < 1e12 ? session.created_at * 1000 : session.created_at;
+    const createdAtStr = new Date(ms).toLocaleString();
+    const text = [
+      session.summary || "(no summary)",
+      `Model: ${session.model || "—"}`,
+      `Messages: ${session.message_count}`,
+      `Created: ${createdAtStr}`,
+    ].join("\n");
+
+    expect(text).toContain("(no summary)");
+  });
+
+  test("handles missing model with fallback", () => {
+    const session = {
+      session_id: "test-789",
+      summary: "Test",
+      model: "",
+      message_count: 5,
+      created_at: Date.now() / 1000,
+    };
+
+    const ms = session.created_at < 1e12 ? session.created_at * 1000 : session.created_at;
+    const createdAtStr = new Date(ms).toLocaleString();
+    const text = [
+      session.summary || "(no summary)",
+      `Model: ${session.model || "—"}`,
+      `Messages: ${session.message_count}`,
+      `Created: ${createdAtStr}`,
+    ].join("\n");
+
+    expect(text).toContain("Model: —");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Integration tests with React Testing Library
 // (Skipped if @testing-library/react is not installed; install to un-skip)
 // ---------------------------------------------------------------------------

@@ -165,6 +165,7 @@ export default function HistoryPanel({
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<HistorySession | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const loadSessions = useCallback(
     async (signal?: AbortSignal) => {
@@ -248,6 +249,25 @@ export default function HistoryPanel({
       onResumeFromDrawer?.(newSessionId, resumeId);
     },
     [onResumeFromDrawer],
+  );
+
+  const handleCopy = useCallback(
+    (session: HistorySession) => {
+      const ms = session.created_at < 1e12 ? session.created_at * 1000 : session.created_at;
+      const createdAtStr = new Date(ms).toLocaleString();
+      const text = [
+        session.summary || "(no summary)",
+        `Model: ${session.model || "—"}`,
+        `Messages: ${session.message_count}`,
+        `Created: ${createdAtStr}`,
+      ].join("\n");
+
+      navigator.clipboard.writeText(text).then(() => {
+        setCopiedId(session.session_id);
+        setTimeout(() => setCopiedId(null), 1500);
+      });
+    },
+    [],
   );
 
   return (
@@ -344,6 +364,15 @@ export default function HistoryPanel({
                           </div>
                         </div>
                         <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(session)}
+                            disabled={isBusy}
+                            className="rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs hover:bg-[var(--accent-strong)]/20 disabled:opacity-50"
+                            title="Copy session info"
+                          >
+                            {copiedId === session.session_id ? "✓" : "📋"}
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleDetailSelect(session)}
