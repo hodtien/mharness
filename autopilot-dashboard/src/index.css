@@ -528,6 +528,210 @@ body {
   50% { box-shadow: 0 0 24px rgba(0, 212, 170, 0.16); }
 }
 
+/* ─── Empty State ─────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.empty-state .empty-icon {
+  width: 40px;
+  height: 40px;
+  opacity: 0.25;
+}
+
+.empty-state .empty-text {
+  font-size: 12px;
+  color: var(--ink-secondary);
+  letter-spacing: 0.3px;
+  line-height: 1.5;
+}
+
+.btn-empty-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-empty-action:hover {
+  background: rgba(0, 212, 170, 0.1);
+}
+
+/* ─── Modal ───────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-box {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 50;
+  width: 100%;
+  max-width: 440px;
+  transform: translate(-50%, -50%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--line-bright);
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modal-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.btn-close {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.btn-close:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.modal-form { display: grid; gap: 16px; }
+
+.form-field { display: grid; gap: 6px; }
+
+.form-field label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+}
+
+.form-field label .required { color: #ff6666; }
+.form-field label .label-hint { opacity: 0.5; font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+.form-field input,
+.form-field textarea {
+  background: var(--bg-surface);
+  border: 1px solid var(--line-bright);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  transition: border-color 0.2s;
+  resize: none;
+}
+
+.form-field input::placeholder,
+.form-field textarea::placeholder { color: #444; }
+
+.form-field input:focus,
+.form-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.error-msg {
+  padding: 10px 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  background: rgba(255, 68, 68, 0.1);
+  color: #ff6666;
+  font-size: 12px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.btn-cancel {
+  padding: 7px 16px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.btn-submit {
+  padding: 7px 16px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 212, 170, 0.4);
+  background: rgba(0, 212, 170, 0.15);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-submit:hover:not(:disabled) {
+  background: rgba(0, 212, 170, 0.25);
+}
+
+.btn-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Toast ───────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: 10px 20px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: rgba(0, 212, 170, 0.15);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  animation: fade-in 0.2s ease;
+}
+
 .animate-fade-in {
   animation: fade-in 0.4s ease-out forwards;
 }

@@ -159,11 +159,15 @@ function GroupColumnView({
   color,
   cards,
   showCount = true,
+  emptyAction,
+  emptyText,
 }: {
   label: string;
   color: string;
   cards: TaskCard[];
   showCount?: boolean;
+  emptyAction?: { label: string; onClick: () => void };
+  emptyText?: string;
 }) {
   return (
     <section className="column">
@@ -179,7 +183,16 @@ function GroupColumnView({
       <div className="cards">
         {cards.length > 0
           ? cards.map((card) => <CardView key={card.id} card={card} />)
-          : <div className="empty">—</div>
+          : emptyAction
+            ? (
+              <div className="empty-state">
+                {emptyText && <span className="empty-text">{emptyText}</span>}
+                <button className="btn-empty-action" onClick={emptyAction.onClick}>
+                  {emptyAction.label}
+                </button>
+              </div>
+            )
+            : <div className="empty">—</div>
         }
       </div>
     </section>
@@ -242,6 +255,104 @@ function useAutoRefresh(
   }, [hasActive, onRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
+/* ── New Idea Modal ────────────────────────────── */
+
+function NewIdeaModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [labelsRaw, setLabelsRaw] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    titleRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const labels = labelsRaw
+        ? labelsRaw.split(",").map((l) => l.trim()).filter(Boolean)
+        : undefined;
+      await fetch("/api/pipeline/cards", {
+        method: "POST",
+        body: JSON.stringify({ title: title.trim(), body: body.trim() || undefined, labels }),
+        headers: { "Content-Type": "application/json" },
+      });
+      onSuccess();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="modal-overlay" onClick={onClose} aria-hidden="true" />
+      <div className="modal-box" role="dialog" aria-modal="true" aria-label="New idea">
+        <div className="modal-header">
+          <h2>New idea</h2>
+          <button onClick={onClose} className="btn-close" aria-label="Close">✕</button>
+        </div>
+        <form onSubmit={handleSubmit} className="modal-form">
+          <div className="form-field">
+            <label htmlFor="idea-title">Title <span className="required">*</span></label>
+            <input
+              id="idea-title"
+              ref={titleRef}
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="What needs to be done?"
+              required
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="idea-body">Body</label>
+            <textarea
+              id="idea-body"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Optional details…"
+              rows={4}
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="idea-labels">Labels <span className="label-hint">(comma-separated)</span></label>
+            <input
+              id="idea-labels"
+              type="text"
+              value={labelsRaw}
+              onChange={(e) => setLabelsRaw(e.target.value)}
+              placeholder="frontend, bug, enhancement"
+            />
+          </div>
+          {error && <div className="error-msg">{error}</div>}
+          <div className="modal-actions">
+            <button type="button" onClick={onClose} className="btn-cancel">Cancel</button>
+            <button type="submit" disabled={!title.trim() || submitting} className="btn-submit">
+              {submitting ? "Submitting…" : "Submit"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </>
+  );
+}
+
 /* ── Main App ────────────────────────────────── */
 
 export function App() {
@@ -250,6 +361,8 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<number>(Date.now());
+  const [showIdeaModal, setShowIdeaModal] = useState(false);
+  const [ideaSuccess, setIdeaSuccess] = useState(false);
 
   const loadSnapshot = useCallback(async () => {
     setLoading(true);
@@ -429,18 +542,47 @@ export function App() {
 
         {/* ── Kanban Board (7 columns) ────── */}
         <section className="board board-7col">
-          {groupedColumns.map((group) => (
-            <GroupColumnView
-              key={group.key}
-              label={group.label}
-              color={group.color}
-              cards={group.cards}
-            />
-          ))}
+          {groupedColumns.map((group) => {
+            // Empty state action per column
+            const emptyAction = group.key === "queue"
+              ? { label: "+ Add idea", onClick: () => setShowIdeaModal(true) }
+              : undefined;
+            const emptyText = group.key === "queue"
+              ? "No tasks queued"
+              : group.key === "running"
+                ? "No active tasks"
+                : undefined;
+            return (
+              <GroupColumnView
+                key={group.key}
+                label={group.label}
+                color={group.color}
+                cards={group.cards}
+                emptyAction={emptyAction}
+                emptyText={emptyText}
+              />
+            );
+          })}
         </section>
 
         {/* ── Journal ────────────────────── */}
         <JournalView entries={snapshot.journal || []} />
+
+        {/* ── Modals ─────────────────────── */}
+        {showIdeaModal && (
+          <NewIdeaModal
+            onClose={() => setShowIdeaModal(false)}
+            onSuccess={() => {
+              setShowIdeaModal(false);
+              setIdeaSuccess(true);
+              setTimeout(() => setIdeaSuccess(false), 3000);
+              loadSnapshot();
+            }}
+          />
+        )}
+        {ideaSuccess && (
+          <div className="toast">✓ Idea queued successfully</div>
+        )}
       </div>
     </>
   );
