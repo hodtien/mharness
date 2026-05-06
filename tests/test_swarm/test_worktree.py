@@ -194,12 +194,21 @@ def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, mon
         # Any other git call succeeds silently
         return 0, "", ""
 
-    monkeypatch.setattr("openharness.swarm.worktree._run_git", fake_run_git)
+    import openharness.swarm.worktree as _wt_mod
 
-    assert asyncio.run(manager.remove_worktree("autopilot/ap-test")) is True
+    monkeypatch.setattr(_wt_mod, "_run_git", fake_run_git)
+
+    result = asyncio.run(manager.remove_worktree("autopilot/ap-test"))
+    all_call_args = [a for a, _c in calls]
+    assert result is True, f"Expected True, got {result!r}. All calls: {all_call_args}"
 
     remove_calls = [(a, c) for a, c in calls if a[:3] == ("worktree", "remove", "--force")]
-    assert len(remove_calls) >= 2, f"Expected ≥2 remove calls (repo + fallback), got {remove_calls}"
+    assert len(remove_calls) >= 2, (
+        f"Expected ≥2 remove calls (repo + fallback), got {remove_calls}. "
+        f"All calls: {all_call_args}. "
+        f"repo_r={repo_r!r}, base_dir_r={base_dir_r!r}, "
+        f"git_common_path={git_common_path!r}"
+    )
     # Last remove call must be the fallback (cwd=base_dir)
     last_args, last_cwd = remove_calls[-1]
     assert Path(last_cwd).resolve() == base_dir_r
