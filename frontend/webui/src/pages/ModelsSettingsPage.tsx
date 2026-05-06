@@ -5,12 +5,10 @@ import {
   type ModelsResponse,
   type ProviderProfile,
 } from "../api/client";
-
-interface Toast {
-  id: number;
-  kind: "success" | "error";
-  message: string;
-}
+import LoadingSkeleton from "../components/LoadingSkeleton";
+import ErrorBanner from "../components/ErrorBanner";
+import EmptyState from "../components/EmptyState";
+import { toast } from "../store/toast";
 
 interface AddModalState {
   provider: string;
@@ -46,7 +44,7 @@ export default function ModelsSettingsPage() {
   const [addModal, setAddModal] = useState<AddModalState | null>(null);
   const [editModal, setEditModal] = useState<EditModalState | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null);
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  
 
   const reload = async () => {
     setError(null);
@@ -88,7 +86,13 @@ export default function ModelsSettingsPage() {
   }, [providers]);
 
   if (loading) {
-    return <div className="p-6 text-sm text-[var(--text-dim)]">Loading models…</div>;
+    return (
+      <div className="flex flex-1 overflow-y-auto p-6">
+        <div className="w-full max-w-5xl space-y-4">
+          <LoadingSkeleton rows={4} />
+        </div>
+      </div>
+    );
   }
 
   const toggle = (providerId: string) => {
@@ -107,13 +111,7 @@ export default function ModelsSettingsPage() {
     });
   };
 
-  const pushToast = (kind: "success" | "error", message: string) => {
-    const id = Date.now() + Math.random();
-    setToasts((prev) => [...prev, { id, kind, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
-  };
+  
 
   const submitAdd = async () => {
     if (!addModal) return;
@@ -142,7 +140,7 @@ export default function ModelsSettingsPage() {
       });
       await reload();
       setAddModal(null);
-      pushToast("success", `Model ${trimmedId} added.`);
+      toast.success(`Model ${trimmedId} added.`);
     } catch (err) {
       setAddModal({ ...addModal, busy: false, error: String(err) });
     }
@@ -188,15 +186,12 @@ export default function ModelsSettingsPage() {
       });
       await reload();
       setEditModal(null);
-      pushToast("success", `Model ${editModal.modelId} updated.`);
+      toast.success(`Model ${editModal.modelId} updated.`);
     } catch (err) {
       // Re-add failed after delete succeeded — surface error and reload state.
       await reload().catch(() => undefined);
       setEditModal(null);
-      pushToast(
-        "error",
-        `Update failed after delete; model ${editModal.modelId} was removed: ${String(err)}`,
-      );
+      toast.error(`Update failed after delete; model ${editModal.modelId} was removed: ${String(err)}`);
     }
   };
 
@@ -208,7 +203,7 @@ export default function ModelsSettingsPage() {
       await reload();
       const removedId = deleteConfirm.modelId;
       setDeleteConfirm(null);
-      pushToast("success", `Model ${removedId} deleted.`);
+      toast.success(`Model ${removedId} deleted.`);
     } catch (err) {
       setDeleteConfirm({ ...deleteConfirm, busy: false, error: String(err) });
     }
@@ -235,16 +230,10 @@ export default function ModelsSettingsPage() {
           </button>
         </div>
 
-        {error && (
-          <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
-            {error}
-          </div>
-        )}
+        {error && <ErrorBanner message={error} />}
 
         {providerEntries.length === 0 && (
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 text-sm text-[var(--text-dim)]">
-            No provider profiles configured.
-          </div>
+          <EmptyState message="No provider profiles configured." description="Add a provider in Provider settings first." />
         )}
 
         <div className="space-y-3">
@@ -327,23 +316,6 @@ export default function ModelsSettingsPage() {
           onCancel={() => setDeleteConfirm(null)}
           onConfirm={submitDelete}
         />
-      )}
-
-      {toasts.length > 0 && (
-        <div className="fixed right-4 top-4 z-[60] space-y-2" aria-live="polite">
-          {toasts.map((toast) => (
-            <div
-              key={toast.id}
-              className={`rounded-lg border px-4 py-3 text-sm shadow-lg ${
-                toast.kind === "success"
-                  ? "border-emerald-400/30 bg-emerald-500/15 text-emerald-100"
-                  : "border-red-400/30 bg-red-500/15 text-red-100"
-              }`}
-            >
-              {toast.message}
-            </div>
-          ))}
-        </div>
       )}
     </div>
   );
