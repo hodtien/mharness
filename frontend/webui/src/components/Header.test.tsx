@@ -1,6 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { BrowserRouter } from "react-router-dom";
 import { PermissionModeChip } from "./Header";
+import Header from "./Header";
 import { useSession } from "../store/session";
 
 function mockLocalStorage() {
@@ -120,5 +122,76 @@ describe("PermissionModeChip", () => {
     await waitFor(() => {
       expect(useSession.getState().appState?.permission_mode).toBe("default");
     });
+  });
+});
+
+describe("Header breadcrumb", () => {
+  beforeEach(() => {
+    mockLocalStorage();
+    useSession.setState({
+      appState: null,
+      connectionStatus: "open",
+      transcript: [],
+      tasks: [],
+      busy: false,
+      errorBanner: null,
+      pendingPermission: null,
+      pendingQuestion: null,
+      pendingSelect: null,
+      compact: null,
+      todoMarkdown: null,
+      planMode: null,
+      swarm: null,
+      resumedFrom: null,
+    });
+  });
+
+  it("renders model badge, provider badge, and truncated path with tooltip", () => {
+    useSession.setState({
+      appState: {
+        model: "claude-3-5-sonnet",
+        provider: "anthropic",
+        cwd: "/Users/hodtien/harness/my-harness",
+        permission_mode: "default",
+      },
+    });
+
+    render(
+      <BrowserRouter>
+        <Header
+          onToggleSidebar={() => {}}
+          onInterrupt={() => {}}
+          onResumeSession={() => Promise.resolve()}
+        />
+      </BrowserRouter>,
+    );
+
+    // Model badge should be visible
+    expect(screen.getByText(/claude-3-5-sonnet/)).toBeTruthy();
+
+    // Provider badge should be rendered (visible on md+ breakpoint)
+    expect(screen.getByText(/anthropic/)).toBeTruthy();
+
+    // Path should be rendered with truncation (visible on lg+ breakpoint)
+    const pathSpan = screen.getByTitle("/Users/hodtien/harness/my-harness");
+    expect(pathSpan).toBeTruthy();
+    expect(pathSpan.textContent).toMatch(/\.\.\./); // should show "...my-harness"
+  });
+
+  it("handles missing appState gracefully", () => {
+    useSession.setState({ appState: null });
+
+    render(
+      <BrowserRouter>
+        <Header
+          onToggleSidebar={() => {}}
+          onInterrupt={() => {}}
+          onResumeSession={() => Promise.resolve()}
+        />
+      </BrowserRouter>,
+    );
+
+    // Should not crash, just show brand
+    expect(screen.getByText("OpenHarness")).toBeTruthy();
   });
 });

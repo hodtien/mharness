@@ -287,6 +287,27 @@ function SessionsDropdown({ onResumeSession }: Pick<Props, "onResumeSession">) {
   );
 }
 
+/**
+ * Truncate path from the left, showing the rightmost segments.
+ * Example: /Users/hodtien/harness/my-harness → ...my-harness
+ */
+function truncatePathLeft(path: string, maxLength = 30): string {
+  if (path.length <= maxLength) return path;
+  const parts = path.split("/");
+  if (parts.length <= 2) {
+    // Very short path like "/abc" — just ellipsize from left
+    return "..." + path.slice(-(maxLength - 3));
+  }
+  // Show rightmost segment(s) that fit
+  let result = parts[parts.length - 1];
+  for (let i = parts.length - 2; i >= 0; i--) {
+    const candidate = parts[i] + "/" + result;
+    if (candidate.length > maxLength - 3) break;
+    result = candidate;
+  }
+  return "..." + result;
+}
+
 export default function Header({ onToggleSidebar, onInterrupt, onResumeSession }: Props) {
   const { appState, connectionStatus, busy, errorBanner } = useSession();
   const dotColor =
@@ -295,6 +316,9 @@ export default function Header({ onToggleSidebar, onInterrupt, onResumeSession }
       : connectionStatus === "connecting"
         ? "bg-amber-400"
         : "bg-rose-500";
+
+  const fullPath = appState?.cwd || "";
+  const truncatedPath = fullPath ? truncatePathLeft(fullPath) : "";
 
   return (
     <div className="flex flex-col border-b border-[var(--border)] bg-[var(--panel)]">
@@ -313,10 +337,27 @@ export default function Header({ onToggleSidebar, onInterrupt, onResumeSession }
           </span>
           <SessionsDropdown onResumeSession={onResumeSession} />
           <PermissionModeChip />
-          <span className="hidden truncate text-xs text-[var(--text-dim)] sm:inline">
-            {appState?.model ? `· ${appState.model}` : ""}
-            {appState?.cwd ? ` · ${appState.cwd}` : ""}
-          </span>
+          {/* Model badge (priority display) */}
+          {appState?.model && (
+            <span className="shrink-0 text-xs text-[var(--text-dim)]">
+              · {appState.model}
+            </span>
+          )}
+          {/* Provider badge (visible on tablet+) */}
+          {appState?.provider && (
+            <span className="hidden shrink-0 text-xs text-[var(--text-dim)] md:inline">
+              · {appState.provider}
+            </span>
+          )}
+          {/* Path with left truncation + tooltip (desktop only) */}
+          {fullPath && (
+            <span
+              className="hidden truncate text-xs text-[var(--text-dim)] lg:inline"
+              title={fullPath}
+            >
+              · {truncatedPath}
+            </span>
+          )}
         </div>
         {busy && (
           <button
@@ -332,10 +373,6 @@ export default function Header({ onToggleSidebar, onInterrupt, onResumeSession }
           {errorBanner}
         </div>
       )}
-      {/* Mobile-only second-line meta */}
-      <div className="px-3 pb-2 text-[11px] text-[var(--text-dim)] sm:hidden">
-        {appState?.model || "?"} · {appState?.permission_mode || "default"}
-      </div>
     </div>
   );
 }
