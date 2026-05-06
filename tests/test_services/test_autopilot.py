@@ -3423,15 +3423,33 @@ def test_existing_pr_card_conflicting_branch_passes_through_ci(tmp_path: Path, m
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
+    sync_cwd = tmp_path / "worktrees" / "card-42"
+    sync_cwd.mkdir(parents=True)
     card, _ = store.enqueue_card(
         source_kind="github_pr",
         title="GitHub PR #42: existing PR",
         body="",
         source_ref="pr:42",
-        metadata={"linked_pr_number": 42},
+        metadata={
+            "linked_pr_number": 42,
+            "head_branch": "autopilot/pr-42",
+            "worktree_path": str(sync_cwd),
+        },
     )
+    call_order: list[str] = []
+
+    def fake_push_pr_branch_with_sync(
+        self, cwd, *, base_branch, head_branch, policies, card_id=None
+    ):
+        call_order.append("sync")
+        assert cwd == sync_cwd
+        assert base_branch == "main"
+        assert head_branch == "autopilot/pr-42"
+        assert card_id == card.id
+        return True, "branch_push_done", "Pushed autopilot/pr-42."
 
     async def fake_wait_for_pr_ci(self, pr_number, policies):
+        call_order.append("ci")
         return (
             "success",
             "All remote checks passed.",
@@ -3439,6 +3457,18 @@ def test_existing_pr_card_conflicting_branch_passes_through_ci(tmp_path: Path, m
             [],
         )
 
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo",
+        lambda self, cwd: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_same_git_common_dir",
+        lambda self, cwd: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        fake_push_pr_branch_with_sync,
+    )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
     )
@@ -3457,3 +3487,131 @@ def test_existing_pr_card_conflicting_branch_passes_through_ci(tmp_path: Path, m
     updated = store.get_card(card.id)
     assert updated is not None
     assert updated.metadata.get("human_gate_pending") is True
+    assert call_order == ["sync", "ci"]
+
+
+def test_existing_pr_card_branch_sync_failure_marks_failed(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import asyncio
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    sync_cwd = tmp_path / "worktrees" / "card-42"
+    sync_cwd.mkdir(parents=True)
+    card, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #42: existing PR",
+        body="",
+        source_ref="pr:42",
+        metadata={
+            "linked_pr_number": 42,
+            "head_branch": "autopilot/pr-42",
+            "worktree_path": str(sync_cwd),
+        },
+    )
+    call_order: list[str] = []
+
+    def fake_push_pr_branch_with_sync(
+        self, cwd, *, base_branch, head_branch, policies, card_id=None
+    ):
+        call_order.append("sync")
+        return False, "branch_push_failed", "remote rejected push"
+
+    async def fake_wait_for_pr_ci(self, pr_number, policies):
+        call_order.append("ci")
+        return "success", "All remote checks passed.", {"labels": [], "isDraft": False}, []
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo",
+        lambda self, cwd: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_same_git_common_dir",
+        lambda self, cwd: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        fake_push_pr_branch_with_sync,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+
+    result = asyncio.run(store.run_card(card.id))
+
+    assert result.status == "failed"
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.status == "failed"
+    assert updated.metadata.get("last_failure_stage") == "branch_push_failed"
+    assert updated.metadata.get("last_failure_summary") == "remote rejected push"
+    assert call_order == ["sync"]
+
+
+def test_existing_pr_card_skips_branch_sync_for_foreign_worktree(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import asyncio
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    sync_cwd = tmp_path / "foreign" / "card-42"
+    sync_cwd.mkdir(parents=True)
+    card, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #42: existing PR",
+        body="",
+        source_ref="pr:42",
+        metadata={"linked_pr_number": 42, "worktree_path": str(sync_cwd)},
+    )
+    call_order: list[str] = []
+
+    def fake_push_pr_branch_with_sync(
+        self, cwd, *, base_branch, head_branch, policies, card_id=None
+    ):
+        call_order.append("sync")
+        return True, "branch_push_done", "Pushed."
+
+    async def fake_wait_for_pr_ci(self, pr_number, policies):
+        call_order.append("ci")
+        return (
+            "success",
+            "All remote checks passed.",
+            {"url": "https://example/pr/42", "labels": [], "isDraft": False},
+            [],
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo",
+        lambda self, cwd: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_same_git_common_dir",
+        lambda self, cwd: False,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        fake_push_pr_branch_with_sync,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: False,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    result = asyncio.run(store.run_card(card.id))
+
+    assert result.status == "completed"
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.metadata.get("base_branch") == "main"
+    assert call_order == ["ci"]

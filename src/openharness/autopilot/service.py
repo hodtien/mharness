@@ -2027,6 +2027,19 @@ class RepoAutopilotStore:
         completed = self._run_git(["rev-parse", "--git-dir"], cwd=cwd)
         return completed.returncode == 0
 
+    def _is_same_git_common_dir(self, cwd: Path) -> bool:
+        repo_common_dir = self._run_git(["rev-parse", "--git-common-dir"], cwd=self._cwd)
+        cwd_common_dir = self._run_git(["rev-parse", "--git-common-dir"], cwd=cwd)
+        if repo_common_dir.returncode != 0 or cwd_common_dir.returncode != 0:
+            return False
+        repo_path = Path((repo_common_dir.stdout or "").strip())
+        cwd_path = Path((cwd_common_dir.stdout or "").strip())
+        if not repo_path.is_absolute():
+            repo_path = self._cwd / repo_path
+        if not cwd_path.is_absolute():
+            cwd_path = cwd / cwd_path
+        return repo_path.resolve() == cwd_path.resolve()
+
     def _git_commit_all(self, cwd: Path, message: str) -> bool:
         if not self._git_has_changes(cwd):
             return False
@@ -2816,11 +2829,56 @@ class RepoAutopilotStore:
         stream_writer: RunStreamWriter,
         attempt_count: int,
     ) -> RepoRunResult:
+        base_branch = self._base_branch(policies)
+        head_branch = _safe_text(card.metadata.get("head_branch")) or self._head_branch(
+            card, policies
+        )
+        worktree_path = _safe_text(card.metadata.get("worktree_path"))
+        worktree_candidate = Path(worktree_path).expanduser() if worktree_path else None
+        sync_cwd: Path | None = None
+        if worktree_candidate is not None and ".." not in worktree_candidate.parts:
+            sync_cwd = worktree_candidate.resolve()
+        push_ok, push_stage, push_summary = True, "branch_sync_skipped", ""
+        if (
+            sync_cwd is not None
+            and sync_cwd.exists()
+            and self._is_git_repo(sync_cwd)
+            and self._is_same_git_common_dir(sync_cwd)
+        ):
+            push_ok, push_stage, push_summary = self._push_pr_branch_with_sync(
+                sync_cwd,
+                base_branch=base_branch,
+                head_branch=head_branch,
+                policies=policies,
+                card_id=card.id,
+            )
+        if not push_ok:
+            self.update_status(
+                card.id,
+                status="failed",
+                note=push_summary,
+                metadata_updates={
+                    "linked_pr_number": pr_number,
+                    "last_failure_stage": push_stage,
+                    "last_failure_summary": push_summary,
+                },
+            )
+            return RepoRunResult(
+                card_id=card.id,
+                status="failed",
+                run_report_path=str(current_run_report),
+                verification_report_path=str(current_verification_report),
+                pr_number=pr_number,
+            )
         self.update_status(
             card.id,
             status="waiting_ci",
             note=f"monitoring existing PR #{pr_number}",
-            metadata_updates={"linked_pr_number": pr_number},
+            metadata_updates={
+                "linked_pr_number": pr_number,
+                "head_branch": head_branch,
+                "base_branch": base_branch,
+            },
         )
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
         _review_agent = _safe_text(execution.get("review_agent"))
