@@ -3,6 +3,8 @@ import { NavLink } from "react-router-dom";
 import { api } from "../api/client";
 import { useSession } from "../store/session";
 
+const SETTINGS_COLLAPSED_KEY = "oh:sidebar:settings-collapsed";
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -18,6 +20,23 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
   const planMode = useSession((s) => s.planMode);
   const swarm = useSession((s) => s.swarm);
   const [cron, setCron] = useState<Array<Record<string, unknown>>>([]);
+  const [settingsCollapsed, setSettingsCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SETTINGS_COLLAPSED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSettings = () => {
+    const next = !settingsCollapsed;
+    setSettingsCollapsed(next);
+    try {
+      localStorage.setItem(SETTINGS_COLLAPSED_KEY, String(next));
+    } catch {
+      // ignore storage errors
+    }
+  };
 
   useEffect(() => {
     api
@@ -35,22 +54,85 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
         <NavItem to="/tasks" label="Jobs" icon="⚙️" onClose={onClose} />
       </nav>
 
-      <Section title="Settings">
-        <nav aria-label="Settings" className="flex flex-col gap-1">
-          <NavItem to="/settings/modes" label="Modes" icon="🎚️" onClose={onClose} />
-          <NavItem to="/settings/provider" label="Provider" icon="🔌" onClose={onClose} />
-          <NavItem to="/settings/models" label="Models" icon="🧠" onClose={onClose} />
-          <NavItem to="/settings/agents" label="Agents" icon="🤖" onClose={onClose} />
-        </nav>
+      <Section
+        title={
+          <button
+            onClick={toggleSettings}
+            className="flex w-full items-center justify-between gap-2 text-left focus:outline-none focus:ring-1 focus:ring-[var(--border)]"
+            aria-expanded={!settingsCollapsed}
+            aria-label={settingsCollapsed ? "Expand Settings section" : "Collapse Settings section"}
+          >
+            <span>Settings</span>
+            {settingsCollapsed ? (
+              <span aria-hidden="true" className="text-[11px]">⚙️</span>
+            ) : (
+              <span aria-hidden="true" className="text-[10px]">▲</span>
+            )}
+          </button>
+        }
+      >
+        {settingsCollapsed ? (
+          <div className="flex gap-2 text-[11px]">
+            <NavLink
+              to="/settings/modes"
+              className={({ isActive }) =>
+                `flex items-center gap-1 rounded-md border px-2 py-1 transition ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)] text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"}`
+              }
+              onClick={onClose}
+            >
+              🎚️
+            </NavLink>
+            <NavLink
+              to="/settings/provider"
+              className={({ isActive }) =>
+                `flex items-center gap-1 rounded-md border px-2 py-1 transition ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)] text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"}`
+              }
+              onClick={onClose}
+            >
+              🔌
+            </NavLink>
+            <NavLink
+              to="/settings/models"
+              className={({ isActive }) =>
+                `flex items-center gap-1 rounded-md border px-2 py-1 transition ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)] text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"}`
+              }
+              onClick={onClose}
+            >
+              🧠
+            </NavLink>
+            <NavLink
+              to="/settings/agents"
+              className={({ isActive }) =>
+                `flex items-center gap-1 rounded-md border px-2 py-1 transition ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)] text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"}`
+              }
+              onClick={onClose}
+            >
+              🤖
+            </NavLink>
+          </div>
+        ) : (
+          <nav aria-label="Settings" className="flex flex-col gap-1">
+            <NavItem to="/settings/modes" label="Modes" icon="🎚️" onClose={onClose} />
+            <NavItem to="/settings/provider" label="Provider" icon="🔌" onClose={onClose} />
+            <NavItem to="/settings/models" label="Models" icon="🧠" onClose={onClose} />
+            <NavItem to="/settings/agents" label="Agents" icon="🤖" onClose={onClose} />
+          </nav>
+        )}
       </Section>
 
       <Section title="Status">
-        <Row k="model" v={appState?.model} />
-        <Row k="provider" v={appState?.provider} />
-        <Row k="auth" v={appState?.auth_status} />
-        <Row k="permission" v={planMode || appState?.permission_mode} />
-        <Row k="effort" v={appState?.effort} />
-        <Row k="mcp" v={`${appState?.mcp_connected ?? 0} ok / ${appState?.mcp_failed ?? 0} fail`} />
+        <div className="sidebar-status-group">
+          <StatusField label="Model" value={appState?.model} />
+          <StatusField label="Provider" value={appState?.provider} />
+          <StatusField label="Permission" value={planMode || appState?.permission_mode} tone={planMode === "full_auto" ? "danger" : "success"} />
+          <StatusField label="Effort" value={appState?.effort} />
+        </div>
+
+        <div className="sidebar-status-subsection">
+          <div className="sidebar-status-subsection-title">Access</div>
+          <StatusField label="Auth" value={appState?.auth_status} tone={appState?.auth_status === "ok" ? "success" : "danger"} />
+          <StatusField label="MCP" value={`${appState?.mcp_connected ?? 0} ok / ${appState?.mcp_failed ?? 0} fail`} tone={(appState?.mcp_failed ?? 0) > 0 ? "danger" : "success"} />
+        </div>
       </Section>
 
       {compact && (
@@ -102,47 +184,60 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
         </Section>
       )}
 
-      <Section title={`Jobs (${tasks.length})`}>
-        {tasks.length === 0 && (
-          <div className="text-xs text-[var(--text-dim)]">No background jobs.</div>
-        )}
-        {tasks.slice(0, 12).map((t) => (
-          <div
-            key={t.id}
-            className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1.5 text-[11px]"
-          >
-            <div className="flex justify-between">
-              <span className="font-mono text-[var(--text-dim)]">{t.id.slice(0, 8)}</span>
-              <span className={statusColor(t.status)}>{t.status}</span>
+      <div className="sidebar-jobs-section">
+        <Section title={`Jobs (${tasks.length})`}>
+          {tasks.length === 0 && (
+            <div className="text-xs text-[var(--text-dim)]">No background jobs.</div>
+          )}
+          {tasks.slice(0, 12).map((t) => (
+            <div
+              key={t.id}
+              className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1.5 text-[11px]"
+            >
+              <div className="flex justify-between gap-2">
+                <span className="font-mono text-[var(--text-dim)]">{t.id.slice(0, 8)}</span>
+                <span className={`job-badge ${jobBadgeClass(t.status)}`}>{t.status}</span>
+              </div>
+              <div className="truncate text-[12px]">{t.description || t.type}</div>
             </div>
-            <div className="truncate text-[12px]">{t.description || t.type}</div>
-          </div>
-        ))}
-      </Section>
+          ))}
+        </Section>
+      </div>
 
-      <Section title={`Cron jobs (${cron.length})`}>
-        {cron.length === 0 && (
-          <div className="text-xs text-[var(--text-dim)]">No cron jobs.</div>
-        )}
-        {cron.slice(0, 8).map((j, idx) => (
-          <div
-            key={idx}
-            className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1.5 text-[11px]"
-          >
-            <div className="flex justify-between">
-              <span className="truncate font-medium">{String(j.name ?? "?")}</span>
-              <span
-                className={j.enabled ? "text-emerald-300" : "text-[var(--text-dim)]"}
-              >
-                {j.enabled ? "on" : "off"}
-              </span>
+      <div className="sidebar-cron-section">
+        <Section title={`Cron Jobs (${cron.length})`}>
+          {cron.length === 0 && (
+            <div className="text-xs text-[var(--text-dim)]">No cron jobs.</div>
+          )}
+          {cron.slice(0, 8).map((j, idx) => (
+            <div
+              key={idx}
+              className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1.5 text-[11px]"
+            >
+              <div className="flex justify-between gap-2">
+                <span className="truncate font-medium">{String(j.name ?? "?")}</span>
+                <span className={`job-badge ${j.enabled ? "job-badge-success" : "job-badge-neutral"}`}>
+                  {j.enabled ? "on" : "off"}
+                </span>
+              </div>
+              <div className="font-mono text-[11px] text-[var(--text-dim)]">
+                {String(j.schedule ?? "")}
+              </div>
             </div>
-            <div className="font-mono text-[11px] text-[var(--text-dim)]">
-              {String(j.schedule ?? "")}
-            </div>
-          </div>
-        ))}
-      </Section>
+          ))}
+        </Section>
+      </div>
+
+      <a
+        href="https://github.com/hodtien/openharness/tree/main/docs"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] text-[var(--text-dim)] transition hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
+        style={{ textDecoration: "none", borderWidth: "1px", borderStyle: "solid", borderColor: "transparent" }}
+      >
+        <span>📖</span>
+        <span>Docs</span>
+      </a>
 
       <div className="mt-auto text-[10px] text-[var(--text-dim)]">
         OpenHarness Web UI · v0.1
@@ -204,7 +299,7 @@ function NavItem({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
     <div>
       <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-dim)]">
@@ -215,18 +310,28 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ k, v }: { k: string; v?: string | number }) {
+type Tone = "success" | "danger" | "warning" | "neutral";
+
+function StatusField({ label, value, tone = "neutral" }: { label: string; value?: string | number; tone?: Tone }) {
+  const pillClass = tone === "success"
+    ? "status-pill status-pill-success"
+    : tone === "danger"
+    ? "status-pill status-pill-danger"
+    : tone === "warning"
+    ? "status-pill status-pill-warning"
+    : "status-pill";
+
   return (
     <div className="flex items-center justify-between text-xs">
-      <span className="text-[var(--text-dim)]">{k}</span>
-      <span className="truncate font-mono text-right">{v ?? "—"}</span>
+      <span className="text-[var(--text-dim)]">{label}</span>
+      <span className={pillClass}>{value ?? "—"}</span>
     </div>
   );
 }
 
-function statusColor(status: string): string {
-  if (["running", "active", "in_progress"].includes(status)) return "text-amber-300";
-  if (["completed", "done", "ok"].includes(status)) return "text-emerald-300";
-  if (["failed", "error"].includes(status)) return "text-rose-300";
-  return "text-[var(--text-dim)]";
+function jobBadgeClass(status: string): string {
+  if (["running", "active", "in_progress"].includes(status)) return "job-badge-warning";
+  if (["completed", "done", "ok"].includes(status)) return "job-badge-success";
+  if (["failed", "error"].includes(status)) return "job-badge-danger";
+  return "job-badge-neutral";
 }

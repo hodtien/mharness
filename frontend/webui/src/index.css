@@ -161,3 +161,100 @@ button {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* ─── Sidebar Status Pill / Badge ─────────────── */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  border-radius: 999px;
+  border: 1px solid;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+.status-pill-success {
+  background: rgba(52, 211, 153, 0.1);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.25);
+}
+.status-pill-danger {
+  background: rgba(248, 113, 113, 0.1);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.25);
+}
+.status-pill-warning {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+/* ─── Sidebar Status Sub-group / Sub-section ─── */
+.sidebar-status-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5px;
+}
+.sidebar-status-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.sidebar-status-subsection-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  opacity: 0.6;
+  margin-bottom: 2px;
+}
+
+/* ─── Sidebar Job / Cron Badge ─────────────────── */
+.job-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.job-badge-success {
+  background: rgba(52, 211, 153, 0.1);
+  color: #34d399;
+}
+.job-badge-danger {
+  background: rgba(248, 113, 113, 0.1);
+  color: #f87171;
+}
+.job-badge-warning {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+}
+.job-badge-neutral {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+}
+
+/* ─── Sidebar Jobs / Cron Sections ────────────── */
+.sidebar-jobs-section {
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.sidebar-cron-section {
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
