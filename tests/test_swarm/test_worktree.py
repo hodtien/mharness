@@ -162,9 +162,8 @@ def test_create_worktree_symlinks_webui_dist(tmp_path):
 
 
 def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, monkeypatch):
-    # Use a real git repo so `rev-parse --git-common-dir` returns a real .git
-    # path, avoiding cross-platform mock fragility (Linux CI vs macOS symlinks).
-    # Only the `git worktree remove --force` commands are intercepted.
+    # Use a real git repo so we can get real worktree paths, but mock all
+    # _run_git calls so the test is fully deterministic cross-platform.
     repo = tmp_path / "repo"
     _init_repo_with_webui_dist(repo)
 
@@ -172,30 +171,30 @@ def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, mon
     worktree = asyncio.run(manager.create_worktree(repo, "autopilot/ap-test"))
     worktree_path = worktree.path
 
-    # Resolve to canonical paths for cwd comparisons (handles macOS /var → /private/var)
+    # Resolve canonical paths once (handles macOS /var → /private/var)
     repo_r = repo.resolve()
     base_dir_r = manager.base_dir.resolve()
+    # The real .git path — used as the rev-parse return value so
+    # remove_worktree resolves repo_path correctly on all platforms.
+    git_common_path = str((repo_r / ".git").resolve())
 
-    original_run_git = None
     calls: list[tuple[tuple[str, ...], Path]] = []
 
-    async def selective_fake_run_git(*args: str, cwd: Path) -> tuple[int, str, str]:
+    async def fake_run_git(*args: str, cwd: Path) -> tuple[int, str, str]:
         calls.append((args, cwd))
+        if args[:2] == ("rev-parse", "--git-common-dir"):
+            return 0, git_common_path, ""
         cwd_r = Path(cwd).resolve()
         if args[:3] == ("worktree", "remove", "--force") and cwd_r == repo_r:
-            # Simulate the repo-root remove failing
+            # Simulate the repo-root remove failing (e.g. locked worktree)
             return 1, "", "fatal: busy"
         if args[:3] == ("worktree", "remove", "--force") and cwd_r == base_dir_r:
-            # Fallback succeeds
+            # Fallback from base_dir succeeds
             return 0, "", ""
-        # All other git calls (e.g. rev-parse --git-common-dir) use the real impl
-        assert original_run_git is not None
-        return await original_run_git(*args, cwd=cwd)
+        # Any other git call succeeds silently
+        return 0, "", ""
 
-    import openharness.swarm.worktree as _wt_mod
-
-    original_run_git = _wt_mod._run_git
-    monkeypatch.setattr("openharness.swarm.worktree._run_git", selective_fake_run_git)
+    monkeypatch.setattr("openharness.swarm.worktree._run_git", fake_run_git)
 
     assert asyncio.run(manager.remove_worktree("autopilot/ap-test")) is True
 
