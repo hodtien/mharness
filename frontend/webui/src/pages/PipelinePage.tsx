@@ -213,6 +213,21 @@ function PolicyTab({ onSaved }: PolicyTabProps) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const yamlError = useMemo(() => {
+    const lines = yamlContent.split("\n");
+    let currentIndent = 0;
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      if (!line.trim() || line.trimStart().startsWith("#")) continue;
+      const indent = line.match(/^\s*/)?.[0].length ?? 0;
+      if (indent % 2 !== 0) return `YAML error on line ${i + 1}: indentation must use 2-space increments.`;
+      if (indent > currentIndent + 2) return `YAML error on line ${i + 1}: unexpected indentation.`;
+      currentIndent = indent;
+      if (!line.includes(":")) return `YAML error on line ${i + 1}: expected key-value pair.`;
+    }
+    return null;
+  }, [yamlContent]);
+
   useEffect(() => {
     apiFetch<{ yaml_content: string; parsed: unknown }>("/api/pipeline/policy")
       .then((data) => {
@@ -221,6 +236,24 @@ function PolicyTab({ onSaved }: PolicyTabProps) {
       .catch((err) => setLoadError(String(err)))
       .finally(() => setLoading(false));
   }, []);
+
+  const highlightedPreview = useMemo(() => {
+    return yamlContent.split("\n").map((line, idx) => {
+      const commentIdx = line.indexOf("#");
+      const comment = commentIdx >= 0 ? line.slice(commentIdx) : "";
+      const code = commentIdx >= 0 ? line.slice(0, commentIdx) : line;
+      const colonIdx = code.indexOf(":");
+      const key = colonIdx >= 0 ? code.slice(0, colonIdx + 1) : code;
+      const value = colonIdx >= 0 ? code.slice(colonIdx + 1) : "";
+      return (
+        <div key={idx} className="whitespace-pre-wrap break-words">
+          <span className="text-[var(--text)]">{key}</span>
+          <span className="text-amber-300">{value}</span>
+          {comment && <span className="text-emerald-400">{comment}</span>}
+        </div>
+      );
+    });
+  }, [yamlContent]);
 
   const handleSave = async () => {
     setSaveError(null);
@@ -276,24 +309,37 @@ function PolicyTab({ onSaved }: PolicyTabProps) {
           Edit <code className="rounded bg-[var(--panel-2)] px-1 py-0.5">.openharness/autopilot/autopilot_policy.yaml</code>
         </p>
         <div className="flex items-center gap-3">
-          {saved && (
-            <span className="text-xs text-emerald-400">Saved ✓</span>
-          )}
+          {saved && <span className="text-xs text-emerald-400">Saved ✓</span>}
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || Boolean(yamlError)}
             className="rounded-lg border border-[var(--accent)]/40 bg-[var(--accent)]/20 px-4 py-1.5 text-sm font-medium text-[var(--accent)] transition hover:bg-[var(--accent)]/30 disabled:opacity-40"
           >
             {saving ? "Saving…" : "Save"}
           </button>
         </div>
       </div>
-      <textarea
-        value={yamlContent}
-        onChange={(e) => { setYamlContent(e.target.value); setSaved(false); }}
-        className="flex-1 resize-none rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-4 font-mono text-sm text-[var(--text)] focus:border-[var(--accent)]/60 focus:outline-none"
-        spellCheck={false}
-      />
+      <div className="grid flex-1 gap-3 lg:grid-cols-2">
+        <textarea
+          value={yamlContent}
+          onChange={(e) => {
+            setYamlContent(e.target.value);
+            setSaved(false);
+          }}
+          className="min-h-80 resize-none rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-4 font-mono text-sm text-[var(--text)] focus:border-[var(--accent)]/60 focus:outline-none"
+          spellCheck={false}
+          aria-label="Autopilot policy YAML editor"
+        />
+        <div className="min-h-80 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-4 font-mono text-sm leading-6 text-[var(--text)]">
+          <div className="mb-2 text-xs uppercase tracking-wide text-[var(--text-dim)]">Preview</div>
+          {highlightedPreview}
+        </div>
+      </div>
+      {yamlError && (
+        <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+          {yamlError}
+        </div>
+      )}
       {saveError && (
         <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
           {saveError}
