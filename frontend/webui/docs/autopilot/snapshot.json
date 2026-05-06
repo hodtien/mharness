@@ -1,10 +1,45 @@
 {
-  "generated_at": 1777468900.0370162,
+  "generated_at": 1778003294.7724211,
   "repo_name": "webui",
   "repo_path": "/Users/hodtien/harness/my-harness/frontend/webui",
-  "focus": null,
+  "focus": {
+    "id": "ap-0de0d4ba",
+    "title": "[P10.1] UI: Tối ưu layout phần Status trong Sidebar",
+    "body": "Cải thiện visual hierarchy cho phần Status trong sidebar: dùng pill/badge thay vì text thuần cho model/provider/permission/effort, thêm màu semantic (xanh=ok, đỏ=error), nhóm các field liên quan, tách JOBS và CRON JOBS thành sub-section riêng với border-top. Tránh hiển thị dày đặc văn bản như hiện tại. Spawn agents: code-reviewer.",
+    "status": "queued",
+    "source_kind": "manual_idea",
+    "source_ref": "",
+    "score": 120,
+    "score_reasons": [
+      "source=manual_idea",
+      "direct user-driven input",
+      "urgent signals",
+      "recently updated"
+    ],
+    "labels": [],
+    "created_at": 1778003205.033091,
+    "updated_at": 1778003252.4592068,
+    "metadata": {
+      "last_note": "",
+      "url": "",
+      "execution_model": "",
+      "assistant_summary_preview": "",
+      "human_gate_pending": false,
+      "verification_failed": false,
+      "attempt_count": 0,
+      "max_attempts": 0,
+      "linked_pr_number": null,
+      "linked_pr_url": "",
+      "head_branch": "",
+      "last_ci_conclusion": "",
+      "last_ci_summary": "",
+      "last_failure_stage": "",
+      "last_failure_summary": "",
+      "verification_steps": []
+    }
+  },
   "counts": {
-    "queued": 0,
+    "queued": 7,
     "accepted": 0,
     "preparing": 0,
     "running": 0,
@@ -34,7 +69,260 @@
     "superseded"
   ],
   "columns": {
-    "queued": [],
+    "queued": [
+      {
+        "id": "ap-0de0d4ba",
+        "title": "[P10.1] UI: Tối ưu layout phần Status trong Sidebar",
+        "body": "Cải thiện visual hierarchy cho phần Status trong sidebar: dùng pill/badge thay vì text thuần cho model/provider/permission/effort, thêm màu semantic (xanh=ok, đỏ=error), nhóm các field liên quan, tách JOBS và CRON JOBS thành sub-section riêng với border-top. Tránh hiển thị dày đặc văn bản như hiện tại. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003205.033091,
+        "updated_at": 1778003252.4592068,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-5d12507f",
+        "title": "[P10.2] UX: Collapsible SETTINGS section trong Sidebar",
+        "body": "Settings section trong sidebar có 4 items (Modes, Provider, Models, Agents) chiếm nhiều space. Thêm toggle collapse/expand cho section SETTINGS. Lưu trạng thái vào localStorage. Khi collapsed: hiện icon gear nhỏ thay vì list. Default: expanded. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003256.914895,
+        "updated_at": 1778003256.914895,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-470cb11e",
+        "title": "[P10.3] UX: Thêm liên kết Docs/Help vào Sidebar",
+        "body": "Thêm liên kết 'Docs' hoặc 'Help' ở cuối sidebar (dưới CRON JOBS) dẫn đến tài liệu hướng dẫn sử dụng. Dùng icon ? hoặc book. Mở link trong tab mới. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003262.679401,
+        "updated_at": 1778003262.679401,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-4aa6cc69",
+        "title": "[P10.4] UI: Header breadcrumb responsive truncation",
+        "body": "Header hiện tại hiển thị '* DEFAULT↓ · claude-review · /Users/hodtien/harness/my-harness' — khó đọc trên màn nhỏ. Ưu tiên hiển thị: model badge trước, path truncate từ trái (hiện ...my-harness thay vì full path), tooltip hover để xem đầy đủ. Trên mobile <768px: ẩn path, chỉ giữ model + provider. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003267.7689779,
+        "updated_at": 1778003267.7689779,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-cac01728",
+        "title": "[P10.5] UI: Column count badge màu theo trạng thái",
+        "body": "Header mỗi cột Kanban (QUEUE, IN PROGRESS, REVIEW, COMPLETED, FAILED, REJECTED) chỉ hiển thị số trắng. Thêm màu semantic: QUEUE=xanh-lam, IN PROGRESS=cam (nhấp nháy nhẹ khi count>0), REVIEW=tím, COMPLETED=xanh-lá, FAILED=đỏ, REJECTED=xám mờ. Badge pulse animation khi có card active. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003271.6348999,
+        "updated_at": 1778003271.6348999,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-71e868b2",
+        "title": "[P10.6] UX: Empty state có hành động cho cột QUEUE",
+        "body": "Cột QUEUE đang hiện 'No cards' nhưng không gợi ý gì. Thêm empty state: icon + text 'No tasks queued' + nút '+ Add idea' trực tiếp trong cột (gọi cùng modal với nút '+ New idea' trên header). Tương tự cho cột IN PROGRESS: 'No active tasks. Click Run Next to start.' Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003274.18142,
+        "updated_at": 1778003274.18142,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-2de56b7d",
+        "title": "[P10.7] UX: Autopilot log viewer — chronological + grouped blocks",
+        "body": "Trong card detail drawer (Activity tab): hiện tại log entries không rõ thứ tự. Sắp xếp tất cả entries theo timestamp tăng dần. Gom các entries liên tiếp cùng kind thành collapsible block với header [timestamp] kind (N entries). Expanded by default nếu block ≤3 entries, collapsed nếu >3. Format: ▼ [10:32] implement (3) / ▶ [10:35] tool_use bash (12, collapsed). Spawn agents: planner → code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003294.770726,
+        "updated_at": 1778003294.770726,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      }
+    ],
     "accepted": [],
     "preparing": [],
     "running": [],
@@ -48,12 +336,346 @@
     "rejected": [],
     "superseded": []
   },
-  "cards": [],
-  "journal": [],
+  "cards": [
+    {
+      "id": "ap-0de0d4ba",
+      "title": "[P10.1] UI: Tối ưu layout phần Status trong Sidebar",
+      "body": "Cải thiện visual hierarchy cho phần Status trong sidebar: dùng pill/badge thay vì text thuần cho model/provider/permission/effort, thêm màu semantic (xanh=ok, đỏ=error), nhóm các field liên quan, tách JOBS và CRON JOBS thành sub-section riêng với border-top. Tránh hiển thị dày đặc văn bản như hiện tại. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003205.033091,
+      "updated_at": 1778003252.4592068,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-5d12507f",
+      "title": "[P10.2] UX: Collapsible SETTINGS section trong Sidebar",
+      "body": "Settings section trong sidebar có 4 items (Modes, Provider, Models, Agents) chiếm nhiều space. Thêm toggle collapse/expand cho section SETTINGS. Lưu trạng thái vào localStorage. Khi collapsed: hiện icon gear nhỏ thay vì list. Default: expanded. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003256.914895,
+      "updated_at": 1778003256.914895,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-470cb11e",
+      "title": "[P10.3] UX: Thêm liên kết Docs/Help vào Sidebar",
+      "body": "Thêm liên kết 'Docs' hoặc 'Help' ở cuối sidebar (dưới CRON JOBS) dẫn đến tài liệu hướng dẫn sử dụng. Dùng icon ? hoặc book. Mở link trong tab mới. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003262.679401,
+      "updated_at": 1778003262.679401,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-4aa6cc69",
+      "title": "[P10.4] UI: Header breadcrumb responsive truncation",
+      "body": "Header hiện tại hiển thị '* DEFAULT↓ · claude-review · /Users/hodtien/harness/my-harness' — khó đọc trên màn nhỏ. Ưu tiên hiển thị: model badge trước, path truncate từ trái (hiện ...my-harness thay vì full path), tooltip hover để xem đầy đủ. Trên mobile <768px: ẩn path, chỉ giữ model + provider. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003267.7689779,
+      "updated_at": 1778003267.7689779,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-cac01728",
+      "title": "[P10.5] UI: Column count badge màu theo trạng thái",
+      "body": "Header mỗi cột Kanban (QUEUE, IN PROGRESS, REVIEW, COMPLETED, FAILED, REJECTED) chỉ hiển thị số trắng. Thêm màu semantic: QUEUE=xanh-lam, IN PROGRESS=cam (nhấp nháy nhẹ khi count>0), REVIEW=tím, COMPLETED=xanh-lá, FAILED=đỏ, REJECTED=xám mờ. Badge pulse animation khi có card active. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003271.6348999,
+      "updated_at": 1778003271.6348999,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-71e868b2",
+      "title": "[P10.6] UX: Empty state có hành động cho cột QUEUE",
+      "body": "Cột QUEUE đang hiện 'No cards' nhưng không gợi ý gì. Thêm empty state: icon + text 'No tasks queued' + nút '+ Add idea' trực tiếp trong cột (gọi cùng modal với nút '+ New idea' trên header). Tương tự cho cột IN PROGRESS: 'No active tasks. Click Run Next to start.' Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003274.18142,
+      "updated_at": 1778003274.18142,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-2de56b7d",
+      "title": "[P10.7] UX: Autopilot log viewer — chronological + grouped blocks",
+      "body": "Trong card detail drawer (Activity tab): hiện tại log entries không rõ thứ tự. Sắp xếp tất cả entries theo timestamp tăng dần. Gom các entries liên tiếp cùng kind thành collapsible block với header [timestamp] kind (N entries). Expanded by default nếu block ≤3 entries, collapsed nếu >3. Format: ▼ [10:32] implement (3) / ▶ [10:35] tool_use bash (12, collapsed). Spawn agents: planner → code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003294.770726,
+      "updated_at": 1778003294.770726,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    }
+  ],
+  "journal": [
+    {
+      "timestamp": 1778003205.033904,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [P10.1] UI: Tối ưu layout phần Status trong Sidebar",
+      "task_id": "ap-0de0d4ba",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778003252.459682,
+      "kind": "intake_refresh",
+      "summary": "Refreshed intake card ap-0de0d4ba: [P10.1] UI: Tối ưu layout phần Status trong Sidebar",
+      "task_id": "ap-0de0d4ba",
+      "metadata": {
+        "source_kind": "manual_idea",
+        "source_ref": ""
+      }
+    },
+    {
+      "timestamp": 1778003256.9154098,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [P10.2] UX: Collapsible SETTINGS section trong Sidebar",
+      "task_id": "ap-5d12507f",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778003262.680077,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [P10.3] UX: Thêm liên kết Docs/Help vào Sidebar",
+      "task_id": "ap-470cb11e",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778003267.76966,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [P10.4] UI: Header breadcrumb responsive truncation",
+      "task_id": "ap-4aa6cc69",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778003271.6355321,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [P10.5] UI: Column count badge màu theo trạng thái",
+      "task_id": "ap-cac01728",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778003274.182073,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [P10.6] UX: Empty state có hành động cho cột QUEUE",
+      "task_id": "ap-71e868b2",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778003294.771528,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [P10.7] UX: Autopilot log viewer — chronological + grouped blocks",
+      "task_id": "ap-2de56b7d",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    }
+  ],
   "policies": {
     "autopilot": "/Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/autopilot_policy.yaml",
     "verification": "/Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/verification_policy.yaml",
     "release": "/Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/release_policy.yaml"
   },
-  "active_context": "# Active Repo Context\n\nGenerated at: 2026-04-29 13:21:40 UTC\n\n## Current Task Focus\n- No active repo task focus yet.\n\n## In Progress\n- None.\n\n## Next Up\n- No queued items.\n\n## Recently Completed\n- None yet.\n\n## Recent Failures\n- None.\n\n## Recent Repo Journal\n- Journal is empty.\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/release_policy.yaml"
+  "active_context": "# Active Repo Context\n\nGenerated at: 2026-05-05 17:48:14 UTC\n\n## Current Task Focus\n- [queued] [P10.1] UI: Tối ưu layout phần Status trong Sidebar (manual_idea, score=120)\n- Detail: Cải thiện visual hierarchy cho phần Status trong sidebar: dùng pill/badge thay vì text thuần cho model/provider/permission/effort, thêm màu semantic (xanh=ok, đỏ=error), nhóm các field liên quan, tách JOBS và CRON JOB...\n\n## In Progress\n- None.\n\n## Next Up\n- [120] ap-0de0d4ba [P10.1] UI: Tối ưu layout phần Status trong Sidebar (manual_idea)\n- [120] ap-5d12507f [P10.2] UX: Collapsible SETTINGS section trong Sidebar (manual_idea)\n- [120] ap-470cb11e [P10.3] UX: Thêm liên kết Docs/Help vào Sidebar (manual_idea)\n- [120] ap-4aa6cc69 [P10.4] UI: Header breadcrumb responsive truncation (manual_idea)\n- [120] ap-cac01728 [P10.5] UI: Column count badge màu theo trạng thái (manual_idea)\n- [120] ap-71e868b2 [P10.6] UX: Empty state có hành động cho cột QUEUE (manual_idea)\n- [120] ap-2de56b7d [P10.7] UX: Autopilot log viewer — chronological + grouped blocks (manual_idea)\n\n## Recently Completed\n- None yet.\n\n## Recent Failures\n- None.\n\n## Recent Repo Journal\n- 05-05 17:46 intake_added: Queued manual_idea: [P10.1] UI: Tối ưu layout phần Status trong Sidebar\n- 05-05 17:47 intake_refresh: Refreshed intake card ap-0de0d4ba: [P10.1] UI: Tối ưu layout phần Status trong Sidebar\n- 05-05 17:47 intake_added: Queued manual_idea: [P10.2] UX: Collapsible SETTINGS section trong Sidebar\n- 05-05 17:47 intake_added: Queued manual_idea: [P10.3] UX: Thêm liên kết Docs/Help vào Sidebar\n- 05-05 17:47 intake_added: Queued manual_idea: [P10.4] UI: Header breadcrumb responsive truncation\n- 05-05 17:47 intake_added: Queued manual_idea: [P10.5] UI: Column count badge màu theo trạng thái\n- 05-05 17:47 intake_added: Queued manual_idea: [P10.6] UX: Empty state có hành động cho cột QUEUE\n- 05-05 17:48 intake_added: Queued manual_idea: [P10.7] UX: Autopilot log viewer — chronological + grouped blocks\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/release_policy.yaml"
 }

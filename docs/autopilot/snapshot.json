@@ -1,10 +1,45 @@
 {
-  "generated_at": 1777984149.7012181,
+  "generated_at": 1778038939.8811321,
   "repo_name": "my-harness",
   "repo_path": "/Users/hodtien/harness/my-harness",
-  "focus": null,
+  "focus": {
+    "id": "ap-d8d56bb1",
+    "title": "[P10.2] UX: Collapsible SETTINGS section trong Sidebar",
+    "body": "Settings section trong sidebar có 4 items (Modes, Provider, Models, Agents) chiếm nhiều space. Thêm toggle collapse/expand cho section SETTINGS. Lưu trạng thái vào localStorage. Khi collapsed: hiện icon gear nhỏ thay vì list. Default: expanded. Spawn agents: code-reviewer.",
+    "status": "queued",
+    "source_kind": "manual_idea",
+    "source_ref": "",
+    "score": 120,
+    "score_reasons": [
+      "source=manual_idea",
+      "direct user-driven input",
+      "urgent signals",
+      "recently updated"
+    ],
+    "labels": [],
+    "created_at": 1778003465.62876,
+    "updated_at": 1778003465.62876,
+    "metadata": {
+      "last_note": "",
+      "url": "",
+      "execution_model": "",
+      "assistant_summary_preview": "",
+      "human_gate_pending": false,
+      "verification_failed": false,
+      "attempt_count": 0,
+      "max_attempts": 0,
+      "linked_pr_number": null,
+      "linked_pr_url": "",
+      "head_branch": "",
+      "last_ci_conclusion": "",
+      "last_ci_summary": "",
+      "last_failure_stage": "",
+      "last_failure_summary": "",
+      "verification_steps": []
+    }
+  },
   "counts": {
-    "queued": 0,
+    "queued": 15,
     "accepted": 0,
     "preparing": 0,
     "running": 0,
@@ -12,9 +47,9 @@
     "pr_open": 0,
     "waiting_ci": 0,
     "repairing": 0,
-    "completed": 14,
-    "merged": 58,
-    "failed": 2,
+    "completed": 15,
+    "merged": 61,
+    "failed": 0,
     "rejected": 18,
     "superseded": 0
   },
@@ -34,7 +69,548 @@
     "superseded"
   ],
   "columns": {
-    "queued": [],
+    "queued": [
+      {
+        "id": "ap-d8d56bb1",
+        "title": "[P10.2] UX: Collapsible SETTINGS section trong Sidebar",
+        "body": "Settings section trong sidebar có 4 items (Modes, Provider, Models, Agents) chiếm nhiều space. Thêm toggle collapse/expand cho section SETTINGS. Lưu trạng thái vào localStorage. Khi collapsed: hiện icon gear nhỏ thay vì list. Default: expanded. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003465.62876,
+        "updated_at": 1778003465.62876,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-9435c08d",
+        "title": "[P10.3] UX: Thêm liên kết Docs/Help vào Sidebar",
+        "body": "Thêm liên kết 'Docs' hoặc 'Help' ở cuối sidebar (dưới CRON JOBS) dẫn đến tài liệu hướng dẫn sử dụng. Dùng icon ? hoặc book. Mở link trong tab mới. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003466.0603929,
+        "updated_at": 1778003466.0603929,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-850626be",
+        "title": "[P10.4] UI: Header breadcrumb responsive truncation",
+        "body": "Header hiện tại hiển thị '* DEFAULT↓ · claude-review · /Users/hodtien/harness/my-harness' — khó đọc trên màn nhỏ. Ưu tiên hiển thị: model badge trước, path truncate từ trái (hiện ...my-harness thay vì full path), tooltip hover để xem đầy đủ. Trên mobile <768px: ẩn path, chỉ giữ model + provider. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003466.5197551,
+        "updated_at": 1778003466.5197551,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-e96e0fa0",
+        "title": "[P10.5] UI: Column count badge màu theo trạng thái",
+        "body": "Header mỗi cột Kanban (QUEUE, IN PROGRESS, REVIEW, COMPLETED, FAILED, REJECTED) chỉ hiển thị số trắng. Thêm màu semantic: QUEUE=xanh-lam, IN PROGRESS=cam (nhấp nháy nhẹ khi count>0), REVIEW=tím, COMPLETED=xanh-lá, FAILED=đỏ, REJECTED=xám mờ. Badge pulse animation khi có card active. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003481.6338959,
+        "updated_at": 1778003481.6338959,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-93e8a111",
+        "title": "[P10.6] UX: Empty state có hành động cho cột QUEUE",
+        "body": "Cột QUEUE đang hiện 'No cards' nhưng không gợi ý gì. Thêm empty state: icon + text 'No tasks queued' + nút '+ Add idea' trực tiếp trong cột (gọi cùng modal với nút '+ New idea' trên header). Tương tự cho cột IN PROGRESS: 'No active tasks. Click Run Next to start.' Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003482.067146,
+        "updated_at": 1778003482.067146,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-0484c32b",
+        "title": "[P10.7] UX: Autopilot log viewer — chronological + grouped blocks",
+        "body": "Trong card detail drawer (Activity tab): hiện tại log entries không rõ thứ tự. Sắp xếp tất cả entries theo timestamp tăng dần. Gom các entries liên tiếp cùng kind thành collapsible block với header [timestamp] kind (N entries). Expanded by default nếu block ≤3 entries, collapsed nếu >3. Format: ▼ [10:32] implement (3) / ▶ [10:35] tool_use bash (12, collapsed). Spawn agents: planner → code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003495.103004,
+        "updated_at": 1778003495.103004,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-6949f459",
+        "title": "[P10.8] UX: Thêm Skeleton loader cho trang History",
+        "body": "Thay thế văn bản 'Loading history...' bằng component Skeleton loader (pulse animation) phản ánh đúng layout card: thumbnail placeholder, text line placeholder, badge placeholder. Reuse LoadingSkeleton.tsx nếu đã có từ X2. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003495.523963,
+        "updated_at": 1778003495.523963,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-89a397dd",
+        "title": "[P10.9] UX: History grouping theo ngày",
+        "body": "History list hiện tại là flat list không có separator. Group các sessions theo ngày với sticky header: 'Today', 'Yesterday', '3 days ago', 'Last week', date cụ thể cho cũ hơn. Dùng date-fns formatRelative hoặc Intl.RelativeTimeFormat (không thêm lib nếu chưa có). Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003495.954293,
+        "updated_at": 1778003495.954293,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-a86e255e",
+        "title": "[P10.10] UX: History search + filter theo model",
+        "body": "Thêm search bar trên History page: filter by summary text (debounce 300ms, client-side trên data đã fetch). Thêm filter dropdown theo model (lấy unique models từ history list). Kết quả filter realtime, không cần fetch lại. Empty state khi không có kết quả: 'No sessions match your search'. Spawn agents: tdd-guide → code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003496.3932421,
+        "updated_at": 1778003496.3932421,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-47a03029",
+        "title": "[P10.11] UX: Nút Copy mở rộng trong History",
+        "body": "Thêm nút Copy cho mỗi history item. Copy toàn bộ: summary + model + message_count + created_at dưới dạng plain text. Feedback: icon đổi thành checkmark 1.5s sau khi copy thành công. Thay thế đề xuất P10.7 cũ (chỉ copy description). Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003514.857483,
+        "updated_at": 1778003514.857483,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-b4ce5924",
+        "title": "[P10.12] UI: Status styling cho Background Jobs",
+        "body": "Bảng Background Jobs: thêm màu và icon theo trạng thái cho từng dòng — xanh lá + ✓ cho completed, đỏ + ✗ cho failed/error, vàng + spinner cho running. Status badge thay vì text thuần. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003515.3144581,
+        "updated_at": 1778003515.3144581,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-8771e96c",
+        "title": "[P10.13] UX: Inline log viewer cho Jobs",
+        "body": "Khi click vào một job trong TasksPage, drawer hiện chỉ có basic info. Thêm inline log viewer: terminal-style monospace font, dark background, scroll, auto-follow tail khi job đang running (polling mỗi 2s). Nút 'Scroll to bottom' floating khi user scroll lên. Nút copy log. Spawn agents: tdd-guide → code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003515.743346,
+        "updated_at": 1778003515.743346,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-503a240c",
+        "title": "[P10.14] UI: Cải thiện input 'Passes' trong Modes Settings",
+        "body": "Chuyển đổi ô nhập 'Passes' trong ModesSettingsPage từ text input sang number input (type=number, min=1, max=5) với stepper buttons. Hiển thị visual indicator (ví dụ 5 dots, active dots = passes value) bên cạnh để trực quan hơn. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003516.184549,
+        "updated_at": 1778003516.184549,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-76f738ce",
+        "title": "[P10.15] UI: Syntax highlighting cho Autopilot Policy editor",
+        "body": "Trong PipelinePage tab Policy: thay textarea thuần bằng editor có syntax highlighting YAML. Dùng CodeMirror 6 (@codemirror/lang-yaml) hoặc monaco-editor nếu đã có dependency. Nếu chưa có thư viện nào: dùng highlight.js chỉ cho read-only preview + textarea cho edit. Validate YAML realtime, hiển thị error inline dưới editor. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003516.6160178,
+        "updated_at": 1778003516.6160178,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-50836f38",
+        "title": "[P10.16] UX: Cập nhật thông báo trang Chat",
+        "body": "Cập nhật ChatPage: khi đã kết nối WebSocket thành công, thay 'Waiting for backend...' bằng welcome message hiển thị: session ID (truncate), model đang dùng, trạng thái kết nối với icon xanh. Khi mất kết nối: hiển thị banner đỏ 'Disconnected — attempting to reconnect...' với spinner. Spawn agents: code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003517.0439749,
+        "updated_at": 1778003517.0439749,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      }
+    ],
     "accepted": [],
     "preparing": [],
     "running": [],
@@ -209,6 +785,63 @@
             {
               "command": "agent:code-reviewer (diff vs main)",
               "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-c5c5b442",
+        "title": "[P10.1] UI: Tối ưu layout phần Status trong Sidebar",
+        "body": "Cải thiện visual hierarchy cho phần Status trong sidebar: dùng pill/badge thay vì text thuần cho model/provider/permission/effort, thêm màu semantic (xanh=ok, đỏ=error), nhóm các field liên quan, tách JOBS và CRON JOBS thành sub-section riêng với border-top. Tránh hiển thị dày đặc văn bản như hiện tại. Spawn agents: code-reviewer.",
+        "status": "completed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003465.194387,
+        "updated_at": 1778037758.88875,
+        "metadata": {
+          "last_note": "PR #74 CI passed after updating branch from main",
+          "url": "",
+          "execution_model": "oclaude-coder",
+          "assistant_summary_preview": "I'll investigate the CI failures and fix them. Let me start by checking the current state and understanding what went wrong.I found the sidebar changes already in place. I’m reading the component and its tests to confirm whether the remaining failure is in the UI code or in the autopilot harness ...",
+          "human_gate_pending": true,
+          "verification_failed": false,
+          "attempt_count": 5,
+          "max_attempts": 5,
+          "linked_pr_number": 74,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/74",
+          "head_branch": "autopilot/ap-c5c5b442",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "Python tests (3.10)=SUCCESS; Python tests (3.11)=SUCCESS; Python quality=SUCCESS; Frontend typecheck=SUCCESS",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "success",
               "returncode": 0
             }
           ]
@@ -1363,6 +1996,63 @@
             {
               "command": "agent:code-reviewer (diff vs main)",
               "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-2cf73449",
+        "title": "[P10.1-test] test queue visibility",
+        "body": "test card để kiểm tra queue hiển thị trên UI",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778003425.812085,
+        "updated_at": 1778005234.538055,
+        "metadata": {
+          "last_note": "Merged PR #75",
+          "url": "",
+          "execution_model": "oclaude-coder",
+          "assistant_summary_preview": "Let me check the recent commit and understand what was changed:Good! Now I can see this is about testing queue visibility. Let me check what was actually added:Perfect! So a test was added to verify that both \"queued\" and \"accepted\" cards are visible in the Queue column. Now let me check if the t...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 5,
+          "max_attempts": 5,
+          "linked_pr_number": 75,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/75",
+          "head_branch": "autopilot/ap-2cf73449",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "PR #75 merged after CI fix.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "success",
               "returncode": 0
             }
           ]
@@ -4022,14 +4712,12 @@
             }
           ]
         }
-      }
-    ],
-    "failed": [
+      },
       {
         "id": "ap-93f7fa1a",
         "title": "[P9.10] Rebase strategy cho in-flight worktrees",
         "body": "## Mục tiêu\nKhi card A merge vào main, card B đang chạy trên worktree cũ base → cần rebase để tránh merge conflict.\n\n## Phân tích hiện tại\n- Mỗi worktree branch từ main tại thời điểm create\n- Khi card A merge → main advance → card B worktree stale\n- Card B push branch → PR có conflict với new main\n- Hiện tại không có auto-rebase mechanism\n\n## Giải pháp đề xuất\n1. Sau mỗi _pull_base_branch() (khi card merge xong):\n   - List active worktrees qua count_active_cards()\n   - Cho mỗi active worktree: schedule git fetch origin main + git rebase origin/main\n   - Nếu rebase conflict → abort rebase, journal warning, để card tự handle khi verify\n2. Rebase KHÔNG bắt buộc thành công — nếu fail thì card verify step sẽ phát hiện conflict\n3. Async: rebase chạy background, không block main flow\n4. Lock: cần RepoFileLock per-worktree ('card-{id}.lock') khi rebase\n\n## Alternative đơn giản hơn (recommended cho v1):\n- KHÔNG auto-rebase\n- Khi card push branch → nếu PR có conflict → repair step detect và rebase\n- Đã có repair loop → tận dụng existing mechanism\n- Chỉ cần journal entry 'base_advanced' để track\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/service.py — post-merge notification, optional rebase\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu  \n- test_base_advance_journals_notification: card A merge → journal 'base_advanced' cho active cards\n- test_rebase_conflict_non_fatal: rebase fails → journal warning, card continues\n\nSpawn agents: planner (chọn strategy v1 vs full) → tdd-guide → code-reviewer.\nDepends on: P9.3, P9.8.",
-        "status": "failed",
+        "status": "merged",
         "source_kind": "manual_idea",
         "source_ref": "",
         "score": 100,
@@ -4050,7 +4738,7 @@
           "url": "",
           "execution_model": "oclaude-coder",
           "assistant_summary_preview": "Now let me check where `_handle_base_branch_advanced` is called after merge:Made the smallest fix to keep this v1 behavior aligned with the “recommended simpler strategy”: ### What changed - In `src/openharness/autopilot/service.py`, post-merge handling now calls `_handle_base_branch_advanced(......",
-          "human_gate_pending": true,
+          "human_gate_pending": false,
           "verification_failed": false,
           "attempt_count": 5,
           "max_attempts": 5,
@@ -4059,8 +4747,8 @@
           "head_branch": "autopilot/ap-93f7fa1a",
           "last_ci_conclusion": "success",
           "last_ci_summary": "Python tests (3.10)=SUCCESS; Python tests (3.11)=SUCCESS; Python quality=SUCCESS; Frontend typecheck=SUCCESS",
-          "last_failure_stage": "repair_exhausted",
-          "last_failure_summary": "repair rounds exhausted",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
           "verification_steps": [
             {
               "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
@@ -4089,7 +4777,7 @@
         "id": "ap-5d3976a2",
         "title": "[P9.11] Integration test: 2 cards chạy song song end-to-end",
         "body": "## Mục tiêu\nTest tích hợp đảm bảo 2 autopilot cards có thể chạy song song không conflict.\n\n## Test scenarios\n1. test_two_cards_claim_different_cards:\n   - Enqueue 3 cards\n   - 2 workers gọi pick_and_claim_card() đồng thời\n   - Mỗi worker nhận card khác nhau\n   - Không card nào bị claim 2 lần\n\n2. test_two_cards_run_in_parallel_worktrees:\n   - 2 cards claimed\n   - Mỗi card tạo worktree riêng (slug khác nhau)\n   - Cả 2 chạy đồng thời không conflict\n   - Registry reflect cả 2 đang running\n\n3. test_capacity_gate_blocks_third_card:\n   - max_parallel_runs=2\n   - 2 cards đang running\n   - run_next() cho card thứ 3 → blocked (409)\n   - Card 1 finish → run_next() cho card 3 → OK\n\n4. test_merge_one_does_not_corrupt_other:\n   - Card A merge → _pull_base_branch()\n   - Card B vẫn running → không bị ảnh hưởng\n   - Registry vẫn correct\n\n5. test_crash_cleanup_does_not_affect_sibling:\n   - Card A crash → worktree cleanup\n   - Card B vẫn running bình thường\n\n## Files cần sửa\n- NEW: tests/test_autopilot/test_parallel_execution.py\n\n## Mock strategy\n- Mock _run_agent_prompt, _run_gh, git commands\n- Dùng real file system (tmp_path) cho registry + journal + worktree dirs\n- Dùng threading cho concurrent execution\n\nSpawn agents: tdd-guide (viết toàn bộ test scenarios) → code-reviewer.\nDepends on: P9.1, P9.2, P9.3, P9.7, P9.8, P9.9.",
-        "status": "failed",
+        "status": "merged",
         "source_kind": "manual_idea",
         "source_ref": "",
         "score": 100,
@@ -4109,7 +4797,7 @@
           "url": "",
           "execution_model": "oclaude-coder",
           "assistant_summary_preview": "Let me run the verification commands to see the current state: All verification commands pass! Let me check what the previous failure was about:Done — no code changes were needed. ### What changed - The requested integration test file already exists at `tests/test_autopilot/test_parallel_executio...",
-          "human_gate_pending": true,
+          "human_gate_pending": false,
           "verification_failed": true,
           "attempt_count": 5,
           "max_attempts": 5,
@@ -4118,8 +4806,8 @@
           "head_branch": "autopilot/ap-5d3976a2",
           "last_ci_conclusion": "success",
           "last_ci_summary": "Python tests (3.10)=SUCCESS; Python tests (3.11)=SUCCESS; Python quality=SUCCESS; Frontend typecheck=SUCCESS",
-          "last_failure_stage": "local_verification_failed",
-          "last_failure_summary": "agent:code-reviewer (diff vs main) rc=1",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
           "verification_steps": [
             {
               "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
@@ -4145,6 +4833,7 @@
         }
       }
     ],
+    "failed": [],
     "rejected": [
       {
         "id": "ap-000584f0",
@@ -4783,6 +5472,546 @@
   },
   "cards": [
     {
+      "id": "ap-d8d56bb1",
+      "title": "[P10.2] UX: Collapsible SETTINGS section trong Sidebar",
+      "body": "Settings section trong sidebar có 4 items (Modes, Provider, Models, Agents) chiếm nhiều space. Thêm toggle collapse/expand cho section SETTINGS. Lưu trạng thái vào localStorage. Khi collapsed: hiện icon gear nhỏ thay vì list. Default: expanded. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003465.62876,
+      "updated_at": 1778003465.62876,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-9435c08d",
+      "title": "[P10.3] UX: Thêm liên kết Docs/Help vào Sidebar",
+      "body": "Thêm liên kết 'Docs' hoặc 'Help' ở cuối sidebar (dưới CRON JOBS) dẫn đến tài liệu hướng dẫn sử dụng. Dùng icon ? hoặc book. Mở link trong tab mới. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003466.0603929,
+      "updated_at": 1778003466.0603929,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-850626be",
+      "title": "[P10.4] UI: Header breadcrumb responsive truncation",
+      "body": "Header hiện tại hiển thị '* DEFAULT↓ · claude-review · /Users/hodtien/harness/my-harness' — khó đọc trên màn nhỏ. Ưu tiên hiển thị: model badge trước, path truncate từ trái (hiện ...my-harness thay vì full path), tooltip hover để xem đầy đủ. Trên mobile <768px: ẩn path, chỉ giữ model + provider. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003466.5197551,
+      "updated_at": 1778003466.5197551,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-e96e0fa0",
+      "title": "[P10.5] UI: Column count badge màu theo trạng thái",
+      "body": "Header mỗi cột Kanban (QUEUE, IN PROGRESS, REVIEW, COMPLETED, FAILED, REJECTED) chỉ hiển thị số trắng. Thêm màu semantic: QUEUE=xanh-lam, IN PROGRESS=cam (nhấp nháy nhẹ khi count>0), REVIEW=tím, COMPLETED=xanh-lá, FAILED=đỏ, REJECTED=xám mờ. Badge pulse animation khi có card active. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003481.6338959,
+      "updated_at": 1778003481.6338959,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-93e8a111",
+      "title": "[P10.6] UX: Empty state có hành động cho cột QUEUE",
+      "body": "Cột QUEUE đang hiện 'No cards' nhưng không gợi ý gì. Thêm empty state: icon + text 'No tasks queued' + nút '+ Add idea' trực tiếp trong cột (gọi cùng modal với nút '+ New idea' trên header). Tương tự cho cột IN PROGRESS: 'No active tasks. Click Run Next to start.' Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003482.067146,
+      "updated_at": 1778003482.067146,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-0484c32b",
+      "title": "[P10.7] UX: Autopilot log viewer — chronological + grouped blocks",
+      "body": "Trong card detail drawer (Activity tab): hiện tại log entries không rõ thứ tự. Sắp xếp tất cả entries theo timestamp tăng dần. Gom các entries liên tiếp cùng kind thành collapsible block với header [timestamp] kind (N entries). Expanded by default nếu block ≤3 entries, collapsed nếu >3. Format: ▼ [10:32] implement (3) / ▶ [10:35] tool_use bash (12, collapsed). Spawn agents: planner → code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003495.103004,
+      "updated_at": 1778003495.103004,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-6949f459",
+      "title": "[P10.8] UX: Thêm Skeleton loader cho trang History",
+      "body": "Thay thế văn bản 'Loading history...' bằng component Skeleton loader (pulse animation) phản ánh đúng layout card: thumbnail placeholder, text line placeholder, badge placeholder. Reuse LoadingSkeleton.tsx nếu đã có từ X2. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003495.523963,
+      "updated_at": 1778003495.523963,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-89a397dd",
+      "title": "[P10.9] UX: History grouping theo ngày",
+      "body": "History list hiện tại là flat list không có separator. Group các sessions theo ngày với sticky header: 'Today', 'Yesterday', '3 days ago', 'Last week', date cụ thể cho cũ hơn. Dùng date-fns formatRelative hoặc Intl.RelativeTimeFormat (không thêm lib nếu chưa có). Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003495.954293,
+      "updated_at": 1778003495.954293,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-a86e255e",
+      "title": "[P10.10] UX: History search + filter theo model",
+      "body": "Thêm search bar trên History page: filter by summary text (debounce 300ms, client-side trên data đã fetch). Thêm filter dropdown theo model (lấy unique models từ history list). Kết quả filter realtime, không cần fetch lại. Empty state khi không có kết quả: 'No sessions match your search'. Spawn agents: tdd-guide → code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003496.3932421,
+      "updated_at": 1778003496.3932421,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-47a03029",
+      "title": "[P10.11] UX: Nút Copy mở rộng trong History",
+      "body": "Thêm nút Copy cho mỗi history item. Copy toàn bộ: summary + model + message_count + created_at dưới dạng plain text. Feedback: icon đổi thành checkmark 1.5s sau khi copy thành công. Thay thế đề xuất P10.7 cũ (chỉ copy description). Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003514.857483,
+      "updated_at": 1778003514.857483,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-b4ce5924",
+      "title": "[P10.12] UI: Status styling cho Background Jobs",
+      "body": "Bảng Background Jobs: thêm màu và icon theo trạng thái cho từng dòng — xanh lá + ✓ cho completed, đỏ + ✗ cho failed/error, vàng + spinner cho running. Status badge thay vì text thuần. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003515.3144581,
+      "updated_at": 1778003515.3144581,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-8771e96c",
+      "title": "[P10.13] UX: Inline log viewer cho Jobs",
+      "body": "Khi click vào một job trong TasksPage, drawer hiện chỉ có basic info. Thêm inline log viewer: terminal-style monospace font, dark background, scroll, auto-follow tail khi job đang running (polling mỗi 2s). Nút 'Scroll to bottom' floating khi user scroll lên. Nút copy log. Spawn agents: tdd-guide → code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003515.743346,
+      "updated_at": 1778003515.743346,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-503a240c",
+      "title": "[P10.14] UI: Cải thiện input 'Passes' trong Modes Settings",
+      "body": "Chuyển đổi ô nhập 'Passes' trong ModesSettingsPage từ text input sang number input (type=number, min=1, max=5) với stepper buttons. Hiển thị visual indicator (ví dụ 5 dots, active dots = passes value) bên cạnh để trực quan hơn. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003516.184549,
+      "updated_at": 1778003516.184549,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-76f738ce",
+      "title": "[P10.15] UI: Syntax highlighting cho Autopilot Policy editor",
+      "body": "Trong PipelinePage tab Policy: thay textarea thuần bằng editor có syntax highlighting YAML. Dùng CodeMirror 6 (@codemirror/lang-yaml) hoặc monaco-editor nếu đã có dependency. Nếu chưa có thư viện nào: dùng highlight.js chỉ cho read-only preview + textarea cho edit. Validate YAML realtime, hiển thị error inline dưới editor. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003516.6160178,
+      "updated_at": 1778003516.6160178,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-50836f38",
+      "title": "[P10.16] UX: Cập nhật thông báo trang Chat",
+      "body": "Cập nhật ChatPage: khi đã kết nối WebSocket thành công, thay 'Waiting for backend...' bằng welcome message hiển thị: session ID (truncate), model đang dùng, trạng thái kết nối với icon xanh. Khi mất kết nối: hiển thị banner đỏ 'Disconnected — attempting to reconnect...' với spinner. Spawn agents: code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003517.0439749,
+      "updated_at": 1778003517.0439749,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
       "id": "ap-e732a7bf",
       "title": "[P2.2] Backend: PATCH /api/modes — thay đổi modes runtime",
       "body": "Endpoint PATCH /api/modes nhận body Pydantic model ModesPatch(permission_mode?: str, effort?: str, passes?: int, fast_mode?: bool, output_style?: str, theme?: str). Validate giá trị (permission_mode phải trong ['default','plan','full_auto'], effort trong ['low','medium','high'], passes 1-5). Áp dụng vào AppState hiện tại. Persist vào ~/.openharness/settings.json qua save_settings(). Broadcast state_snapshot qua WebSocket.",
@@ -4948,6 +6177,63 @@
           {
             "command": "agent:code-reviewer (diff vs main)",
             "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-c5c5b442",
+      "title": "[P10.1] UI: Tối ưu layout phần Status trong Sidebar",
+      "body": "Cải thiện visual hierarchy cho phần Status trong sidebar: dùng pill/badge thay vì text thuần cho model/provider/permission/effort, thêm màu semantic (xanh=ok, đỏ=error), nhóm các field liên quan, tách JOBS và CRON JOBS thành sub-section riêng với border-top. Tránh hiển thị dày đặc văn bản như hiện tại. Spawn agents: code-reviewer.",
+      "status": "completed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003465.194387,
+      "updated_at": 1778037758.88875,
+      "metadata": {
+        "last_note": "PR #74 CI passed after updating branch from main",
+        "url": "",
+        "execution_model": "oclaude-coder",
+        "assistant_summary_preview": "I'll investigate the CI failures and fix them. Let me start by checking the current state and understanding what went wrong.I found the sidebar changes already in place. I’m reading the component and its tests to confirm whether the remaining failure is in the UI code or in the autopilot harness ...",
+        "human_gate_pending": true,
+        "verification_failed": false,
+        "attempt_count": 5,
+        "max_attempts": 5,
+        "linked_pr_number": 74,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/74",
+        "head_branch": "autopilot/ap-c5c5b442",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "Python tests (3.10)=SUCCESS; Python tests (3.11)=SUCCESS; Python quality=SUCCESS; Frontend typecheck=SUCCESS",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "success",
             "returncode": 0
           }
         ]
@@ -6100,6 +7386,63 @@
           {
             "command": "agent:code-reviewer (diff vs main)",
             "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-2cf73449",
+      "title": "[P10.1-test] test queue visibility",
+      "body": "test card để kiểm tra queue hiển thị trên UI",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778003425.812085,
+      "updated_at": 1778005234.538055,
+      "metadata": {
+        "last_note": "Merged PR #75",
+        "url": "",
+        "execution_model": "oclaude-coder",
+        "assistant_summary_preview": "Let me check the recent commit and understand what was changed:Good! Now I can see this is about testing queue visibility. Let me check what was actually added:Perfect! So a test was added to verify that both \"queued\" and \"accepted\" cards are visible in the Queue column. Now let me check if the t...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 5,
+        "max_attempts": 5,
+        "linked_pr_number": 75,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/75",
+        "head_branch": "autopilot/ap-2cf73449",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "PR #75 merged after CI fix.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/terminal && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "success",
             "returncode": 0
           }
         ]
@@ -8764,7 +10107,7 @@
       "id": "ap-93f7fa1a",
       "title": "[P9.10] Rebase strategy cho in-flight worktrees",
       "body": "## Mục tiêu\nKhi card A merge vào main, card B đang chạy trên worktree cũ base → cần rebase để tránh merge conflict.\n\n## Phân tích hiện tại\n- Mỗi worktree branch từ main tại thời điểm create\n- Khi card A merge → main advance → card B worktree stale\n- Card B push branch → PR có conflict với new main\n- Hiện tại không có auto-rebase mechanism\n\n## Giải pháp đề xuất\n1. Sau mỗi _pull_base_branch() (khi card merge xong):\n   - List active worktrees qua count_active_cards()\n   - Cho mỗi active worktree: schedule git fetch origin main + git rebase origin/main\n   - Nếu rebase conflict → abort rebase, journal warning, để card tự handle khi verify\n2. Rebase KHÔNG bắt buộc thành công — nếu fail thì card verify step sẽ phát hiện conflict\n3. Async: rebase chạy background, không block main flow\n4. Lock: cần RepoFileLock per-worktree ('card-{id}.lock') khi rebase\n\n## Alternative đơn giản hơn (recommended cho v1):\n- KHÔNG auto-rebase\n- Khi card push branch → nếu PR có conflict → repair step detect và rebase\n- Đã có repair loop → tận dụng existing mechanism\n- Chỉ cần journal entry 'base_advanced' để track\n\n## Files cần sửa\n- MODIFY: src/openharness/autopilot/service.py — post-merge notification, optional rebase\n- MODIFY: tests/test_services/test_autopilot.py\n\n## Tests yêu cầu  \n- test_base_advance_journals_notification: card A merge → journal 'base_advanced' cho active cards\n- test_rebase_conflict_non_fatal: rebase fails → journal warning, card continues\n\nSpawn agents: planner (chọn strategy v1 vs full) → tdd-guide → code-reviewer.\nDepends on: P9.3, P9.8.",
-      "status": "failed",
+      "status": "merged",
       "source_kind": "manual_idea",
       "source_ref": "",
       "score": 100,
@@ -8785,7 +10128,7 @@
         "url": "",
         "execution_model": "oclaude-coder",
         "assistant_summary_preview": "Now let me check where `_handle_base_branch_advanced` is called after merge:Made the smallest fix to keep this v1 behavior aligned with the “recommended simpler strategy”: ### What changed - In `src/openharness/autopilot/service.py`, post-merge handling now calls `_handle_base_branch_advanced(......",
-        "human_gate_pending": true,
+        "human_gate_pending": false,
         "verification_failed": false,
         "attempt_count": 5,
         "max_attempts": 5,
@@ -8794,8 +10137,8 @@
         "head_branch": "autopilot/ap-93f7fa1a",
         "last_ci_conclusion": "success",
         "last_ci_summary": "Python tests (3.10)=SUCCESS; Python tests (3.11)=SUCCESS; Python quality=SUCCESS; Frontend typecheck=SUCCESS",
-        "last_failure_stage": "repair_exhausted",
-        "last_failure_summary": "repair rounds exhausted",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
         "verification_steps": [
           {
             "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
@@ -8824,7 +10167,7 @@
       "id": "ap-5d3976a2",
       "title": "[P9.11] Integration test: 2 cards chạy song song end-to-end",
       "body": "## Mục tiêu\nTest tích hợp đảm bảo 2 autopilot cards có thể chạy song song không conflict.\n\n## Test scenarios\n1. test_two_cards_claim_different_cards:\n   - Enqueue 3 cards\n   - 2 workers gọi pick_and_claim_card() đồng thời\n   - Mỗi worker nhận card khác nhau\n   - Không card nào bị claim 2 lần\n\n2. test_two_cards_run_in_parallel_worktrees:\n   - 2 cards claimed\n   - Mỗi card tạo worktree riêng (slug khác nhau)\n   - Cả 2 chạy đồng thời không conflict\n   - Registry reflect cả 2 đang running\n\n3. test_capacity_gate_blocks_third_card:\n   - max_parallel_runs=2\n   - 2 cards đang running\n   - run_next() cho card thứ 3 → blocked (409)\n   - Card 1 finish → run_next() cho card 3 → OK\n\n4. test_merge_one_does_not_corrupt_other:\n   - Card A merge → _pull_base_branch()\n   - Card B vẫn running → không bị ảnh hưởng\n   - Registry vẫn correct\n\n5. test_crash_cleanup_does_not_affect_sibling:\n   - Card A crash → worktree cleanup\n   - Card B vẫn running bình thường\n\n## Files cần sửa\n- NEW: tests/test_autopilot/test_parallel_execution.py\n\n## Mock strategy\n- Mock _run_agent_prompt, _run_gh, git commands\n- Dùng real file system (tmp_path) cho registry + journal + worktree dirs\n- Dùng threading cho concurrent execution\n\nSpawn agents: tdd-guide (viết toàn bộ test scenarios) → code-reviewer.\nDepends on: P9.1, P9.2, P9.3, P9.7, P9.8, P9.9.",
-      "status": "failed",
+      "status": "merged",
       "source_kind": "manual_idea",
       "source_ref": "",
       "score": 100,
@@ -8844,7 +10187,7 @@
         "url": "",
         "execution_model": "oclaude-coder",
         "assistant_summary_preview": "Let me run the verification commands to see the current state: All verification commands pass! Let me check what the previous failure was about:Done — no code changes were needed. ### What changed - The requested integration test file already exists at `tests/test_autopilot/test_parallel_executio...",
-        "human_gate_pending": true,
+        "human_gate_pending": false,
         "verification_failed": true,
         "attempt_count": 5,
         "max_attempts": 5,
@@ -8853,8 +10196,8 @@
         "head_branch": "autopilot/ap-5d3976a2",
         "last_ci_conclusion": "success",
         "last_ci_summary": "Python tests (3.10)=SUCCESS; Python tests (3.11)=SUCCESS; Python quality=SUCCESS; Frontend typecheck=SUCCESS",
-        "last_failure_stage": "local_verification_failed",
-        "last_failure_summary": "agent:code-reviewer (diff vs main) rc=1",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
         "verification_steps": [
           {
             "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
@@ -9514,238 +10857,261 @@
   ],
   "journal": [
     {
-      "timestamp": 1777975180.399519,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.10] Rebase strategy cho in-flight worktrees (local verification failed; retrying)",
-      "task_id": "ap-93f7fa1a",
+      "timestamp": 1778004910.470077,
+      "kind": "remote_branch_rebase_done",
+      "summary": "Rebased worktree onto origin/autopilot/ap-2cf73449",
+      "task_id": "ap-2cf73449",
+      "metadata": {
+        "remote_branch": "origin/autopilot/ap-2cf73449",
+        "worktree_path": "/Users/hodtien/.openharness/worktrees/autopilot+ap-2cf73449"
+      }
+    },
+    {
+      "timestamp": 1778004910.4852202,
+      "kind": "rebase_done",
+      "summary": "Rebased worktree onto origin/main",
+      "task_id": "ap-2cf73449",
+      "metadata": {
+        "base_branch": "main",
+        "worktree_path": "/Users/hodtien/.openharness/worktrees/autopilot+ap-2cf73449"
+      }
+    },
+    {
+      "timestamp": 1778004910.4856791,
+      "kind": "branch_sync_done",
+      "summary": "Synced autopilot/ap-2cf73449 onto origin/main.",
+      "task_id": "ap-2cf73449",
+      "metadata": {
+        "base_branch": "main",
+        "head_branch": "autopilot/ap-2cf73449",
+        "attempt_count": 1
+      }
+    },
+    {
+      "timestamp": 1778004913.537514,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P10.1-test] test queue visibility (waiting for remote CI on PR #75)",
+      "task_id": "ap-2cf73449",
       "metadata": {}
     },
     {
-      "timestamp": 1777975180.4248161,
-      "kind": "verification_failed",
-      "summary": "[P9.10] Rebase strategy cho in-flight worktrees: local verification failed, retrying",
-      "task_id": "ap-93f7fa1a",
+      "timestamp": 1778004957.008451,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P10.1-test] test queue visibility (remote CI status: failed)",
+      "task_id": "ap-2cf73449",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778004957.047688,
+      "kind": "status_repairing",
+      "summary": "repairing: [P10.1-test] test queue visibility (remote CI failed; retrying)",
+      "task_id": "ap-2cf73449",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778004957.067845,
+      "kind": "ci_failed_retry",
+      "summary": "[P10.1-test] test queue visibility: remote CI failed, retrying",
+      "task_id": "ap-2cf73449",
       "metadata": {
+        "pr_number": 75,
         "attempt_count": 3
       }
     },
     {
-      "timestamp": 1777975181.164642,
+      "timestamp": 1778004958.994803,
       "kind": "status_repairing",
-      "summary": "repairing: [P9.10] Rebase strategy cho in-flight worktrees (repairing failed run)",
-      "task_id": "ap-93f7fa1a",
+      "summary": "repairing: [P10.1-test] test queue visibility (repairing failed run)",
+      "task_id": "ap-2cf73449",
       "metadata": {}
     },
     {
-      "timestamp": 1777975266.359074,
+      "timestamp": 1778005046.5575318,
       "kind": "run_finished",
-      "summary": "Agent run finished for [P9.10] Rebase strategy cho in-flight worktrees",
-      "task_id": "ap-93f7fa1a",
+      "summary": "Agent run finished for [P10.1-test] test queue visibility",
+      "task_id": "ap-2cf73449",
       "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-93f7fa1a-attempt-04-run.md",
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-2cf73449-attempt-04-run.md",
         "attempt_count": 4
       }
     },
     {
-      "timestamp": 1777975266.369123,
+      "timestamp": 1778005046.57683,
       "kind": "status_verifying",
-      "summary": "verifying: [P9.10] Rebase strategy cho in-flight worktrees (running verification gates)",
-      "task_id": "ap-93f7fa1a",
+      "summary": "verifying: [P10.1-test] test queue visibility (running verification gates)",
+      "task_id": "ap-2cf73449",
       "metadata": {}
     },
     {
-      "timestamp": 1777975320.952307,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.10] Rebase strategy cho in-flight worktrees (local verification failed; retrying)",
-      "task_id": "ap-93f7fa1a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777975320.9776142,
-      "kind": "verification_failed",
-      "summary": "[P9.10] Rebase strategy cho in-flight worktrees: local verification failed, retrying",
-      "task_id": "ap-93f7fa1a",
+      "timestamp": 1778005092.306476,
+      "kind": "existing_progress_detected",
+      "summary": "[P10.1-test] test queue visibility: reusing existing local branch progress",
+      "task_id": "ap-2cf73449",
       "metadata": {
+        "attempt_count": 4,
+        "head_branch": "autopilot/ap-2cf73449"
+      }
+    },
+    {
+      "timestamp": 1778005093.649096,
+      "kind": "remote_branch_rebase_done",
+      "summary": "Rebased worktree onto origin/autopilot/ap-2cf73449",
+      "task_id": "ap-2cf73449",
+      "metadata": {
+        "remote_branch": "origin/autopilot/ap-2cf73449",
+        "worktree_path": "/Users/hodtien/.openharness/worktrees/autopilot+ap-2cf73449"
+      }
+    },
+    {
+      "timestamp": 1778005093.662336,
+      "kind": "rebase_done",
+      "summary": "Rebased worktree onto origin/main",
+      "task_id": "ap-2cf73449",
+      "metadata": {
+        "base_branch": "main",
+        "worktree_path": "/Users/hodtien/.openharness/worktrees/autopilot+ap-2cf73449"
+      }
+    },
+    {
+      "timestamp": 1778005093.66264,
+      "kind": "branch_sync_done",
+      "summary": "Synced autopilot/ap-2cf73449 onto origin/main.",
+      "task_id": "ap-2cf73449",
+      "metadata": {
+        "base_branch": "main",
+        "head_branch": "autopilot/ap-2cf73449",
+        "attempt_count": 1
+      }
+    },
+    {
+      "timestamp": 1778005097.0876212,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P10.1-test] test queue visibility (waiting for remote CI on PR #75)",
+      "task_id": "ap-2cf73449",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778005099.805002,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P10.1-test] test queue visibility (remote CI status: failed)",
+      "task_id": "ap-2cf73449",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778005099.8588889,
+      "kind": "status_repairing",
+      "summary": "repairing: [P10.1-test] test queue visibility (remote CI failed; retrying)",
+      "task_id": "ap-2cf73449",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778005099.875659,
+      "kind": "ci_failed_retry",
+      "summary": "[P10.1-test] test queue visibility: remote CI failed, retrying",
+      "task_id": "ap-2cf73449",
+      "metadata": {
+        "pr_number": 75,
         "attempt_count": 4
       }
     },
     {
-      "timestamp": 1777975321.8924649,
+      "timestamp": 1778005102.439231,
       "kind": "status_repairing",
-      "summary": "repairing: [P9.10] Rebase strategy cho in-flight worktrees (repairing failed run)",
-      "task_id": "ap-93f7fa1a",
+      "summary": "repairing: [P10.1-test] test queue visibility (repairing failed run)",
+      "task_id": "ap-2cf73449",
       "metadata": {}
     },
     {
-      "timestamp": 1777975418.9068391,
+      "timestamp": 1778005192.873555,
       "kind": "run_finished",
-      "summary": "Agent run finished for [P9.10] Rebase strategy cho in-flight worktrees",
-      "task_id": "ap-93f7fa1a",
+      "summary": "Agent run finished for [P10.1-test] test queue visibility",
+      "task_id": "ap-2cf73449",
       "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-93f7fa1a-attempt-05-run.md",
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-2cf73449-attempt-05-run.md",
         "attempt_count": 5
       }
     },
     {
-      "timestamp": 1777975418.923811,
+      "timestamp": 1778005192.8935208,
       "kind": "status_verifying",
-      "summary": "verifying: [P9.10] Rebase strategy cho in-flight worktrees (running verification gates)",
-      "task_id": "ap-93f7fa1a",
+      "summary": "verifying: [P10.1-test] test queue visibility (running verification gates)",
+      "task_id": "ap-2cf73449",
       "metadata": {}
     },
     {
-      "timestamp": 1777975477.830624,
+      "timestamp": 1778005227.521055,
+      "kind": "existing_progress_detected",
+      "summary": "[P10.1-test] test queue visibility: reusing existing local branch progress",
+      "task_id": "ap-2cf73449",
+      "metadata": {
+        "attempt_count": 5,
+        "head_branch": "autopilot/ap-2cf73449"
+      }
+    },
+    {
+      "timestamp": 1778005228.816313,
+      "kind": "remote_branch_rebase_done",
+      "summary": "Rebased worktree onto origin/autopilot/ap-2cf73449",
+      "task_id": "ap-2cf73449",
+      "metadata": {
+        "remote_branch": "origin/autopilot/ap-2cf73449",
+        "worktree_path": "/Users/hodtien/.openharness/worktrees/autopilot+ap-2cf73449"
+      }
+    },
+    {
+      "timestamp": 1778005228.828898,
+      "kind": "rebase_done",
+      "summary": "Rebased worktree onto origin/main",
+      "task_id": "ap-2cf73449",
+      "metadata": {
+        "base_branch": "main",
+        "worktree_path": "/Users/hodtien/.openharness/worktrees/autopilot+ap-2cf73449"
+      }
+    },
+    {
+      "timestamp": 1778005228.829151,
+      "kind": "branch_sync_done",
+      "summary": "Synced autopilot/ap-2cf73449 onto origin/main.",
+      "task_id": "ap-2cf73449",
+      "metadata": {
+        "base_branch": "main",
+        "head_branch": "autopilot/ap-2cf73449",
+        "attempt_count": 1
+      }
+    },
+    {
+      "timestamp": 1778005232.464915,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P10.1-test] test queue visibility (waiting for remote CI on PR #75)",
+      "task_id": "ap-2cf73449",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778005234.505594,
+      "kind": "status_waiting_ci",
+      "summary": "waiting_ci: [P10.1-test] test queue visibility (remote CI status: failed)",
+      "task_id": "ap-2cf73449",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778005234.543253,
       "kind": "status_failed",
-      "summary": "failed: [P9.10] Rebase strategy cho in-flight worktrees (1 verification gate(s) failed)",
-      "task_id": "ap-93f7fa1a",
+      "summary": "failed: [P10.1-test] test queue visibility (remote CI failed: Python tests (3.10)=FAILURE; Python tests (3.11)=FAILURE)",
+      "task_id": "ap-2cf73449",
       "metadata": {}
     },
     {
-      "timestamp": 1777975477.853625,
-      "kind": "verification_failed",
-      "summary": "[P9.10] Rebase strategy cho in-flight worktrees: 1 verification gate(s) failed",
-      "task_id": "ap-93f7fa1a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777983768.448747,
+      "timestamp": 1778037758.866197,
       "kind": "status_preparing",
-      "summary": "preparing: [P9.10] Rebase strategy cho in-flight worktrees (preparing isolated worktree)",
-      "task_id": "ap-93f7fa1a",
+      "summary": "preparing: [P10.1] UI: Tối ưu layout phần Status trong Sidebar (preparing isolated worktree)",
+      "task_id": "ap-c5c5b442",
       "metadata": {}
     },
     {
-      "timestamp": 1777983768.513088,
+      "timestamp": 1778037758.893533,
       "kind": "status_failed",
-      "summary": "failed: [P9.10] Rebase strategy cho in-flight worktrees (repair rounds exhausted)",
-      "task_id": "ap-93f7fa1a",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777983768.546011,
-      "kind": "worktree_cleanup",
-      "summary": "Removed stale worktree for terminal card ap-5d3976a2",
-      "task_id": "ap-5d3976a2",
-      "metadata": {
-        "worktree_slug": "autopilot/ap-5d3976a2"
-      }
-    },
-    {
-      "timestamp": 1777983768.777335,
-      "kind": "status_preparing",
-      "summary": "preparing: [P9.11] Integration test: 2 cards chạy song song end-to-end (preparing isolated worktree)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777983769.98167,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (repairing failed run)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777983840.298251,
-      "kind": "run_finished",
-      "summary": "Agent run finished for [P9.11] Integration test: 2 cards chạy song song end-to-end",
-      "task_id": "ap-5d3976a2",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-5d3976a2-attempt-03-run.md",
-        "attempt_count": 3
-      }
-    },
-    {
-      "timestamp": 1777983840.326745,
-      "kind": "status_verifying",
-      "summary": "verifying: [P9.11] Integration test: 2 cards chạy song song end-to-end (running verification gates)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777983905.212123,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (local verification failed; retrying)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777983905.2431731,
-      "kind": "verification_failed",
-      "summary": "[P9.11] Integration test: 2 cards chạy song song end-to-end: local verification failed, retrying",
-      "task_id": "ap-5d3976a2",
-      "metadata": {
-        "attempt_count": 3
-      }
-    },
-    {
-      "timestamp": 1777983906.324029,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (repairing failed run)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777983977.753624,
-      "kind": "run_finished",
-      "summary": "Agent run finished for [P9.11] Integration test: 2 cards chạy song song end-to-end",
-      "task_id": "ap-5d3976a2",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-5d3976a2-attempt-04-run.md",
-        "attempt_count": 4
-      }
-    },
-    {
-      "timestamp": 1777983977.772876,
-      "kind": "status_verifying",
-      "summary": "verifying: [P9.11] Integration test: 2 cards chạy song song end-to-end (running verification gates)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777984021.545813,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (local verification failed; retrying)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777984021.576139,
-      "kind": "verification_failed",
-      "summary": "[P9.11] Integration test: 2 cards chạy song song end-to-end: local verification failed, retrying",
-      "task_id": "ap-5d3976a2",
-      "metadata": {
-        "attempt_count": 4
-      }
-    },
-    {
-      "timestamp": 1777984022.600747,
-      "kind": "status_repairing",
-      "summary": "repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (repairing failed run)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777984104.359218,
-      "kind": "run_finished",
-      "summary": "Agent run finished for [P9.11] Integration test: 2 cards chạy song song end-to-end",
-      "task_id": "ap-5d3976a2",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-5d3976a2-attempt-05-run.md",
-        "attempt_count": 5
-      }
-    },
-    {
-      "timestamp": 1777984104.377524,
-      "kind": "status_verifying",
-      "summary": "verifying: [P9.11] Integration test: 2 cards chạy song song end-to-end (running verification gates)",
-      "task_id": "ap-5d3976a2",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1777984149.686313,
-      "kind": "status_failed",
-      "summary": "failed: [P9.11] Integration test: 2 cards chạy song song end-to-end (1 verification gate(s) failed)",
-      "task_id": "ap-5d3976a2",
+      "summary": "failed: [P10.1] UI: Tối ưu layout phần Status trong Sidebar (repair rounds exhausted)",
+      "task_id": "ap-c5c5b442",
       "metadata": {}
     }
   ],
@@ -9754,5 +11120,5 @@
     "verification": "/Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml",
     "release": "/Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
   },
-  "active_context": "# Active Repo Context\n\nGenerated at: 2026-05-05 12:29:09 UTC\n\n## Current Task Focus\n- No active repo task focus yet.\n\n## In Progress\n- None.\n\n## Next Up\n- No queued items.\n\n## Recently Completed\n- ap-b6a2705c [P9.9] Worktree cleanup finally block\n- ap-e8d98ed7 [P9.6] Frontend: Card detail + model dropdown\n- ap-bd344eb2 [P9.8] Capacity-based concurrency gate thay already_running\n- ap-a0665b96 [P9.7] Configurable max_parallel_runs policy\n- ap-960d5957 [P9.5] Backend API: PATCH /api/pipeline/cards/{id}/model\n\n## Recent Failures\n- [failed] ap-5d3976a2 [P9.11] Integration test: 2 cards chạy song song end-to-end\n- [failed] ap-93f7fa1a [P9.10] Rebase strategy cho in-flight worktrees\n- [rejected] ap-000584f0 GitHub PR #8: Claude/review repo code m vtiq\n- [rejected] ap-0cca6f22 GitHub PR #34: Windows startup fails with ModuleNotFoundError: No module named 'fcnt…\n- [rejected] ap-c6657d82 GitHub PR #61: feat(tools): add structured GitTool with schema-enforced safety\n\n## Recent Repo Journal\n- 05-05 12:26 run_finished: Agent run finished for [P9.11] Integration test: 2 cards chạy song song end-to-end\n- 05-05 12:26 status_verifying: verifying: [P9.11] Integration test: 2 cards chạy song song end-to-end (running verification gates)\n- 05-05 12:27 status_repairing: repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (local verification failed; retrying)\n- 05-05 12:27 verification_failed: [P9.11] Integration test: 2 cards chạy song song end-to-end: local verification failed, retrying\n- 05-05 12:27 status_repairing: repairing: [P9.11] Integration test: 2 cards chạy song song end-to-end (repairing failed run)\n- 05-05 12:28 run_finished: Agent run finished for [P9.11] Integration test: 2 cards chạy song song end-to-end\n- 05-05 12:28 status_verifying: verifying: [P9.11] Integration test: 2 cards chạy song song end-to-end (running verification gates)\n- 05-05 12:29 status_failed: failed: [P9.11] Integration test: 2 cards chạy song song end-to-end (1 verification gate(s) failed)\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
+  "active_context": "# Active Repo Context\n\nGenerated at: 2026-05-06 03:22:38 UTC\n\n## Current Task Focus\n- [queued] [P10.2] UX: Collapsible SETTINGS section trong Sidebar (manual_idea, score=120)\n- Detail: Settings section trong sidebar có 4 items (Modes, Provider, Models, Agents) chiếm nhiều space. Thêm toggle collapse/expand cho section SETTINGS. Lưu trạng thái vào localStorage. Khi collapsed: hiện icon gear nhỏ thay ...\n\n## In Progress\n- None.\n\n## Next Up\n- [120] ap-d8d56bb1 [P10.2] UX: Collapsible SETTINGS section trong Sidebar (manual_idea)\n- [120] ap-9435c08d [P10.3] UX: Thêm liên kết Docs/Help vào Sidebar (manual_idea)\n- [120] ap-850626be [P10.4] UI: Header breadcrumb responsive truncation (manual_idea)\n- [120] ap-e96e0fa0 [P10.5] UI: Column count badge màu theo trạng thái (manual_idea)\n- [120] ap-93e8a111 [P10.6] UX: Empty state có hành động cho cột QUEUE (manual_idea)\n- [120] ap-0484c32b [P10.7] UX: Autopilot log viewer — chronological + grouped blocks (manual_idea)\n- [120] ap-6949f459 [P10.8] UX: Thêm Skeleton loader cho trang History (manual_idea)\n- [120] ap-89a397dd [P10.9] UX: History grouping theo ngày (manual_idea)\n\n## Recently Completed\n- ap-2cf73449 [P10.1-test] test queue visibility\n- ap-5d3976a2 [P9.11] Integration test: 2 cards chạy song song end-to-end\n- ap-93f7fa1a [P9.10] Rebase strategy cho in-flight worktrees\n- ap-b6a2705c [P9.9] Worktree cleanup finally block\n- ap-e8d98ed7 [P9.6] Frontend: Card detail + model dropdown\n\n## Recent Failures\n- [failed] ap-c5c5b442 [P10.1] UI: Tối ưu layout phần Status trong Sidebar\n- [rejected] ap-000584f0 GitHub PR #8: Claude/review repo code m vtiq\n- [rejected] ap-0cca6f22 GitHub PR #34: Windows startup fails with ModuleNotFoundError: No module named 'fcnt…\n- [rejected] ap-c6657d82 GitHub PR #61: feat(tools): add structured GitTool with schema-enforced safety\n- [rejected] ap-87a69305 GitHub PR #62: feat(skills): add runtime skill activation\n\n## Recent Repo Journal\n- 05-05 18:20 remote_branch_rebase_done: Rebased worktree onto origin/autopilot/ap-2cf73449\n- 05-05 18:20 rebase_done: Rebased worktree onto origin/main\n- 05-05 18:20 branch_sync_done: Synced autopilot/ap-2cf73449 onto origin/main.\n- 05-05 18:20 status_waiting_ci: waiting_ci: [P10.1-test] test queue visibility (waiting for remote CI on PR #75)\n- 05-05 18:20 status_waiting_ci: waiting_ci: [P10.1-test] test queue visibility (remote CI status: failed)\n- 05-05 18:20 status_failed: failed: [P10.1-test] test queue visibility (remote CI failed: Python tests (3.10)=FAILURE; Python tests (3.11)=FAILURE)\n- 05-06 03:22 status_preparing: preparing: [P10.1] UI: Tối ưu layout phần Status trong Sidebar (preparing isolated worktree)\n- 05-06 03:22 status_failed: failed: [P10.1] UI: Tối ưu layout phần Status trong Sidebar (repair rounds exhausted)\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
 }

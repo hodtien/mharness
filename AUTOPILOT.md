@@ -25,7 +25,7 @@ oh -p "..." --dangerously-skip-permissions
 
 # Cách 3: trong interactive session, đổi mode runtime
 oh
-> /permission full_auto
+> /permissions full_auto
 ```
 
 ### Flow end-to-end (1 prompt → done)
@@ -33,9 +33,9 @@ oh
 ```
 1. Bridge load ~/.claude/settings.json → resolve model + auth
 2. Agent đọc prompt, vào loop:
-   ├─ Plan → spawn sub-agents (planner/tdd-guide/worker) qua agent_tool
+   ├─ Plan → spawn sub-agents (planner/tdd-guide/worker) qua AgentTool
    ├─ Mỗi sub-agent dùng model theo agent_models[name] chain
-   └─ Tools (file_edit/bash/grep) chạy không hỏi xác nhận
+   └─ Tools (FileEditTool/BashTool/GrepTool) chạy không hỏi xác nhận
 3. Loop kết thúc khi:
    ├─ Agent declare done
    ├─ Hết --max-turns
@@ -53,7 +53,7 @@ oh -p "Read GUIDE.md, implement feature X, write tests, run pytest, fix failures
    --output-format json > result.json
 
 # Bug fix nhanh
-oh -p "Fix the null pointer in src/auth.ts line 42, run tests to verify" \
+oh -p "Fix the null pointer in src/auth.py line 42, run tests to verify" \
    --permission-mode full_auto
 
 # Refactor + commit
@@ -103,26 +103,79 @@ highest-priority → PR → CI → merge. Chạy 24/7 qua cron.
 
 ```
 queued → accepted → preparing → running → verifying
-    → pr_open → waiting_ci → completed → merged
-                                       → failed → repairing (auto retry)
-                                       → rejected / superseded
+       → waiting_ci → code_review → completed → merged
+                                  → failed → repairing (auto retry)
+                                  → rejected
+                                  → killed
+                                  → superseded
 ```
+
+**Tất cả trạng thái hợp lệ:**
+
+| Status        | Ý nghĩa                                              |
+|---------------|------------------------------------------------------|
+| `queued`      | Vừa enqueue, chưa được nhận                         |
+| `accepted`    | Đã accept, chờ worker                               |
+| `preparing`   | Đang checkout worktree, setup môi trường            |
+| `running`     | Agent đang implement (code + test)                  |
+| `verifying`   | Chạy local verification (pytest, ruff, tsc…)        |
+| `waiting_ci`  | PR đã push, đang chờ CI checks trên GitHub          |
+| `code_review` | Code-reviewer agent đang đánh giá PR diff           |
+| `repairing`   | Đang tự sửa lỗi (retry tự động)                    |
+| `completed`   | Xong nhưng không merge (policy không cho hoặc skip) |
+| `merged`      | PR đã merge vào base branch                         |
+| `failed`      | Hết attempts, cần can thiệp thủ công               |
+| `rejected`    | Bị từ chối (policy, human review, hoặc thủ công)   |
+| `killed`      | Bị dừng thủ công                                   |
+| `superseded`  | Bị thay thế bởi card mới hơn                       |
+
+### Source kinds
+
+| Source kind              | Từ đâu                  | CLI add                              |
+|--------------------------|-------------------------|--------------------------------------|
+| `manual_idea`            | Manual / brainstorm     | `oh autopilot add idea "..."`        |
+| `ohmo_request`           | ohmo CLI request        | `oh autopilot add ohmo "..."`        |
+| `github_issue`           | GitHub issue            | `oh autopilot add issue "Fix #123"`  |
+| `github_pr`              | GitHub PR cần review    | `oh autopilot add pr "Review #456"`  |
+| `claude_code_candidate`  | Claude Code candidates  | `oh autopilot add claude "..."`      |
 
 ### Commands
 
 ```bash
-oh autopilot status          # tổng counts theo status
-oh autopilot list            # liệt kê tất cả cards
-oh autopilot list queued     # filter theo status
+oh autopilot status                        # tổng counts theo status + next card
+oh autopilot list [<status>] [--limit N]  # liệt kê cards, filter theo status
 oh autopilot add <source> <title> [--body "..."]
-                             # source: idea, issue, pr, claude
-oh autopilot context         # active repo context (synthesized)
-oh autopilot journal         # log recent activity
-oh autopilot scan            # scan intake sources → enqueue
-oh autopilot run-next        # chạy card top priority end-to-end
-oh autopilot tick            # scan + run-next (1 lệnh cho cron)
-oh autopilot install-cron    # cài cron jobs (scan 15min, tick 1h)
-oh autopilot export-dashboard  # static kanban → GitHub Pages
+oh autopilot context                       # active repo context (synthesized)
+oh autopilot journal                       # log recent activity
+oh autopilot scan [issues|prs|claude-code|all] [--limit N]
+oh autopilot run-next                      # chạy card top priority end-to-end
+oh autopilot tick                          # scan + run-next (1 lệnh cho cron)
+oh autopilot install-cron                  # cài cron jobs (scan 15min, tick 1h)
+oh autopilot export-dashboard              # static kanban → GitHub Pages
+```
+
+### Slash commands `/autopilot`
+
+Dùng trong interactive session hoặc script `oh -p`:
+
+```
+/autopilot status
+/autopilot list [queued|running|…]
+/autopilot show <id>
+/autopilot next
+/autopilot context
+/autopilot journal [N]
+/autopilot add [idea|ohmo|issue|pr|claude] <title> :: <details>
+/autopilot accept <id>
+/autopilot start <id>
+/autopilot complete <id> [note]
+/autopilot fail <id> [note]
+/autopilot reject <id> [note]
+/autopilot run-next
+/autopilot tick
+/autopilot install-cron
+/autopilot export-dashboard [output-path]
+/autopilot scan [issues|prs|claude-code|all] [limit]
 ```
 
 ### Flow autopilot loop (mỗi tick)
@@ -130,20 +183,27 @@ oh autopilot export-dashboard  # static kanban → GitHub Pages
 ```
 1. scan — đọc idea/, GitHub issues, PRs, Claude candidates
    └─ enqueue cards với score (priority)
-2. pick_next_card — chọn card cao điểm nhất
-3. run-next — chạy oh -p với context của card:
-   ├─ preparing: checkout worktree mới
+2. pick_next_card — chọn card cao điểm nhất có capacity
+3. run-next — chạy với context của card:
+   ├─ preparing: checkout worktree mới (isolated git branch)
    ├─ running: agent code + test (permission full_auto)
-   ├─ verifying: CI checks local (pytest, ruff, tsc)
-   ├─ pr_open: gh pr create
+   ├─ verifying: CI checks local (pytest, ruff, tsc…)
+   ├─ push + upsert PR: git push + gh pr create/update
+   │   └─ branch sync: rebase onto origin/<base> trước khi push
    ├─ waiting_ci: poll CI status trên GitHub
-   ├─ remote_code_review: code-reviewer agent so sánh PR diff vs origin/main
-   │    (block_on: ["critical"] — nếu CRITICAL → human gate, không merge)
+   ├─ code_review: code-reviewer agent so sánh PR diff vs origin/main
+   │   (block_on: ["critical"] — nếu CRITICAL → human gate)
    ├─ automerge: gh pr merge --squash nếu CI pass + review OK
-   └─ post-merge sync: git fetch origin main && git pull --ff-only origin main
+   └─ post-merge sync: pull origin main + rebase in-flight worktrees
 4. completed/merged hoặc failed (auto retry → repairing)
 5. journal — log mọi state transition
 ```
+
+### Capacity gate
+
+`max_parallel_runs` trong `autopilot_policy.yaml` giới hạn số card chạy
+đồng thời. `run_next` raise `ValueError("Maximum parallel runs reached")`
+khi đầy capacity. Cron/tick tự handle: chỉ chạy khi có slot trống.
 
 ### Auto-merge policy
 
@@ -151,30 +211,52 @@ Autopilot tự merge khi tất cả điều kiện sau đúng:
 
 1. CI checks pass trên GitHub
 2. Remote code review không có `CRITICAL` issue
-3. `auto_merge.mode` cho phép (default: `always`)
+3. `auto_merge.mode` cho phép
 
 Cấu hình trong `.openharness/autopilot/autopilot_policy.yaml`:
 
 ```yaml
+execution:
+  max_parallel_runs: 2
+  max_attempts: 5
+  base_branch: main
+  use_worktree: true
+  pr_branch_sync_strategy: rebase    # rebase | none
+  max_branch_sync_attempts: 2
+  allow_force_push_pr_branch: false  # true → dùng --force-with-lease
+
 github:
   auto_merge:
-    mode: always          # always | fully_auto | disabled
+    mode: always          # always | label_gated | disabled
+    required_label: "autopilot:merge"  # chỉ dùng khi mode: label_gated
   remote_code_review:
-    enabled: true         # false để skip
+    enabled: true
     block_on:
       - critical
     max_turns: 6
     max_diff_chars: 80000
 ```
 
-Sau khi merge, autopilot tự động sync local `main`:
+Sau khi merge, autopilot tự động:
 
-```bash
-git fetch origin main
-git pull --ff-only origin main
-```
+1. Pull `origin/main` vào local branch
+2. Rebase tất cả in-flight worktrees (cards đang `running`/`verifying`) lên
+   `origin/main` mới — tránh diverge với commit vừa merge
 
-Nếu pull thất bại (e.g. fast-forward conflict), card vẫn giữ trạng thái `merged` và journal ghi `kind: merge_warning`.
+Nếu pull thất bại (e.g. fast-forward conflict), card vẫn giữ trạng thái
+`merged` và journal ghi `kind: merge_warning`.
+
+### Branch sync trước khi push
+
+Trước mỗi lần push PR branch, autopilot:
+
+1. Fetch `origin/<base_branch>` và remote head branch
+2. Rebase local head lên `origin/<base_branch>` (strategy: `rebase`)
+3. Nếu conflict → card chuyển sang `repairing` với
+   `human_gate_pending: true`, journal ghi chi tiết
+4. Nếu push bị từ chối (non-fast-forward) → retry sync 1 lần
+5. `allow_force_push_pr_branch: true` → dùng `--force-with-lease` (không
+   bao giờ plain `--force`)
 
 ### Setup cho dự án
 
@@ -197,7 +279,7 @@ oh autopilot add issue "Bug: login timeout on Safari"
 
 # 4. Monitor
 oh autopilot status
-# queued: 3, running: 0, pr_open: 0, completed: 0
+# queued: 3, running: 0, waiting_ci: 0, completed: 0
 
 # 5. Chạy thử 1 card (không đợi cron)
 oh autopilot run-next
@@ -206,58 +288,85 @@ oh autopilot run-next
 oh autopilot journal
 ```
 
-### Source kinds
-
-| Source     | Từ đâu              | Lệnh add                                |
-| ---------- | ---------------------- | ---------------------------------------- |
-| `idea`   | Manual / brainstorm    | `oh autopilot add idea "..."`          |
-| `issue`  | GitHub issue           | `oh autopilot add issue "Fix #123"`    |
-| `pr`     | GitHub PR cần review  | `oh autopilot add pr "Review PR #456"` |
-| `claude` | Claude Code candidates | `oh autopilot add claude "..."`        |
-
 ### Persistence
 
-- **Registry:** `<repo>/.openharness/autopilot/registry.json` — tất cả cards + state
-- **Journal:** `<repo>/.openharness/autopilot/journal.jsonl` — event log (1 JSON/line)
-- **Context:** `<repo>/.openharness/autopilot/context.md` — synthesized repo context
-- **Policy:** `<repo>/.openharness/autopilot/autopilot_policy.yaml` — verification, GitHub, auto-merge policy
-- **Runs:** `<repo>/.openharness/autopilot/runs/` — per-card run + verification reports
+| File / Dir                                          | Nội dung                            |
+|-----------------------------------------------------|-------------------------------------|
+| `.openharness/autopilot/registry.json`              | Tất cả cards + state + metadata     |
+| `.openharness/autopilot/journal.jsonl`              | Event log (1 JSON/line)             |
+| `.openharness/autopilot/context.md`                 | Synthesized repo context            |
+| `.openharness/autopilot/autopilot_policy.yaml`      | Execution + GitHub + merge policy   |
+| `.openharness/autopilot/verification_policy.yaml`   | Local verification commands         |
+| `.openharness/autopilot/runs/`                      | Per-card run + verification reports |
 
-Card schema (synthetic example):
+Card schema (ví dụ):
 
 ```json
 {
-  "id": "card-001",
+  "id": "ap-abc123",
   "status": "queued",
   "score": 85,
   "title": "Add dark mode toggle",
   "body": "Description...",
   "source_kind": "manual_idea",
-  "source_ref": null
+  "source_ref": null,
+  "metadata": {
+    "linked_pr_number": null,
+    "autopilot_managed": false,
+    "attempt_count": 0
+  }
 }
 ```
+
+### Pipeline REST API (Web UI)
+
+Web UI expose đầy đủ pipeline qua `/api/pipeline/*`:
+
+| Method  | Path                                        | Mô tả                                    |
+|---------|---------------------------------------------|------------------------------------------|
+| `GET`   | `/api/pipeline/cards`                       | Tất cả cards                             |
+| `POST`  | `/api/pipeline/cards`                       | Enqueue card mới (201)                   |
+| `GET`   | `/api/pipeline/cards/{id}`                  | Chi tiết card                            |
+| `POST`  | `/api/pipeline/cards/{id}/action`           | `accept` / `reject` / `retry` / `reset` |
+| `PATCH` | `/api/pipeline/cards/{id}/model`            | Set/clear execution model                |
+| `GET`   | `/api/pipeline/cards/{id}/stream`           | SSE event stream (stream token auth)     |
+| `GET`   | `/api/pipeline/cards/{id}/checkpoint`       | Checkpoint info                          |
+| `POST`  | `/api/pipeline/cards/{id}/resume`           | Resume từ checkpoint (202)               |
+| `DELETE`| `/api/pipeline/cards/{id}/checkpoint`       | Xóa checkpoints                          |
+| `GET`   | `/api/pipeline/journal`                     | Journal entries (`?card_id=…`)           |
+| `GET`   | `/api/pipeline/policy`                      | Policy YAML + parsed JSON                |
+| `PATCH` | `/api/pipeline/policy`                      | Validate & persist policy YAML           |
+| `POST`  | `/api/pipeline/run-next`                    | Spawn run-next background task (202)     |
 
 ---
 
 ## WebUI upgrade status
 
-Các phase P0–P3 trong `TASKS.md` đã chạy qua autopilot và cập nhật WebUI foundation, history/resume, modes toggle, provider settings, cùng backend REST routes tương ứng. P4+ tiếp tục là backlog cho UI polish, QA, dashboard export, và packaging.
+Các phase P0–P9 trong `TASKS.md` đã chạy qua autopilot:
 
-Xem `GUIDE.md` để biết danh sách REST API/WebSocket routes hiện tại.
+- **P0–P3**: WebUI foundation, history/resume, modes toggle, provider settings, backend REST routes
+- **P4–P8**: Pipeline WebUI, agent config, models API, review routes, cron routes, tasks routes
+- **P9.10**: Rebase strategy cho in-flight worktrees sau merge
+- **P9.11**: Safe PR branch sync trước khi push (rebase + conflict gate)
+
+P4+ tiếp tục là backlog cho UI polish, QA, dashboard export, và packaging.
+
+Xem `GUIDE.md` section 12b để biết danh sách REST API/WebSocket routes đầy đủ.
 
 ---
 
 ## So sánh nhanh
 
-| Tiêu chí         | `full_auto` mode      | `oh autopilot`          |
-| ------------------ | ----------------------- | ------------------------- |
-| Phạm vi           | 1 prompt, 1 session     | Nhiều tasks, liên tục  |
-| Cần prompt        | Có (user viết)        | Không (auto từ sources) |
-| State persist      | Không                  | Có (registry, journal)   |
-| Cron tích hợp    | Không                  | Có (`install-cron`)    |
-| PR/CI flow         | Phải prompt thủ công | Built-in lifecycle        |
-| Worktree isolation | Phải tự enter         | Tự checkout mỗi card    |
-| Use case           | One-shot task           | Backlog burn-down 24/7    |
+| Tiêu chí           | `full_auto` mode       | `oh autopilot`            |
+| ------------------- | ----------------------- | ------------------------- |
+| Phạm vi            | 1 prompt, 1 session     | Nhiều tasks, liên tục    |
+| Cần prompt         | Có (user viết)         | Không (auto từ sources)  |
+| State persist       | Không                   | Có (registry, journal)   |
+| Cron tích hợp     | Không                   | Có (`install-cron`)      |
+| PR/CI flow          | Phải prompt thủ công   | Built-in lifecycle        |
+| Worktree isolation  | Phải tự enter           | Tự checkout mỗi card     |
+| Parallel cards      | Không                   | Có (`max_parallel_runs`) |
+| Use case            | One-shot task           | Backlog burn-down 24/7    |
 
 ---
 
@@ -282,11 +391,11 @@ oh autopilot add idea "Post-mortem: auth crash root cause analysis"
 
 | Mode                                 | Hành vi                           |
 | ------------------------------------ | ---------------------------------- |
-| `default`                          | Hỏi user trước write/bash/spawn |
+| `default`                          | Hỏi user trước write/bash/spawn  |
 | `plan`                             | Block mọi write ops (read-only)   |
 | `full_auto`                        | Allow all tools automatically      |
-| `--dangerously-skip-permissions`   | =`full_auto` (alias)             |
-| `--allowed-tools "bash,file_edit"` | Chỉ auto-approve tools liệt kê  |
+| `--dangerously-skip-permissions`   | = `full_auto` (alias)             |
+| `--allowed-tools "bash,file_edit"` | Chỉ auto-approve tools liệt kê   |
 | `--disallowed-tools "web_fetch"`   | Block tools cụ thể               |
 
 ---
@@ -314,4 +423,4 @@ oh model agent set Explore          "claude-haiku-4-5"
 
 ---
 
-**Liên quan:** Xem `GUIDE.md` cho install, bridge config, per-agent model mapping chi tiết.
+**Liên quan:** Xem `GUIDE.md` cho install, bridge config, per-agent model mapping, và REST API chi tiết.

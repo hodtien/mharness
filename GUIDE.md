@@ -34,6 +34,8 @@ exec zsh
 uv run oh --help
 ```
 
+Entry points: `oh`, `openharness`, `openh` → đều trỏ vào `openharness.cli:app`.
+
 ### File cấu hình chính
 
 - `~/.claude/settings.json` — **single source of truth** (model, agent_models, env)
@@ -57,7 +59,7 @@ oh model list
 oh model use claude-architect
 
 # Spawn agent test
-oh run "Hello, who are you?"
+oh -p "Hello, who are you?"
 ```
 
 Nếu `claude-router [ready]` xuất hiện → bridge OK, auth token đã được đẩy
@@ -168,8 +170,9 @@ oh model agent list
 oh model agent get planner
 # → planner → claude-architect (fallbacks: claude-architect, claude-review)
 
-# Delete
+# Delete (alias: unset)
 oh model agent delete planner
+oh model agent unset planner
 ```
 
 ### Lưu trữ trong JSON
@@ -205,7 +208,7 @@ Khi model lỗi, harness có 3 lớp retry chạy theo thứ tự:
 
 ### Layer 1: HTTP-level retry (trong `AnthropicApiClient`)
 
-`src/openharness/api/client.py:160-196`:
+`src/openharness/api/client.py`:
 
 - `MAX_RETRIES=3`, exponential backoff với jitter ±25%
 - `RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 529}`
@@ -215,7 +218,7 @@ Khi model lỗi, harness có 3 lớp retry chạy theo thứ tự:
 
 ### Layer 2: Spawn-time chain filter (cho agent con)
 
-`src/openharness/tools/agent_tool.py:69-93`:
+`src/openharness/tools/agent_tool.py`:
 
 1. Resolve full chain từ `resolve_agent_model()`
 2. Filter chain bởi `profile.allowed_models`
@@ -302,6 +305,19 @@ Khi `apply_claude_bridge()` chạy:
 - Nếu `ANTHROPIC_API_KEY` chưa có → inject (in-memory, không persist)
 - Nếu có rồi → giữ nguyên (tôn trọng user override)
 
+### Auth subcommands
+
+```bash
+oh auth login [--profile <name>]
+oh auth status
+oh auth logout
+oh auth switch <profile>
+oh auth copilot-login
+oh auth codex-login
+oh auth claude-login
+oh auth copilot-logout
+```
+
 ### Verify
 
 ```bash
@@ -342,7 +358,9 @@ Override per-profile trong `~/.openharness/settings.json`:
 # Profile
 oh provider list
 oh provider use <name>
-oh provider show <name>
+oh provider add <name>
+oh provider edit <name>
+oh provider remove <name>
 
 # Model
 oh model list
@@ -353,25 +371,59 @@ oh model current
 oh model agent list
 oh model agent set <agent> <model>[,<fallback1>,<fallback2>]
 oh model agent get <agent>
-oh model agent delete <agent>
+oh model agent delete <agent>   # alias: unset
 
 # Auth
 oh auth login [--profile <name>]
 oh auth status
 oh auth logout
+oh auth switch <profile>
+oh auth copilot-login | codex-login | claude-login
+oh auth copilot-logout
 
 # Run
-oh run "<prompt>"
-oh run --agent <type> "<prompt>"
-oh run --agent-model planner=claude-x "<prompt>"  # runtime override
+oh -p "<prompt>"                           # non-interactive one-shot
+oh -p "<prompt>" --dry-run                 # preview config, no API call
+oh -p "<prompt>" --output-format json      # JSON output
+oh -p "<prompt>" --output-format stream-json  # streaming events
+oh                                         # interactive TUI session
+oh -p "<prompt>" --permission-mode full_auto --max-turns 50
 
-# Provider
-oh provider list
+# MCP
+oh mcp list
+oh mcp add <name> --type stdio --command "..."
+oh mcp remove <name>
+
+# Plugin
+oh plugin list
+oh plugin install <name>
+oh plugin uninstall <name>
+
+# Cron
+oh cron start | stop | status
+oh cron list
+oh cron toggle <job-id>
+oh cron history | logs
+
+# Autopilot
+oh autopilot status
+oh autopilot list [<status>] [--limit N]
+oh autopilot add <source> <title> [--body "..."]
+oh autopilot context
+oh autopilot journal
+oh autopilot scan [issues|prs|claude-code|all] [--limit N]
+oh autopilot run-next
+oh autopilot tick
+oh autopilot install-cron
+oh autopilot export-dashboard
 
 # Web UI (xem section 12b)
 oh webui [--host 127.0.0.1] [--port 8765] [--token <fixed>] [--cwd <path>] \
          [--model <alias>] [--api-format anthropic|openai|copilot] \
          [--permission-mode <mode>] [--debug]
+
+# Setup wizard
+oh setup
 ```
 
 ---
@@ -422,7 +474,7 @@ oh webui [--host 127.0.0.1] [--port 8765] [--token <fixed>] [--cwd <path>] \
 Web UI là một SPA (React 19 + Vite + Tailwind v4 + zustand) chạy qua FastAPI
 server, dùng chung `ReactBackendHost` với CLI/TUI. Mục đích: chat với agent từ
 **điện thoại / tablet / máy khác** mà không cần expose terminal. Khi bạn đang
-ngồi ở máy, vẫn dùng `oh run` / TUI như thường — Web UI chỉ thêm một remote
+ngồi ở máy, vẫn dùng `oh -p` / TUI như thường — Web UI chỉ thêm một remote
 surface, không thay thế.
 
 ### Khởi động nhanh
@@ -502,26 +554,81 @@ Mở URL trên trong browser. Token được capture từ `?token=…` rồi lư
 
 ### REST API — WebUI routes đầy đủ (phiên bản hiện tại)
 
+**Sessions & core**
+
+| Method   | Path                          | Mô tả                                            |
+|----------|-------------------------------|--------------------------------------------------|
+| `GET`    | `/api/health`                 | Liveness probe (no auth)                         |
+| `GET`    | `/api/meta`                   | Server metadata (SPA bootstrap)                  |
+| `POST`   | `/api/sessions`               | Tạo session mới (hỗ trợ `{"resume_id":"..."}`)  |
+| `GET`    | `/api/sessions`               | Danh sách active sessions                        |
+| `GET`    | `/api/modes`                  | Modes hiện tại (permission, effort, …)           |
+| `PATCH`  | `/api/modes`                  | Cập nhật modes + persist settings + broadcast    |
+| `WS`     | `/api/ws/{session_id}`        | Stream events (toàn bộ session I/O)              |
+
+**History**
+
+| Method   | Path                          | Mô tả                                            |
+|----------|-------------------------------|--------------------------------------------------|
+| `GET`    | `/api/history`                | Danh sách session snapshots (`?limit=N`)          |
+| `GET`    | `/api/history/{session_id}`   | Chi tiết session                                 |
+| `DELETE` | `/api/history/{session_id}`   | Xóa session (204)                                |
+
+**Providers & Models**
+
 | Method   | Path                                   | Mô tả                                           |
 |----------|----------------------------------------|-------------------------------------------------|
-| `GET`    | `/api/health`                          | Health check                                    |
-| `GET`    | `/api/meta`                            | Server metadata                                 |
-| `POST`   | `/api/sessions`                        | Tạo session mới (hỗ trợ `{"resume_id":"..."}`) |
-| `GET`    | `/api/history`                         | Danh sách session snapshots (`?limit=N`)        |
-| `GET`    | `/api/history/{session_id}`            | Chi tiết session                                |
-| `DELETE` | `/api/history/{session_id}`            | Xóa session                                     |
-| `GET`    | `/api/modes`                           | Trả về modes hiện tại (permission, effort, ...) |
-| `PATCH`  | `/api/modes`                           | Cập nhật modes + persist settings + broadcast   |
 | `GET`    | `/api/providers`                       | Danh sách provider profiles + active flag       |
 | `POST`   | `/api/providers/{name}/activate`       | Switch active provider                          |
 | `POST`   | `/api/providers/{name}/credentials`    | Lưu API key / base_url override                 |
-| `POST`   | `/api/providers/{name}/verify`         | Kiểm tra kết nối (GET /v1/models, timeout 10s)  |
-| `GET`    | `/api/tasks`                           | Danh sách tasks đang chạy                       |
-| `GET`    | `/api/cron/jobs`                       | Cron jobs                                       |
-| `WS`     | `/api/ws/{session_id}`                 | Stream events (toàn bộ session I/O)             |
+| `POST`   | `/api/providers/{name}/verify`         | Kiểm tra kết nối (timeout 10s)                  |
+| `GET`    | `/api/models`                          | Tất cả models (grouped by provider)             |
+| `POST`   | `/api/models`                          | Thêm custom model vào profile (201)             |
+| `DELETE` | `/api/models/{provider}/{model_id}`    | Xóa custom model                                |
 
-REST endpoints bootstrap session và quản lý config; mọi event stream của
-session đi qua một WebSocket `/api/ws/{session_id}`.
+**Agents & Tasks**
+
+| Method   | Path                            | Mô tả                                           |
+|----------|---------------------------------|-------------------------------------------------|
+| `GET`    | `/api/agents`                   | Danh sách agent definitions                     |
+| `GET`    | `/api/agents/{name}`            | Chi tiết agent (kèm system_prompt)              |
+| `PATCH`  | `/api/agents/{name}`            | Cập nhật model/effort/permission_mode           |
+| `GET`    | `/api/tasks`                    | Background tasks (most-recent first)            |
+| `GET`    | `/api/tasks/{task_id}`          | Một background task                             |
+| `GET`    | `/api/tasks/{task_id}/output`   | Log tail của task (`?tail=200`)                 |
+| `POST`   | `/api/tasks/{task_id}/stop`     | Stop task đang chạy                             |
+| `POST`   | `/api/tasks/{task_id}/retry`    | Re-run task đã failed/killed                    |
+
+**Cron**
+
+| Method   | Path              | Mô tả               |
+|----------|-------------------|---------------------|
+| `GET`    | `/api/cron/jobs`  | Danh sách cron jobs |
+
+**Pipeline (Autopilot)**
+
+| Method   | Path                                        | Mô tả                                           |
+|----------|---------------------------------------------|-------------------------------------------------|
+| `GET`    | `/api/pipeline/cards`                       | Danh sách tất cả cards                          |
+| `POST`   | `/api/pipeline/cards`                       | Enqueue card mới (201)                          |
+| `GET`    | `/api/pipeline/cards/{card_id}`             | Chi tiết card                                   |
+| `POST`   | `/api/pipeline/cards/{card_id}/action`      | accept / reject / retry / reset                 |
+| `PATCH`  | `/api/pipeline/cards/{card_id}/model`       | Set/clear execution model cho card              |
+| `GET`    | `/api/pipeline/cards/{card_id}/stream`      | SSE event stream của card (stream token auth)   |
+| `GET`    | `/api/pipeline/cards/{card_id}/checkpoint`  | Checkpoint info                                 |
+| `POST`   | `/api/pipeline/cards/{card_id}/resume`      | Resume từ checkpoint (202)                      |
+| `DELETE` | `/api/pipeline/cards/{card_id}/checkpoint`  | Xóa checkpoints                                 |
+| `GET`    | `/api/pipeline/journal`                     | Journal entries (`?card_id=…`)                  |
+| `GET`    | `/api/pipeline/policy`                      | Policy YAML + parsed JSON                       |
+| `PATCH`  | `/api/pipeline/policy`                      | Validate & persist policy YAML                  |
+| `POST`   | `/api/pipeline/run-next`                    | Spawn `oh autopilot run-next` background (202)  |
+
+**Review**
+
+| Method   | Path                           | Mô tả                            |
+|----------|--------------------------------|----------------------------------|
+| `GET`    | `/api/review/{task_id}`        | Review markdown đã lưu           |
+| `POST`   | `/api/review/{task_id}/rerun`  | Force-run code-reviewer agent    |
 
 ### Dev mode (Vite HMR)
 
@@ -550,9 +657,9 @@ Vite proxy cấu hình trong `frontend/webui/vite.config.ts`. Mở URL kèm
 
 ```bash
 # Cài dev deps
-.venv/bin/pip install pytest pytest-asyncio
+uv sync --extra dev
 
-# Run tests
+# Run all tests
 pytest
 
 # Run claude_bridge tests
@@ -560,6 +667,10 @@ pytest tests/test_config/test_claude_bridge.py -v
 
 # Run with coverage
 pytest --cov=src --cov-report=term-missing
+
+# Lint + format
+ruff check src/
+ruff format --check src/
 ```
 
 ### Test isolation
@@ -574,8 +685,7 @@ user.
 
 ### CLI thật sự có gì
 
-`oh` là **interactive AI coding assistant** (giống Claude Code CLI). Không có
-`oh run` — dùng:
+`oh` là **interactive AI coding assistant** (giống Claude Code CLI).
 
 | Mode | Command | Mục đích |
 |------|---------|----------|
@@ -594,28 +704,43 @@ oh model use <m>    # Đổi active
 oh model agent ...  # Per-agent map (xem section 6)
 oh mcp list         # MCP servers đã cấu hình
 oh mcp add <name>   # Add MCP server
-oh provider list     # Provider profiles
+oh provider list    # Provider profiles
+oh cron status      # Cron scheduler status
+oh autopilot status # Autopilot queue status
 ```
 
-### Built-in tools (37)
+### Built-in tools (38)
 
 Harness pre-load các tool sau cho agent (xem `src/openharness/tools/`):
 
-- **File ops:** `file_read_tool`, `file_write_tool`, `file_edit_tool`, `glob_tool`, `grep_tool`
-- **Shell:** `bash_tool`
-- **Web:** `web_fetch_tool`, `web_search_tool`
-- **Spawn:** `agent_tool` (delegate sub-agent), `team_create_tool`, `send_message_tool`
-- **Tasks:** `task_create_tool`, `task_list_tool`, `task_update_tool`, `task_output_tool`, `task_stop_tool`
-- **Plan mode:** `enter_plan_mode_tool`, `exit_plan_mode_tool`
-- **Worktree:** `enter_worktree_tool`, `exit_worktree_tool`
-- **Schedule:** `cron_create_tool`, `cron_list_tool`, `cron_delete_tool`, `cron_toggle_tool`
-- **Skills/MCP:** `skill_tool`, `mcp_tool`, `mcp_auth_tool`, `lsp_tool`
-- **Misc:** `todo_write_tool`, `brief_tool`, `config_tool`, `tool_search_tool`
+- **File ops:** `FileReadTool`, `FileWriteTool`, `FileEditTool`, `NotebookEditTool`, `GlobTool`, `GrepTool`
+- **Shell:** `BashTool`
+- **Web:** `WebFetchTool`, `WebSearchTool`
+- **Spawn:** `AgentTool` (delegate sub-agent), `TeamCreateTool`, `TeamDeleteTool`, `SendMessageTool`
+- **Tasks:** `TaskCreateTool`, `TaskGetTool`, `TaskListTool`, `TaskUpdateTool`, `TaskOutputTool`, `TaskStopTool`
+- **Plan mode:** `EnterPlanModeTool`, `ExitPlanModeTool`
+- **Worktree:** `EnterWorktreeTool`, `ExitWorktreeTool`
+- **Schedule:** `CronCreateTool`, `CronListTool`, `CronDeleteTool`, `CronToggleTool`
+- **MCP:** `McpAuthTool`, `ListMcpResourcesTool`\*, `ReadMcpResourceTool`\*
+- **Skills/Config:** `SkillTool`, `ToolSearchTool`, `ConfigTool`, `BriefTool`
+- **LSP:** `LspTool`
+- **Misc:** `AskUserQuestionTool`, `TodoWriteTool`, `SleepTool`, `RemoteTriggerTool`
+
+\* Registered dynamically khi có MCP manager. `McpToolAdapter` thêm 1 tool
+per MCP tool cũng được register động.
 
 ### Skills & slash commands
 
-Dry-run cho thấy: 7 skills + 61 slash commands được load tự động từ
-`~/.claude/` (chia sẻ với Claude Code). Không phải config lại.
+53 slash commands được load tự động. Một số hay dùng:
+
+```
+/help    /clear    /status    /resume    /compact
+/model   /provider /permissions /plan    /effort
+/diff    /commit   /branch    /autopilot /tasks
+/agents  /skills   /mcp       /doctor   /hooks
+```
+
+Xem đầy đủ trong session: gõ `/help`.
 
 ### Workflow #1 — Bug fix nhanh
 
@@ -623,8 +748,7 @@ Dry-run cho thấy: 7 skills + 61 slash commands được load tự động từ
 cd ~/projects/my-app
 
 # One-shot fix
-oh -p "Fix the null pointer in src/auth.ts line 42" \
-   --output-format text
+oh -p "Fix the null pointer in src/auth.ts line 42"
 
 # Hoặc interactive (review từng step)
 oh
@@ -680,8 +804,8 @@ oh
 > Aggregate findings, prioritize CRITICAL issues
 ```
 
-`agent_tool` dùng subprocess backend → mỗi agent có task_id riêng,
-pollable qua `task_list_tool`.
+`AgentTool` dùng subprocess backend → mỗi agent có task_id riêng,
+pollable qua `TaskListTool`.
 
 ### Workflow #5 — Non-interactive script
 
@@ -711,11 +835,6 @@ oh mcp add github --type stdio --env GITHUB_TOKEN=$GH_TOKEN \
   --command "npx -y @modelcontextprotocol/server-github"
 
 oh mcp list
-
-# Trong session
-oh
-> Use context7 to fetch latest React docs
-> Use github MCP to search issues labeled "bug"
 ```
 
 ### Workflow #7 — Cron / scheduled task
@@ -726,7 +845,7 @@ oh
 > post failures to #alerts via send_message_tool
 ```
 
-`cron_create_tool` persist vào `.claude/scheduled_tasks.json` nếu chọn durable.
+`CronCreateTool` persist vào `.claude/scheduled_tasks.json` nếu chọn durable.
 
 ### Workflow #8 — Coding với cost-aware routing
 
@@ -801,7 +920,7 @@ oh model agent set Explore          "claude-haiku-4-5"
 ### "No API key configured"
 
 - Check `cat ~/.claude/settings.json | jq .env.ANTHROPIC_AUTH_TOKEN` có giá trị không
-- Verify bridge đang active: `oh provider current` → `claude-router`
+- Verify bridge đang active: `oh provider list` → `claude-router [active]`
 - Manual: `export ANTHROPIC_API_KEY=$(jq -r .env.ANTHROPIC_AUTH_TOKEN ~/.claude/settings.json)`
 
 ### "Unknown model 'X'"
@@ -885,9 +1004,12 @@ covers override chain + agent_map chain + filter by allowed_models.
 | `src/openharness/config/claude_bridge.py` | Bridge core, read/write/resolve   |
 | `src/openharness/config/settings.py`      | `Settings`, `ProviderProfile` |
 | `src/openharness/tools/agent_tool.py`     | Spawn agent + chain filtering     |
-| `src/openharness/cli.py`                  | CLI commands `oh model agent`   |
-| `src/openharness/webui/`                  | Module Web UI server (FastAPI + WebSocket) |
-| `frontend/webui/`                         | React SPA (build → `dist/` được bundle vào wheel) |
+| `src/openharness/cli.py`                  | CLI commands + subcommand groups  |
+| `src/openharness/commands/registry.py`    | Slash commands (`/help`, `/autopilot`, …) |
+| `src/openharness/autopilot/service.py`    | Autopilot core logic              |
+| `src/openharness/autopilot/types.py`      | Card/registry/journal data models |
+| `src/openharness/webui/`                  | FastAPI server + WebSocket routes |
+| `frontend/webui/`                         | React SPA (build → `dist/` bundled vào wheel) |
 | `docs/WEBUI.md`                           | Hướng dẫn chi tiết Web UI + remote access |
 | `tests/test_config/test_claude_bridge.py` | 24 tests, 7 classes               |
 
