@@ -15,6 +15,10 @@ from openharness.swarm.worktree import (
     validate_worktree_slug,
 )
 
+# Capture the original remove_worktree at module-import time, before any test
+# can patch it at the class level (autopilot tests do this).
+_ORIGINAL_REMOVE_WORKTREE = WorktreeManager.remove_worktree
+
 
 # ---------------------------------------------------------------------------
 # validate_worktree_slug — valid cases
@@ -161,10 +165,31 @@ def test_create_worktree_symlinks_webui_dist(tmp_path):
     assert linked_dist.resolve() == dist.resolve()
 
 
+async def test_remove_worktree_returns_true_for_existing_worktree(tmp_path):
+    """Integration test: remove_worktree succeeds for a properly created worktree."""
+    repo = tmp_path / "repo"
+    _init_repo_with_webui_dist(repo)
+
+    manager = WorktreeManager(base_dir=tmp_path / "worktrees")
+    worktree = await manager.create_worktree(repo, "autopilot/ap-test")
+    assert worktree.path.exists()
+
+    result = await manager.remove_worktree("autopilot/ap-test")
+    assert result is True
+
+
 async def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, monkeypatch):
-    # Use a real git repo so we can get real worktree paths, but mock all
-    # _run_git calls so the test is fully deterministic cross-platform.
-    # NOTE: This test must be async to work correctly with asyncio_mode="auto".
+    """Unit test: when repo-root git worktree remove fails, fallback to base_dir cwd succeeds.
+
+    Uses a real git repo + worktree so path resolution is correct on all
+    platforms, and mocks _run_git to simulate the failure scenario.
+
+    IMPORTANT: Call the implementation function directly (bypassing instance
+    method dispatch) to avoid stale class-level patches from previous tests
+    (autopilot tests patch WorktreeManager.remove_worktree at the class level).
+    """
+    import openharness.swarm.worktree as _wt_mod
+
     repo = tmp_path / "repo"
     _init_repo_with_webui_dist(repo)
 
@@ -175,8 +200,6 @@ async def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_pat
     # Resolve canonical paths once (handles macOS /var → /private/var)
     repo_r = repo.resolve()
     base_dir_r = manager.base_dir.resolve()
-    # The real .git path — used as the rev-parse return value so
-    # remove_worktree resolves repo_path correctly on all platforms.
     git_common_path = str((repo_r / ".git").resolve())
 
     calls: list[tuple[tuple[str, ...], Path]] = []
@@ -187,19 +210,17 @@ async def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_pat
             return 0, git_common_path, ""
         cwd_r = Path(cwd).resolve()
         if args[:3] == ("worktree", "remove", "--force") and cwd_r == repo_r:
-            # Simulate the repo-root remove failing (e.g. locked worktree)
             return 1, "", "fatal: busy"
         if args[:3] == ("worktree", "remove", "--force") and cwd_r == base_dir_r:
-            # Fallback from base_dir succeeds
             return 0, "", ""
-        # Any other git call succeeds silently
         return 0, "", ""
-
-    import openharness.swarm.worktree as _wt_mod
 
     monkeypatch.setattr(_wt_mod, "_run_git", fake_run_git)
 
-    result = await manager.remove_worktree("autopilot/ap-test")
+    # Use the original implementation captured at module-import time.
+    # This avoids interference from class-level patches by other tests
+    # (autopilot tests patch WorktreeManager.remove_worktree at the class level).
+    result = await _ORIGINAL_REMOVE_WORKTREE(manager, "autopilot/ap-test")
     all_call_args = [a for a, _c in calls]
     assert result is True, f"Expected True, got {result!r}. All calls: {all_call_args}"
 
@@ -207,10 +228,8 @@ async def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_pat
     assert len(remove_calls) >= 2, (
         f"Expected ≥2 remove calls (repo + fallback), got {remove_calls}. "
         f"All calls: {all_call_args}. "
-        f"repo_r={repo_r!r}, base_dir_r={base_dir_r!r}, "
-        f"git_common_path={git_common_path!r}"
+        f"repo_r={repo_r!r}, base_dir_r={base_dir_r!r}"
     )
-    # Last remove call must be the fallback (cwd=base_dir)
     last_args, last_cwd = remove_calls[-1]
     assert Path(last_cwd).resolve() == base_dir_r
     assert last_args[3] == str(worktree_path)
