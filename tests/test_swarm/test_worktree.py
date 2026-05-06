@@ -162,31 +162,33 @@ def test_create_worktree_symlinks_webui_dist(tmp_path):
 
 
 def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, monkeypatch):
-    repo = tmp_path / "repo"
-    _init_repo_with_webui_dist(repo)
+    # Create worktree directory manually — avoids running real git worktree add
+    # so the entire remove_worktree path is covered by the fake _run_git.
+    fake_repo = tmp_path / "repo"
+    fake_repo.mkdir()
     manager = WorktreeManager(base_dir=tmp_path / "worktrees")
-    worktree = asyncio.run(manager.create_worktree(repo, "autopilot/ap-test"))
-    # Use resolved paths to handle macOS /var → /private/var symlink
-    repo_resolved = repo.resolve()
-    calls: list[tuple[tuple[str, ...], object]] = []  # (args, cwd)
+    worktree_path = tmp_path / "worktrees" / "autopilot+ap-test"
+    worktree_path.mkdir(parents=True)
 
-    async def fake_run_git(*args, cwd):
+    calls: list[tuple[tuple[str, ...], Path]] = []
+
+    async def fake_run_git(*args: str, cwd: Path) -> tuple[int, str, str]:
         calls.append((args, cwd))
         if args[:2] == ("rev-parse", "--git-common-dir"):
-            # Return the resolved .git path so repo_path detection works cross-platform
-            return 0, str(repo_resolved / ".git"), ""
-        if args[:3] == ("worktree", "remove", "--force") and Path(str(cwd)).resolve() == repo_resolved:
+            return 0, str(fake_repo / ".git"), ""
+        if args[:3] == ("worktree", "remove", "--force") and cwd == fake_repo:
             return 1, "", "busy"
-        if args[:3] == ("worktree", "remove", "--force") and Path(str(cwd)).resolve() == manager.base_dir.resolve():
+        if args[:3] == ("worktree", "remove", "--force") and cwd == manager.base_dir:
             return 0, "", ""
         return 0, "", ""
 
     monkeypatch.setattr("openharness.swarm.worktree._run_git", fake_run_git)
 
     assert asyncio.run(manager.remove_worktree("autopilot/ap-test")) is True
-    # Verify fallback was invoked (cwd=base_dir) as the last remove call
+
     remove_calls = [(a, c) for a, c in calls if a[:3] == ("worktree", "remove", "--force")]
     assert len(remove_calls) >= 2, f"Expected ≥2 remove calls (repo + fallback), got {remove_calls}"
+    # Last remove call must be the fallback (cwd=base_dir)
     last_args, last_cwd = remove_calls[-1]
-    assert last_args[3] == str(worktree.path)
-    assert Path(str(last_cwd)).resolve() == manager.base_dir.resolve()
+    assert last_cwd == manager.base_dir
+    assert last_args[3] == str(worktree_path)
