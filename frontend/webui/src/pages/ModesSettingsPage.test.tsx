@@ -57,7 +57,7 @@ describe("ModesSettingsPage", () => {
       expect(screen.getByText("Permission Mode")).toBeTruthy();
     });
     expect(screen.getByText("Effort")).toBeTruthy();
-    expect(screen.getByLabelText(/passes/i)).toBeTruthy();
+    expect(screen.getByLabelText("Passes")).toBeTruthy();
     expect(screen.getByText("Fast Mode")).toBeTruthy();
     expect(screen.getByText("Vim keybindings")).toBeTruthy();
     expect(screen.getByText("Output Style")).toBeTruthy();
@@ -122,5 +122,91 @@ describe("ModesSettingsPage", () => {
         }),
       );
     });
+  });
+
+  it("increments passes value when + button is clicked", async () => {
+    mockLocalStorage();
+    let currentPasses = 2;
+    const patchMock = vi.fn((_url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        const body = JSON.parse(init.body as string);
+        if (body.passes) currentPasses = body.passes;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: false, effort: "low", passes: currentPasses, output_style: "default", theme: "default" }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: false, effort: "low", passes: currentPasses, output_style: "default", theme: "default" }) });
+    });
+    vi.stubGlobal("fetch", patchMock);
+
+    render(<BrowserRouter><ModesSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("Passes")).toBeTruthy());
+
+    const increaseButton = screen.getByRole("button", { name: /increase passes/i });
+    fireEvent.click(increaseButton);
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith(
+        "/api/modes",
+        expect.objectContaining({
+          method: "PATCH",
+          body: expect.stringContaining('"passes":3'),
+        }),
+      );
+    });
+  });
+
+  it("decrements passes value when - button is clicked", async () => {
+    mockLocalStorage();
+    let currentPasses = 3;
+    const patchMock = vi.fn((_url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        const body = JSON.parse(init.body as string);
+        if (body.passes) currentPasses = body.passes;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: false, effort: "low", passes: currentPasses, output_style: "default", theme: "default" }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: false, effort: "low", passes: currentPasses, output_style: "default", theme: "default" }) });
+    });
+    vi.stubGlobal("fetch", patchMock);
+
+    render(<BrowserRouter><ModesSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("Passes")).toBeTruthy());
+
+    const decreaseButton = screen.getByRole("button", { name: /decrease passes/i });
+    fireEvent.click(decreaseButton);
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith(
+        "/api/modes",
+        expect.objectContaining({
+          method: "PATCH",
+          body: expect.stringContaining('"passes":2'),
+        }),
+      );
+    });
+  });
+
+  it("disables decrease button when passes is at minimum (1)", async () => {
+    mockLocalStorage();
+    mockGetModes({ permission_mode: "default", fast_mode: false, vim_enabled: false, effort: "low", passes: 1, output_style: "default", theme: "default" });
+
+    render(<BrowserRouter><ModesSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("Passes")).toBeTruthy());
+
+    const decreaseButton = screen.getByRole("button", { name: /decrease passes/i });
+    expect((decreaseButton as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("disables increase button when passes is at maximum (5)", async () => {
+    mockLocalStorage();
+    mockGetModes({ permission_mode: "default", fast_mode: false, vim_enabled: false, effort: "low", passes: 5, output_style: "default", theme: "default" });
+
+    render(<BrowserRouter><ModesSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("Passes")).toBeTruthy());
+
+    const increaseButton = screen.getByRole("button", { name: /increase passes/i });
+    expect((increaseButton as HTMLButtonElement).disabled).toBe(true);
   });
 });
