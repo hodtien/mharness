@@ -79,6 +79,24 @@ describe("Sidebar", () => {
     expect(desktop.className).not.toContain("sm:block");
   });
 
+  it("hides the settings list and stores collapsed state", () => {
+    renderSidebar({ open: false, collapsed: false });
+
+    fireEvent.click(screen.getByRole("button", { name: /collapse settings section/i }));
+
+    expect(screen.queryByRole("link", { name: "Modes" })).toBeNull();
+    expect(screen.getByRole("button", { name: /expand settings section/i })).toBeTruthy();
+    expect(window.localStorage.getItem("oh:sidebar:settings-collapsed")).toBe("true");
+  });
+
+  it("restores the settings collapsed state from localStorage", () => {
+    window.localStorage.setItem("oh:sidebar:settings-collapsed", "true");
+    renderSidebar({ open: false, collapsed: false });
+
+    expect(screen.queryByRole("link", { name: "Modes" })).toBeNull();
+    expect(screen.getByRole("button", { name: /expand settings section/i })).toBeTruthy();
+  });
+
   it("shows the mobile drawer only when open=true", () => {
     const { rerender } = renderSidebar({ open: false, collapsed: false });
     expect(screen.queryByTestId("sidebar-mobile")).toBeNull();

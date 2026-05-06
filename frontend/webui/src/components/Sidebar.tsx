@@ -3,6 +3,8 @@ import { NavLink } from "react-router-dom";
 import { api } from "../api/client";
 import { useSession } from "../store/session";
 
+const SETTINGS_COLLAPSED_KEY = "oh:sidebar:settings-collapsed";
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -18,6 +20,23 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
   const planMode = useSession((s) => s.planMode);
   const swarm = useSession((s) => s.swarm);
   const [cron, setCron] = useState<Array<Record<string, unknown>>>([]);
+  const [settingsCollapsed, setSettingsCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SETTINGS_COLLAPSED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSettings = () => {
+    const next = !settingsCollapsed;
+    setSettingsCollapsed(next);
+    try {
+      localStorage.setItem(SETTINGS_COLLAPSED_KEY, String(next));
+    } catch {
+      // ignore storage errors
+    }
+  };
 
   useEffect(() => {
     api
@@ -35,13 +54,70 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
         <NavItem to="/tasks" label="Jobs" icon="⚙️" onClose={onClose} />
       </nav>
 
-      <Section title="Settings">
-        <nav aria-label="Settings" className="flex flex-col gap-1">
-          <NavItem to="/settings/modes" label="Modes" icon="🎚️" onClose={onClose} />
-          <NavItem to="/settings/provider" label="Provider" icon="🔌" onClose={onClose} />
-          <NavItem to="/settings/models" label="Models" icon="🧠" onClose={onClose} />
-          <NavItem to="/settings/agents" label="Agents" icon="🤖" onClose={onClose} />
-        </nav>
+      <Section
+        title={
+          <button
+            onClick={toggleSettings}
+            className="flex w-full items-center justify-between gap-2 text-left focus:outline-none focus:ring-1 focus:ring-[var(--border)]"
+            aria-expanded={!settingsCollapsed}
+            aria-label={settingsCollapsed ? "Expand Settings section" : "Collapse Settings section"}
+          >
+            <span>Settings</span>
+            {settingsCollapsed ? (
+              <span aria-hidden="true" className="text-[11px]">⚙️</span>
+            ) : (
+              <span aria-hidden="true" className="text-[10px]">▲</span>
+            )}
+          </button>
+        }
+      >
+        {settingsCollapsed ? (
+          <div className="flex gap-2 text-[11px]">
+            <NavLink
+              to="/settings/modes"
+              className={({ isActive }) =>
+                `flex items-center gap-1 rounded-md border px-2 py-1 transition ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)] text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"}`
+              }
+              onClick={onClose}
+            >
+              🎚️
+            </NavLink>
+            <NavLink
+              to="/settings/provider"
+              className={({ isActive }) =>
+                `flex items-center gap-1 rounded-md border px-2 py-1 transition ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)] text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"}`
+              }
+              onClick={onClose}
+            >
+              🔌
+            </NavLink>
+            <NavLink
+              to="/settings/models"
+              className={({ isActive }) =>
+                `flex items-center gap-1 rounded-md border px-2 py-1 transition ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)] text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"}`
+              }
+              onClick={onClose}
+            >
+              🧠
+            </NavLink>
+            <NavLink
+              to="/settings/agents"
+              className={({ isActive }) =>
+                `flex items-center gap-1 rounded-md border px-2 py-1 transition ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)] text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"}`
+              }
+              onClick={onClose}
+            >
+              🤖
+            </NavLink>
+          </div>
+        ) : (
+          <nav aria-label="Settings" className="flex flex-col gap-1">
+            <NavItem to="/settings/modes" label="Modes" icon="🎚️" onClose={onClose} />
+            <NavItem to="/settings/provider" label="Provider" icon="🔌" onClose={onClose} />
+            <NavItem to="/settings/models" label="Models" icon="🧠" onClose={onClose} />
+            <NavItem to="/settings/agents" label="Agents" icon="🤖" onClose={onClose} />
+          </nav>
+        )}
       </Section>
 
       <Section title="Status">
@@ -152,6 +228,17 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
         </Section>
       </div>
 
+      <a
+        href="https://github.com/hodtien/openharness/tree/main/docs"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] text-[var(--text-dim)] transition hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
+        style={{ textDecoration: "none", borderWidth: "1px", borderStyle: "solid", borderColor: "transparent" }}
+      >
+        <span>📖</span>
+        <span>Docs</span>
+      </a>
+
       <div className="mt-auto text-[10px] text-[var(--text-dim)]">
         OpenHarness Web UI · v0.1
       </div>
@@ -212,7 +299,7 @@ function NavItem({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
     <div>
       <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-dim)]">
