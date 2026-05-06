@@ -18,6 +18,7 @@ from openharness.services.cron_scheduler import (
     load_history,
     run_scheduler_loop,
 )
+from openharness.services.cron import upsert_cron_job, load_cron_jobs
 
 
 @pytest.fixture(autouse=True)
@@ -155,12 +156,10 @@ class TestSchedulerLoop:
     @pytest.mark.asyncio
     async def test_once_mode_fires_due_job(self) -> None:
         """Scheduler loop should fire a job that is due."""
-        from openharness.services.cron import upsert_cron_job
-
         upsert_cron_job({"name": "test-once", "schedule": "* * * * *", "command": "echo fired"})
 
         # Force next_run to the past so it's immediately due
-        from openharness.services.cron import load_cron_jobs, save_cron_jobs
+        from openharness.services.cron import save_cron_jobs
 
         jobs = load_cron_jobs()
         now = datetime.now(timezone.utc)
@@ -172,6 +171,67 @@ class TestSchedulerLoop:
         entries = load_history(job_name="test-once")
         assert len(entries) == 1
         assert entries[0]["status"] == "success"
+
+    @pytest.mark.asyncio
+    async def test_autopilot_jobs_use_project_path_and_isolate_projects(self) -> None:
+        project_a = Path("/tmp/project-a")
+        project_b = Path("/tmp/project-b")
+        project_a.mkdir(parents=True, exist_ok=True)
+        project_b.mkdir(parents=True, exist_ok=True)
+
+        upsert_cron_job(
+            {
+                "name": "autopilot.tick.a",
+                "schedule": "* * * * *",
+                "command": "oh autopilot tick --cwd /tmp/project-a",
+                "cwd": str(project_a),
+                "project_id": "project-a",
+                "project_path": str(project_a),
+            }
+        )
+        upsert_cron_job(
+            {
+                "name": "autopilot.tick.b",
+                "schedule": "* * * * *",
+                "command": "oh autopilot tick --cwd /tmp/project-b",
+                "cwd": str(project_b),
+                "project_id": "project-b",
+                "project_path": str(project_b),
+            }
+        )
+
+        jobs = load_cron_jobs()
+        now = datetime.now(timezone.utc)
+        for job in jobs:
+            job["next_run"] = (now - timedelta(minutes=1)).isoformat()
+        from openharness.services.cron import save_cron_jobs
+
+        save_cron_jobs(jobs)
+
+        seen_cwds: list[str] = []
+
+        async def fake_subprocess(command, *, cwd, stdout, stderr):
+            seen_cwds.append(str(cwd))
+            class Proc:
+                returncode = 0
+                async def communicate(self):
+                    return (b"", b"")
+                async def wait(self):
+                    return 0
+                def kill(self):
+                    return None
+            return Proc()
+
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr("openharness.services.cron_scheduler.create_shell_subprocess", fake_subprocess)
+        try:
+            await run_scheduler_loop(once=True)
+        finally:
+            monkeypatch.undo()
+
+        assert set(seen_cwds) == {str(project_a), str(project_b)}
+        history = load_history()
+        assert {entry["project_id"] for entry in history[-2:]} == {"project-a", "project-b"}
 
 
 class TestResolveTimeout:
