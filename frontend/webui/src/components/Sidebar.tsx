@@ -144,6 +144,17 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
         ))}
       </Section>
 
+      <a
+        href="https://github.com/hodtien/openharness/tree/main/docs"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] text-[var(--text-dim)] transition hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
+        style={{ textDecoration: "none", borderWidth: "1px", borderStyle: "solid", borderColor: "transparent" }}
+      >
+        <span>📖</span>
+        <span>Docs</span>
+      </a>
+
       <div className="mt-auto text-[10px] text-[var(--text-dim)]">
         OpenHarness Web UI · v0.1
       </div>
