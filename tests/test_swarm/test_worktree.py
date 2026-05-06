@@ -178,16 +178,9 @@ async def test_remove_worktree_returns_true_for_existing_worktree(tmp_path):
     assert result is True
 
 
-async def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, monkeypatch):
-    """Unit test: when repo-root git worktree remove fails, fallback to base_dir cwd succeeds.
-
-    Uses a real git repo + worktree so path resolution is correct on all
-    platforms, and mocks _run_git to simulate the failure scenario.
-
-    IMPORTANT: Call the implementation function directly (bypassing instance
-    method dispatch) to avoid stale class-level patches from previous tests
-    (autopilot tests patch WorktreeManager.remove_worktree at the class level).
-    """
+async def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path):
+    """Unit test: when repo-root git worktree remove fails, fallback to base_dir cwd succeeds."""
+    from unittest.mock import patch
     import openharness.swarm.worktree as _wt_mod
 
     repo = tmp_path / "repo"
@@ -197,7 +190,6 @@ async def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_pat
     worktree = await manager.create_worktree(repo, "autopilot/ap-test")
     worktree_path = worktree.path
 
-    # Resolve canonical paths once (handles macOS /var → /private/var)
     repo_r = repo.resolve()
     base_dir_r = manager.base_dir.resolve()
     git_common_path = str((repo_r / ".git").resolve())
@@ -215,12 +207,9 @@ async def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_pat
             return 0, "", ""
         return 0, "", ""
 
-    monkeypatch.setattr(_wt_mod, "_run_git", fake_run_git)
-
-    # Use the original implementation captured at module-import time.
-    # This avoids interference from class-level patches by other tests
-    # (autopilot tests patch WorktreeManager.remove_worktree at the class level).
-    result = await _ORIGINAL_REMOVE_WORKTREE(manager, "autopilot/ap-test")
+    with patch("openharness.swarm.worktree._run_git", side_effect=fake_run_git):
+        result = await _ORIGINAL_REMOVE_WORKTREE(manager, "autopilot/ap-test")
+    
     all_call_args = [a for a, _c in calls]
     assert result is True, f"Expected True, got {result!r}. All calls: {all_call_args}"
 
