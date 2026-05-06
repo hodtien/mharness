@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -165,20 +166,27 @@ def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, mon
     _init_repo_with_webui_dist(repo)
     manager = WorktreeManager(base_dir=tmp_path / "worktrees")
     worktree = asyncio.run(manager.create_worktree(repo, "autopilot/ap-test"))
-    calls: list[tuple[str, ...]] = []
+    # Use resolved paths to handle macOS /var → /private/var symlink
+    repo_resolved = repo.resolve()
+    calls: list[tuple[tuple[str, ...], object]] = []  # (args, cwd)
 
     async def fake_run_git(*args, cwd):
-        calls.append(args)
+        calls.append((args, cwd))
         if args[:2] == ("rev-parse", "--git-common-dir"):
-            return 0, str(repo / ".git"), ""
-        if args[:3] == ("worktree", "remove", "--force") and cwd == repo:
+            # Return the resolved .git path so repo_path detection works cross-platform
+            return 0, str(repo_resolved / ".git"), ""
+        if args[:3] == ("worktree", "remove", "--force") and Path(str(cwd)).resolve() == repo_resolved:
             return 1, "", "busy"
-        if args[:3] == ("worktree", "remove", "--force") and cwd == manager.base_dir:
+        if args[:3] == ("worktree", "remove", "--force") and Path(str(cwd)).resolve() == manager.base_dir.resolve():
             return 0, "", ""
         return 0, "", ""
 
     monkeypatch.setattr("openharness.swarm.worktree._run_git", fake_run_git)
 
     assert asyncio.run(manager.remove_worktree("autopilot/ap-test")) is True
-    assert calls[-1][:3] == ("worktree", "remove", "--force")
-    assert calls[-1][3] == str(worktree.path)
+    # Verify fallback was invoked (cwd=base_dir) as the last remove call
+    remove_calls = [(a, c) for a, c in calls if a[:3] == ("worktree", "remove", "--force")]
+    assert len(remove_calls) >= 2, f"Expected ≥2 remove calls (repo + fallback), got {remove_calls}"
+    last_args, last_cwd = remove_calls[-1]
+    assert last_args[3] == str(worktree.path)
+    assert Path(str(last_cwd)).resolve() == manager.base_dir.resolve()
