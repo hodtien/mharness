@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, type ProviderProfile } from "../api/client";
+import LoadingSkeleton from "../components/LoadingSkeleton";
+import ErrorBanner from "../components/ErrorBanner";
+import EmptyState from "../components/EmptyState";
 
 interface VerifyResult {
   ok: boolean;
@@ -62,7 +65,13 @@ export default function ProviderSettingsPage() {
   }, []);
 
   if (loading) {
-    return <div className="p-6 text-sm text-[var(--text-dim)]">Loading providers…</div>;
+    return (
+      <div className="flex flex-1 overflow-y-auto p-6">
+        <div className="w-full max-w-5xl space-y-4">
+          <LoadingSkeleton rows={3} />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -75,11 +84,7 @@ export default function ProviderSettingsPage() {
           </p>
         </div>
 
-        {error && (
-          <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
-            {error}
-          </div>
-        )}
+        {error && <ErrorBanner message={error} />}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {providers.map((provider) => (
@@ -111,9 +116,7 @@ export default function ProviderSettingsPage() {
         </div>
 
         {providers.length === 0 && (
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 text-sm text-[var(--text-dim)]">
-            No providers returned by the server.
-          </div>
+          <EmptyState message="No providers returned." description="Add or sync a provider to get started." />
         )}
       </div>
 

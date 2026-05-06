@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
 import { api, type AgentProfile, type AgentDetail, type AgentPatch, type ModelsResponse } from "../api/client";
+import LoadingSkeleton from "../components/LoadingSkeleton";
+import { toast } from "../store/toast";
 
 const EFFORT_OPTIONS = ["low", "medium", "high"] as const;
 const PERMISSION_OPTIONS = ["default", "plan", "full_auto"] as const;
 
-interface Toast {
-  id: number;
-  kind: "success" | "error";
-  message: string;
-}
 
 function truncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
@@ -21,7 +18,6 @@ export default function AgentsSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
-  const [toasts, setToasts] = useState<Toast[]>([]);
   const [saveBusy, setSaveBusy] = useState(false);
 
   // Draft state when editing an agent
@@ -83,9 +79,9 @@ export default function AgentsSettingsPage() {
         prev.map((a) => (a.name === editing ? { ...a, ...updated } : a)),
       );
       setEditing(null);
-      pushToast("success", `Agent ${editing} saved.`);
+      toast.success(`Agent ${editing} saved.`);
     } catch (err) {
-      pushToast("error", String(err));
+      toast.error(String(err));
     } finally {
       setSaveBusy(false);
     }
@@ -107,16 +103,15 @@ export default function AgentsSettingsPage() {
     }
   };
 
-  const pushToast = (kind: "success" | "error", message: string) => {
-    const id = Date.now() + Math.random();
-    setToasts((prev) => [...prev, { id, kind, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
-  };
 
   if (loading) {
-    return <div className="p-6 text-sm text-[var(--text-dim)]">Loading agents…</div>;
+    return (
+      <div className="flex flex-1 overflow-y-auto p-6">
+        <div className="w-full max-w-5xl space-y-4">
+          <LoadingSkeleton rows={4} />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -272,21 +267,6 @@ export default function AgentsSettingsPage() {
         </div>
       </div>
 
-      {/* Toast notifications */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2">
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            className={`rounded-lg border px-4 py-3 text-sm shadow-xl ${
-              t.kind === "success"
-                ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-100"
-                : "border-red-400/40 bg-red-500/20 text-red-200"
-            }`}
-          >
-            {t.message}
-          </div>
-        ))}
-      </div>
 
       {/* Detail modal */}
       {detailAgent && (

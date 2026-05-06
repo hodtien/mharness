@@ -16,6 +16,7 @@ import AgentsSettingsPage from "./pages/AgentsSettingsPage";
 import AutopilotPage from "./pages/PipelinePage";
 import TasksPage from "./pages/TasksPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
+import ToastContainer from "./components/ToastContainer";
 
 function RootRedirect() {
   const location = useLocation();
@@ -166,6 +167,7 @@ export default function App() {
       <PermissionModal onRespond={sendPermission} />
       <QuestionModal onRespond={sendQuestionAnswer} />
       <SelectModal onSelect={sendSelectChoice} />
+      <ToastContainer />
     </>
   );
 }

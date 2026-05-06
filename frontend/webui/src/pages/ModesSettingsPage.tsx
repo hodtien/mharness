@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type ModesPayload, type ModesPatch } from "../api/client";
+import LoadingSkeleton from "../components/LoadingSkeleton";
+import ErrorBanner from "../components/ErrorBanner";
+import { toast } from "../store/toast";
 
 type PermissionMode = "default" | "plan" | "full_auto";
 type Effort = "low" | "medium" | "high";
@@ -49,8 +52,10 @@ export default function ModesSettingsPage() {
       const updated = await api.patchModes(patch);
       setModes(updated);
       if (patch.passes !== undefined) setPassesInput(String(updated.passes));
+      toast.success("Modes updated.");
     } catch (err) {
       setError(String(err));
+      toast.error(String(err));
     } finally {
       setSaving(false);
     }
@@ -73,13 +78,19 @@ export default function ModesSettingsPage() {
   };
 
   if (loading) {
-    return <div className="p-6 text-sm text-[var(--text-dim)]">Loading modes…</div>;
+    return (
+      <div className="flex flex-1 overflow-y-auto p-6">
+        <div className="w-full max-w-3xl space-y-4">
+          <LoadingSkeleton rows={4} />
+        </div>
+      </div>
+    );
   }
 
   if (!modes) {
     return (
-      <div className="p-6 text-sm text-red-300">
-        Failed to load modes{error ? `: ${error}` : "."}
+      <div className="flex flex-1 items-center justify-center p-6">
+        <ErrorBanner message={`Failed to load modes${error ? `: ${error}` : "."}`} />
       </div>
     );
   }
