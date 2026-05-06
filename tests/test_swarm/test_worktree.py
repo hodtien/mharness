@@ -198,6 +198,11 @@ def test_remove_worktree_uses_fallback_when_repo_root_remove_fails(tmp_path, mon
 
     monkeypatch.setattr(_wt_mod, "_run_git", fake_run_git)
 
+    # Verify the monkeypatch is active before calling remove_worktree
+    assert _wt_mod._run_git is fake_run_git, (
+        f"Monkeypatch failed: _wt_mod._run_git is {_wt_mod._run_git!r}, expected fake_run_git"
+    )
+
     result = asyncio.run(manager.remove_worktree("autopilot/ap-test"))
     all_call_args = [a for a, _c in calls]
     assert result is True, f"Expected True, got {result!r}. All calls: {all_call_args}"
