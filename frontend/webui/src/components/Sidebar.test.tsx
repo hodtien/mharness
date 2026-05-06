@@ -76,12 +76,22 @@ describe("Sidebar", () => {
     await waitFor(() => expect((globalThis.fetch as unknown as ReturnType<typeof vi.fn>)).toBeDefined());
   });
 
-  it("hides the desktop sidebar when collapsed=true", () => {
-    renderSidebar({ open: false, collapsed: true });
-    const desktop = screen.getByTestId("sidebar-desktop");
-    // When collapsed, only the 'hidden' class is applied — no sm:block override.
-    expect(desktop.className).toContain("hidden");
-    expect(desktop.className).not.toContain("sm:block");
+  it("hides the settings list and stores collapsed state", () => {
+    renderSidebar({ open: false, collapsed: false });
+
+    fireEvent.click(screen.getByRole("button", { name: /collapse settings section/i }));
+
+    expect(screen.queryByRole("link", { name: "Modes" })).toBeNull();
+    expect(screen.getByRole("button", { name: /expand settings section/i })).toBeTruthy();
+    expect(window.localStorage.getItem("oh:sidebar:settings-collapsed")).toBe("true");
+  });
+
+  it("restores the settings collapsed state from localStorage", () => {
+    window.localStorage.setItem("oh:sidebar:settings-collapsed", "true");
+    renderSidebar({ open: false, collapsed: false });
+
+    expect(screen.queryByRole("link", { name: "Modes" })).toBeNull();
+    expect(screen.getByRole("button", { name: /expand settings section/i })).toBeTruthy();
   });
 
   it("shows the mobile drawer only when open=true", () => {
