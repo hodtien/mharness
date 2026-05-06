@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../api/client";
 import HistoryDetailDrawer from "./HistoryDetailDrawer";
+import HistoryCardSkeleton from "./HistoryCardSkeleton";
 
 /**
  * Session metadata returned by `GET /api/history`.
@@ -177,10 +178,7 @@ export default function HistoryPanel({
         <div role="status" aria-live="polite" aria-label="Loading history" className="flex flex-col gap-2">
           <span className="sr-only">Loading history…</span>
           {Array.from({ length: 3 }).map((_, index) => (
-            <div
-              key={index}
-              className="animate-pulse h-16 rounded-lg border border-[var(--border)] bg-[var(--panel-2)]"
-            />
+            <HistoryCardSkeleton key={index} />
           ))}
         </div>
       ) : null}
