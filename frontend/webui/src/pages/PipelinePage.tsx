@@ -326,13 +326,50 @@ function formatSeconds(seconds: number): string {
 
 // ─── Kanban columns ────────────────────────────────────────────────────────────
 
-const COLUMNS: { id: string; label: string; statuses: RepoTaskStatus[] }[] = [
-  { id: "queue", label: "Queue", statuses: ["queued", "accepted"] },
-  { id: "in_progress", label: "In Progress", statuses: ["preparing", "running", "verifying", "repairing"] },
-  { id: "review", label: "Review", statuses: ["pr_open", "waiting_ci"] },
-  { id: "completed", label: "Completed", statuses: ["completed", "merged"] },
-  { id: "failed", label: "Failed", statuses: ["failed"] },
-  { id: "rejected", label: "Rejected", statuses: ["rejected", "killed"] },
+const COLUMNS: {
+  id: string;
+  label: string;
+  statuses: RepoTaskStatus[];
+  badgeColor: string;
+  pulseWhenActive?: boolean;
+}[] = [
+  {
+    id: "queue",
+    label: "Queue",
+    statuses: ["queued", "accepted"],
+    badgeColor: "bg-blue-500/20 text-blue-300 border-blue-500/40",
+  },
+  {
+    id: "in_progress",
+    label: "In Progress",
+    statuses: ["preparing", "running", "verifying", "repairing"],
+    badgeColor: "bg-orange-500/20 text-orange-300 border-orange-500/40",
+    pulseWhenActive: true,
+  },
+  {
+    id: "review",
+    label: "Review",
+    statuses: ["pr_open", "waiting_ci"],
+    badgeColor: "bg-purple-500/20 text-purple-300 border-purple-500/40",
+  },
+  {
+    id: "completed",
+    label: "Completed",
+    statuses: ["completed", "merged"],
+    badgeColor: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+  },
+  {
+    id: "failed",
+    label: "Failed",
+    statuses: ["failed"],
+    badgeColor: "bg-red-500/20 text-red-300 border-red-500/40",
+  },
+  {
+    id: "rejected",
+    label: "Rejected",
+    statuses: ["rejected", "killed"],
+    badgeColor: "bg-gray-500/20 text-gray-400 border-gray-500/40",
+  },
 ];
 
 const SOURCE_LABELS: Record<RepoTaskSource, string> = {
@@ -1880,7 +1917,9 @@ export default function PipelinePage() {
                   <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">
                     {col.label}
                   </span>
-                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--panel-2)] px-1.5 text-[10px] font-medium text-[var(--text-dim)]">
+                  <span
+                    className={`flex h-5 min-w-5 items-center justify-center rounded-full border px-1.5 text-[10px] font-medium ${col.badgeColor}${col.pulseWhenActive && colCards.length > 0 ? " animate-pulse-subtle" : ""}`}
+                  >
                     {colCards.length}
                   </span>
                 </div>
