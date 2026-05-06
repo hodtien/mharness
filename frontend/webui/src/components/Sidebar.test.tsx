@@ -66,14 +66,17 @@ describe("Sidebar", () => {
   it("renders the persistent desktop sidebar by default", async () => {
     renderSidebar({ open: false, collapsed: false });
     const desktop = screen.getByTestId("sidebar-desktop");
-    // Desktop wrapper is hidden on mobile via tailwind, but is in the DOM
-    // and does NOT have the 'hidden' class once large screen kicks in.
     expect(desktop).toBeTruthy();
     expect(desktop.className).toContain("sm:block");
-    expect(desktop.className).not.toContain("hidden sm:block hidden");
-    // Mobile drawer should not be in the DOM when open=false.
     expect(screen.queryByTestId("sidebar-mobile")).toBeNull();
     await waitFor(() => expect((globalThis.fetch as unknown as ReturnType<typeof vi.fn>)).toBeDefined());
+  });
+
+  it("hides the desktop sidebar when collapsed=true", () => {
+    renderSidebar({ open: false, collapsed: true });
+    const desktop = screen.getByTestId("sidebar-desktop");
+    expect(desktop.className).toContain("hidden");
+    expect(desktop.className).not.toContain("sm:block");
   });
 
   it("hides the settings list and stores collapsed state", () => {
@@ -114,7 +117,6 @@ describe("Sidebar", () => {
   });
 
   it("does not affect mobile drawer visibility when collapsed=true", () => {
-    // Collapsed only governs desktop; mobile drawer is still openable.
     renderSidebar({ open: true, collapsed: true });
     expect(screen.getByTestId("sidebar-mobile")).toBeTruthy();
     const desktop = screen.getByTestId("sidebar-desktop");
