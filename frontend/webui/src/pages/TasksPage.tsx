@@ -43,6 +43,25 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
   killed: "Killed",
 };
 
+const STATUS_ICON: Record<TaskStatus, string> = {
+  pending: "⏳",
+  running: "⟳",
+  completed: "✓",
+  failed: "✗",
+  killed: "⊗",
+};
+
+// ─── Status Badge ─────────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: TaskStatus }) {
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[status]}`}>
+      <span className="leading-none">{STATUS_ICON[status]}</span>
+      <span>{STATUS_LABEL[status]}</span>
+    </span>
+  );
+}
+
 // ─── Review status badge ──────────────────────────────────────────────────────
 
 type ReviewStatus = "done" | "in_progress" | "pending" | "failed" | "timeout" | "error" | null;
@@ -321,9 +340,7 @@ function DetailDrawer({ taskId, onClose, onStop, onRetry, stopping, retrying, fo
               {truncateId(taskId)}
             </span>
             {currentTask && (
-              <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[currentTask.status]}`}>
-                {STATUS_LABEL[currentTask.status]}
-              </span>
+              <StatusBadge status={currentTask.status} />
             )}
           </div>
           <button
@@ -354,7 +371,12 @@ function DetailDrawer({ taskId, onClose, onStop, onRetry, stopping, retrying, fo
               {/* Meta grid */}
               <div className="grid grid-cols-2 gap-3">
                 <MetaItem label="Type" value={currentTask.type} />
-                <MetaItem label="Status" value={STATUS_LABEL[currentTask.status]} />
+                <div className="flex flex-col gap-1">
+                  <div className="text-xs font-medium text-[var(--text-dim)]">Status</div>
+                  <div>
+                    <StatusBadge status={currentTask.status} />
+                  </div>
+                </div>
                 <MetaItem label="Created" value={formatTime(currentTask.created_at)} />
                 <MetaItem label="Started" value={formatTime(currentTask.started_at ?? 0)} />
                 <MetaItem label="Ended" value={formatTime(currentTask.ended_at ?? 0)} />
@@ -582,9 +604,7 @@ export default function TasksPage() {
                     {task.type}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[task.status]}`}>
-                      {STATUS_LABEL[task.status]}
-                    </span>
+                    <StatusBadge status={task.status} />
                   </td>
                   <td className="px-4 py-3">
                     <ReviewBadge

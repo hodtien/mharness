@@ -236,6 +236,64 @@ describe("Copy text formatting", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Search and filter logic (isolated)
+// ---------------------------------------------------------------------------
+
+describe("search and filter logic", () => {
+  const mockSessions = [
+    { session_id: "s1", summary: "Fix bug in authentication", model: "gpt-4o", message_count: 5, created_at: 1000 },
+    { session_id: "s2", summary: "Add new feature", model: "claude-3-opus", message_count: 10, created_at: 2000 },
+    { session_id: "s3", summary: "Refactor authentication module", model: "gpt-4o", message_count: 8, created_at: 3000 },
+    { session_id: "s4", summary: "Update documentation", model: "claude-3-sonnet", message_count: 3, created_at: 4000 },
+  ];
+
+  function filterSessions(sessions: typeof mockSessions, searchText: string, selectedModel: string) {
+    return sessions.filter((session) => {
+      const matchesSearch = !searchText ||
+        session.summary.toLowerCase().includes(searchText.toLowerCase());
+      const matchesModel = !selectedModel || session.model === selectedModel;
+      return matchesSearch && matchesModel;
+    });
+  }
+
+  test("filters by search text (case-insensitive)", () => {
+    const result = filterSessions(mockSessions, "authentication", "");
+    expect(result).toHaveLength(2);
+    expect(result[0].session_id).toBe("s1");
+    expect(result[1].session_id).toBe("s3");
+  });
+
+  test("filters by model", () => {
+    const result = filterSessions(mockSessions, "", "gpt-4o");
+    expect(result).toHaveLength(2);
+    expect(result[0].session_id).toBe("s1");
+    expect(result[1].session_id).toBe("s3");
+  });
+
+  test("combines search text and model filter", () => {
+    const result = filterSessions(mockSessions, "authentication", "gpt-4o");
+    expect(result).toHaveLength(2);
+    expect(result.every(s => s.model === "gpt-4o")).toBe(true);
+    expect(result.every(s => s.summary.toLowerCase().includes("authentication"))).toBe(true);
+  });
+
+  test("returns all sessions when no filters applied", () => {
+    const result = filterSessions(mockSessions, "", "");
+    expect(result).toHaveLength(4);
+  });
+
+  test("returns empty array when no matches", () => {
+    const result = filterSessions(mockSessions, "nonexistent", "");
+    expect(result).toHaveLength(0);
+  });
+
+  test("extracts unique models from sessions", () => {
+    const uniqueModels = Array.from(new Set(mockSessions.map(s => s.model).filter(Boolean))).sort();
+    expect(uniqueModels).toEqual(["claude-3-opus", "claude-3-sonnet", "gpt-4o"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Integration tests with React Testing Library
 // (Skipped if @testing-library/react is not installed; install to un-skip)
 // ---------------------------------------------------------------------------

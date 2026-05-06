@@ -166,6 +166,17 @@ export default function HistoryPanel({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<HistorySession | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState("");
+  const [debouncedSearchText, setDebouncedSearchText] = useState("");
+  const [selectedModel, setSelectedModel] = useState<string>("");
+
+  // Debounce search text with 300ms delay
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchText(searchText);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchText]);
 
   const loadSessions = useCallback(
     async (signal?: AbortSignal) => {
@@ -270,6 +281,17 @@ export default function HistoryPanel({
     [],
   );
 
+  // Extract unique models from sessions
+  const uniqueModels = Array.from(new Set(sessions.map(s => s.model).filter(Boolean))).sort();
+
+  // Filter sessions based on search text and selected model
+  const filteredSessions = sessions.filter((session) => {
+    const matchesSearch = !debouncedSearchText ||
+      session.summary.toLowerCase().includes(debouncedSearchText.toLowerCase());
+    const matchesModel = !selectedModel || session.model === selectedModel;
+    return matchesSearch && matchesModel;
+  });
+
   return (
     <>
     <section
@@ -289,6 +311,31 @@ export default function HistoryPanel({
           {state === "loading" ? "Loading…" : "Refresh"}
         </button>
       </header>
+
+      {/* Search and filter controls */}
+      {sessions.length > 0 && (
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            type="text"
+            placeholder="Search sessions..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            className="flex-1 rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm placeholder:text-[var(--text-dim)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+          />
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+          >
+            <option value="">All models</option>
+            {uniqueModels.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {state === "loading" && sessions.length === 0 ? (
         <div role="status" aria-live="polite" aria-label="Loading history" className="flex flex-col gap-2">
@@ -325,9 +372,19 @@ export default function HistoryPanel({
         </div>
       ) : null}
 
-      {sessions.length > 0 ? (
+      {/* Empty search state */}
+      {state === "ready" && sessions.length > 0 && filteredSessions.length === 0 && (debouncedSearchText || selectedModel) ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-1 text-sm text-[var(--text-dim)]">
+          <div className="text-base">No sessions match your search</div>
+          <div className="text-xs">
+            Try a different search term or filter.
+          </div>
+        </div>
+      ) : null}
+
+      {filteredSessions.length > 0 ? (
         <div className="flex flex-1 flex-col overflow-y-auto">
-          {groupSessionsByDate(sessions).map((group) => (
+          {groupSessionsByDate(filteredSessions).map((group) => (
             <div key={group.label} className="flex flex-col">
               <div className="sticky top-0 z-10 bg-[var(--panel-2)] px-2 py-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">
                 {group.label}
