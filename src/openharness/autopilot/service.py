@@ -304,6 +304,8 @@ def _parse_verification_entry(entry: object) -> _VerificationCommand:
 
 
 def _looks_available(command: str, cwd: Path) -> bool:
+    import re as _re
+
     lowered = command.lower()
     if lowered.startswith("uv "):
         return (cwd / "pyproject.toml").exists()
@@ -311,7 +313,10 @@ def _looks_available(command: str, cwd: Path) -> bool:
         return (cwd / "pyproject.toml").exists()
     if "pytest" in lowered:
         return (cwd / "tests").exists()
-    if "tsc" in lowered or "frontend/webui" in lowered:
+    m = _re.search(r"\bcd\s+([\w./\-]+)", command)
+    if m:
+        return (cwd / m.group(1)).exists()
+    if "tsc" in lowered:
         return (cwd / "frontend" / "webui" / "package.json").exists()
     return True
 
