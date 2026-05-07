@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api } from "../api/client";
+import ProjectSelector from "./ProjectSelector";
 import { useSession } from "../store/session";
 
 const SETTINGS_COLLAPSED_KEY = "oh:sidebar:settings-collapsed";
@@ -47,6 +48,8 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
 
   const content = (
     <div className="flex h-full w-72 flex-col gap-3 overflow-y-auto border-r border-[var(--border)] bg-[var(--panel)] p-3">
+      <ProjectSelector />
+
       <nav aria-label="Primary" className="flex flex-col gap-2">
         <NavItem to="/chat" label="Chat" icon="💬" onClose={onClose} />
         <NavItem to="/history" label="History" icon="🕘" onClose={onClose} />
