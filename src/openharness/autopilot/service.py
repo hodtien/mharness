@@ -2080,15 +2080,32 @@ class RepoAutopilotStore:
         shell: bool = False,
         check: bool = False,
     ) -> subprocess.CompletedProcess[str]:
-        completed = subprocess.run(
+        import signal
+
+        proc = subprocess.Popen(
             command,
             cwd=cwd or self._cwd,
             text=True,
-            capture_output=True,
-            check=False,
-            timeout=timeout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             shell=shell,
+            start_new_session=True,
             env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": ""},
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.wait()
+            raise
+        completed = subprocess.CompletedProcess(
+            args=proc.args,
+            returncode=proc.returncode,
+            stdout=stdout,
+            stderr=stderr,
         )
         if check and completed.returncode != 0:
             output = (completed.stderr or completed.stdout).strip() or f"Command failed: {command}"
@@ -3485,6 +3502,8 @@ class RepoAutopilotStore:
                 capture_output=True,
                 text=True,
                 check=False,
+                start_new_session=True,
+                timeout=60,
             )
         except FileNotFoundError as exc:
             raise ValueError("gh CLI is not installed.") from exc
@@ -3923,24 +3942,28 @@ class RepoAutopilotStore:
     def _run_verification_command(
         self, cmd: _VerificationCommand, *, cwd: Path
     ) -> RepoVerificationStep:
+        import signal
+
         target: str | list[str] = cmd.raw if cmd.shell else list(cmd.argv)
+        proc = None
         try:
-            completed = subprocess.run(
+            proc = subprocess.Popen(
                 target,
                 cwd=cwd,
                 env=_verification_subprocess_env(cwd),
                 shell=cmd.shell,
                 text=True,
-                capture_output=True,
-                check=False,
-                timeout=1800,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
             )
+            stdout, stderr = proc.communicate(timeout=1800)
             return RepoVerificationStep(
                 command=cmd.raw,
-                returncode=completed.returncode,
-                status="success" if completed.returncode == 0 else "failed",
-                stdout=(completed.stdout or "")[-4000:],
-                stderr=(completed.stderr or "")[-4000:],
+                returncode=proc.returncode,
+                status="success" if proc.returncode == 0 else "failed",
+                stdout=(stdout or "")[-4000:],
+                stderr=(stderr or "")[-4000:],
             )
         except FileNotFoundError as exc:
             return RepoVerificationStep(
@@ -3950,6 +3973,12 @@ class RepoAutopilotStore:
                 stderr=f"executable not found: {exc}",
             )
         except subprocess.TimeoutExpired as exc:
+            if proc is not None:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                proc.wait()
             return RepoVerificationStep(
                 command=cmd.raw,
                 returncode=-1,
