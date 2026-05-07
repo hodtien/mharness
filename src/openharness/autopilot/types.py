@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 RepoTaskStatus = Literal[
+    "pending",
     "queued",
     "accepted",
     "preparing",
@@ -23,6 +24,7 @@ RepoTaskStatus = Literal[
     "rejected",
     "killed",
     "superseded",
+    "paused",
 ]
 RepoTaskSource = Literal[
     "ohmo_request",

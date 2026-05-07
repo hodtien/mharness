@@ -232,6 +232,28 @@ def test_has_capacity_false(tmp_path: Path) -> None:
     assert store.has_capacity(policies) is False
 
 
+def test_pending_not_active(tmp_path: Path) -> None:
+    """pending cards should not be counted as active."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="First", body="body")
+    store.update_status(card.id, status="pending")
+
+    assert store.count_active_cards() == 0
+
+
+def test_paused_not_active(tmp_path: Path) -> None:
+    """paused cards should not be counted as active."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="First", body="body")
+    store.update_status(card.id, status="paused")
+
+    assert store.count_active_cards() == 0
+
+
 def test_autopilot_scan_claude_code_candidates(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
