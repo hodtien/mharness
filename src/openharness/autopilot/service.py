@@ -433,6 +433,57 @@ class RepoAutopilotStore:
             1 for card in self._load_registry().cards if card.status in self._ACTIVE_STATUSES
         )
 
+    _WORKER_OWNED_STATUSES = frozenset({"preparing", "running", "verifying"})
+
+    def _reap_dead_worker_cards(self) -> list[str]:
+        """Reset cards whose worker process has died back to queued.
+
+        Only cards in preparing/running/verifying with a worker_id of the form
+        'pid-<PID>-<token>' are eligible — waiting_ci/pr_open/repairing are managed
+        by the CI-poll loop and must not be reset here.
+        """
+        reaped: list[str] = []
+        registry = self._load_registry()
+        changed = False
+        for card in registry.cards:
+            if card.status not in self._WORKER_OWNED_STATUSES:
+                continue
+            worker_id = _safe_text(card.metadata.get("worker_id"))
+            if not worker_id:
+                continue
+            parts = worker_id.split("-")
+            if len(parts) < 2 or parts[0] != "pid":
+                continue
+            try:
+                pid = int(parts[1])
+            except ValueError:
+                continue
+            try:
+                os.kill(pid, 0)  # signal 0: check existence only
+            except ProcessLookupError:
+                pass
+            else:
+                continue  # process alive — leave it alone
+            # PID is gone: reset to queued so the next run_next picks it up
+            card.status = "queued"
+            card.updated_at = time.time()
+            card.metadata["last_note"] = f"worker {worker_id} died; requeued"
+            card.metadata.pop("worker_id", None)
+            reaped.append(card.id)
+            changed = True
+            log.warning("Reaped dead-worker card %s (worker %s)", card.id, worker_id)
+        if changed:
+            registry.updated_at = time.time()
+            atomic_write_text(
+                self._registry_path,
+                json.dumps(registry.model_dump(mode="json"), ensure_ascii=False, indent=2),
+            )
+            self.append_journal(
+                kind="dead_worker_reaped",
+                summary=f"reaped {len(reaped)} dead-worker card(s): {', '.join(reaped)}",
+            )
+        return reaped
+
     def has_capacity(self, policies: dict[str, Any]) -> bool:
         """Return True when fewer active cards are running than max_parallel_runs allows."""
         max_parallel = int(
@@ -853,6 +904,7 @@ class RepoAutopilotStore:
         max_turns: int | None = None,
         permission_mode: str | None = None,
     ) -> RepoRunResult:
+        self._reap_dead_worker_cards()
         policies = self.load_policies()
         if not self.has_capacity(policies):
             raise ValueError("Maximum parallel runs reached.")

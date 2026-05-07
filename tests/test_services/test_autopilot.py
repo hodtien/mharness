@@ -4149,3 +4149,54 @@ def test_existing_pr_card_skips_branch_sync_for_foreign_worktree(
     assert updated is not None
     assert updated.metadata.get("base_branch") == "main"
     assert call_order == ["ci"]
+
+
+def test_reap_dead_worker_cards_resets_orphaned_cards(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    import os
+
+    # Card with a dead worker PID
+    card_dead, _ = store.enqueue_card(
+        source_kind="manual_idea", title="dead worker card", body="fix orphan"
+    )
+    store.update_status(
+        card_dead.id,
+        status="running",
+        note="running",
+        metadata_updates={"worker_id": "pid-999999999-deadbeef"},
+    )
+
+    # Card with a live worker PID (current process)
+    card_live, _ = store.enqueue_card(
+        source_kind="manual_idea", title="live worker card", body="still running"
+    )
+    store.update_status(
+        card_live.id,
+        status="running",
+        note="running",
+        metadata_updates={"worker_id": f"pid-{os.getpid()}-livetoken"},
+    )
+
+    # Card in waiting_ci — must NOT be reaped even if worker_id looks dead
+    card_waiting, _ = store.enqueue_card(
+        source_kind="manual_idea", title="waiting ci card", body="ci check"
+    )
+    store.update_status(
+        card_waiting.id,
+        status="waiting_ci",
+        note="ci",
+        metadata_updates={"worker_id": "pid-999999999-deadci"},
+    )
+
+    reaped = store._reap_dead_worker_cards()
+
+    assert card_dead.id in reaped
+    assert card_live.id not in reaped
+    assert card_waiting.id not in reaped
+
+    assert store.get_card(card_dead.id).status == "queued"
+    assert store.get_card(card_live.id).status == "running"
+    assert store.get_card(card_waiting.id).status == "waiting_ci"
