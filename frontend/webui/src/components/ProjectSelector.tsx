@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api, type Project, type ProjectsResponse } from "../api/client";
+import { toast } from "../store/toast";
 
 /** Truncates a path string for display: shows leading ~ or first segment + trailing segment. */
 function truncatePath(path: string, maxLen = 36): string {
@@ -64,9 +65,13 @@ export default function ProjectSelector() {
   );
 
   const handleActivate = async (projectId: string) => {
+    const project = data?.projects.find((p) => p.id === projectId);
+    const projectName = project?.name ?? projectId;
     setActivating(projectId);
     try {
       await api.activateProject(projectId);
+      // Show toast before reloading
+      toast.success(`Switched to project: ${projectName}`);
       // Reload the page so the backend re-initializes with the new project context.
       window.location.reload();
     } catch (err) {
