@@ -76,6 +76,7 @@ export default function ProjectSelector() {
       setData((prev) => (prev ? { ...prev, active_project_id: projectId } : prev));
       setOpen(false);
       toast.success(`Switched to project: ${projectName}`);
+      window.location.reload();
     } catch (err) {
       setError(String(err));
       setActivating(null);
