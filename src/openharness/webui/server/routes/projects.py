@@ -7,7 +7,7 @@ import logging
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from openharness.services.projects import (
@@ -45,11 +45,17 @@ class ProjectUpdateRequest(BaseModel):
 @router.get("")
 def list_projects_endpoint() -> dict[str, object]:
     projects, active_project_id = list_projects()
-    return {"projects": [asdict(project) for project in projects], "active_project_id": active_project_id}
+    return {
+        "projects": [
+            {**asdict(project), "is_active": project.id == active_project_id} for project in projects
+        ],
+        "active_project_id": active_project_id,
+    }
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_project_endpoint(body: ProjectCreateRequest) -> dict[str, object]:
+def create_project_endpoint(request: Request) -> dict[str, object]:
+    body = ProjectCreateRequest.model_validate_json(request.body())
     path = Path(body.path)
     if not path.is_dir():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Path is not a directory")
@@ -57,15 +63,16 @@ def create_project_endpoint(body: ProjectCreateRequest) -> dict[str, object]:
         project = create_project(name=body.name, path=body.path, description=body.description)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Duplicate project path") from None
-    return asdict(project)
+    return {**asdict(project), "is_active": False}
 
 
 @router.patch("/{project_id}")
-def update_project_endpoint(project_id: str, body: ProjectUpdateRequest) -> dict[str, object]:
+def update_project_endpoint(project_id: str, request: Request) -> dict[str, object]:
+    body = ProjectUpdateRequest.model_validate_json(request.body())
     updated = update_project(project_id, name=body.name, description=body.description)
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    return asdict(updated)
+    return {**asdict(updated), "is_active": False}
 
 
 @router.delete("/{project_id}")

@@ -34,6 +34,7 @@ class Project:
     path: str
     description: str | None = None
     created_at: str | None = None
+    updated_at: str | None = None
 
 
 def _load_raw() -> dict:
@@ -126,6 +127,7 @@ def update_project(project_id: str, *, name: str | None = None, description: str
                     p.name = name
                 if description is not None:
                     p.description = description
+                p.updated_at = datetime.now(timezone.utc).isoformat()
                 _save_projects(projects, active_id)
                 return p
     return None

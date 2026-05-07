@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type ProjectProfile, type ProjectsResponse } from "../api/client";
+import { api, type Project, type ProjectsResponse } from "../api/client";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import { toast } from "../store/toast";
 
@@ -37,7 +37,7 @@ export default function ProjectsPage() {
       .finally(() => setLoading(false));
   };
 
-  const startEdit = (project: ProjectProfile) => {
+  const startEdit = (project: Project) => {
     setEditing(project.id);
     setDraft({ name: project.name, description: project.description ?? "" });
   };
@@ -51,7 +51,7 @@ export default function ProjectsPage() {
     if (!editing) return;
     setSaving(true);
     try {
-      const updated = await api.patchProject(editing, {
+      const updated = await api.updateProject(editing, {
         name: draft.name || undefined,
         description: draft.description || undefined,
       });
@@ -87,7 +87,13 @@ export default function ProjectsPage() {
     try {
       await api.activateProject(projectId);
       setData((prev) =>
-        prev ? { ...prev, active_project_id: projectId } : prev,
+        prev
+          ? {
+              ...prev,
+              active_project_id: projectId,
+              projects: prev.projects.map((p) => ({ ...p, is_active: p.id === projectId })),
+            }
+          : prev,
       );
       toast.success("Project activated.");
     } catch (err) {

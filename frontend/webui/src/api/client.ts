@@ -157,26 +157,28 @@ export interface AgentPatch {
 
 // ---------------- Projects ----------------
 
-export interface ProjectProfile {
+export interface Project {
   id: string;
   name: string;
   path: string;
   description: string | null;
   created_at: string | null;
+  updated_at: string | null;
+  is_active: boolean;
 }
 
 export interface ProjectsResponse {
-  projects: ProjectProfile[];
+  projects: Project[];
   active_project_id: string | null;
 }
 
-export interface ProjectCreateBody {
+export interface ProjectCreate {
   name: string;
   path: string;
   description?: string | null;
 }
 
-export interface ProjectUpdateBody {
+export interface ProjectUpdate {
   name?: string | null;
   description?: string | null;
 }
@@ -247,16 +249,16 @@ export const api = {
       body: JSON.stringify(patch),
     }),
   listProjects: () => apiFetch<ProjectsResponse>("/api/projects"),
-  createProject: (body: ProjectCreateBody) =>
-    apiFetch<ProjectProfile>("/api/projects", {
+  createProject: (data: ProjectCreate) =>
+    apiFetch<Project>("/api/projects", {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify(data),
       headers: { "Content-Type": "application/json" },
     }),
-  patchProject: (projectId: string, body: ProjectUpdateBody) =>
-    apiFetch<ProjectProfile>(`/api/projects/${encodeURIComponent(projectId)}`, {
+  updateProject: (projectId: string, data: ProjectUpdate) =>
+    apiFetch<Project>(`/api/projects/${encodeURIComponent(projectId)}`, {
       method: "PATCH",
-      body: JSON.stringify(body),
+      body: JSON.stringify(data),
       headers: { "Content-Type": "application/json" },
     }),
   deleteProject: (projectId: string) =>
