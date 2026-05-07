@@ -769,6 +769,7 @@ provider_app = typer.Typer(name="provider", help="Manage provider profiles")
 cron_app = typer.Typer(name="cron", help="Manage cron scheduler and jobs")
 autopilot_app = typer.Typer(name="autopilot", help="Manage repo autopilot")
 model_app = typer.Typer(name="model", help="Manage active model via ~/.claude/settings.json")
+project_app = typer.Typer(name="project", help="Manage projects")
 
 app.add_typer(mcp_app)
 app.add_typer(plugin_app)
@@ -777,6 +778,7 @@ app.add_typer(provider_app)
 app.add_typer(cron_app)
 app.add_typer(autopilot_app)
 app.add_typer(model_app)
+app.add_typer(project_app)
 
 
 # ---- webui ----
@@ -1405,6 +1407,147 @@ def autopilot_export_dashboard_cmd(
 
     path = RepoAutopilotStore(cwd).export_dashboard(output)
     print(f"Exported autopilot dashboard: {path}")
+
+
+# ---- project subcommands ----
+
+def _find_project_by_id_or_name(projects: list, identifier: str):
+    """Find a project by ID or name (case-insensitive)."""
+    for p in projects:
+        if p.id == identifier:
+            return p
+        if p.name.lower() == identifier.lower():
+            return p
+    return None
+
+
+@project_app.command("list")
+def project_list_cmd() -> None:
+    """List all registered projects in a table."""
+    from openharness.services.projects import list_projects
+
+    projects, active_id = list_projects()
+    if not projects:
+        print("No projects registered. Use `oh project add` to add one.")
+        return
+
+    # Column widths
+    id_w = max(12, max(len(p.id) for p in projects))
+    name_w = max(20, max(len(p.name) for p in projects))
+    path_w = max(min(50, max(len(p.path) for p in projects)), 20)
+
+    # Header
+    print(f"{'ID':<{id_w}} {'NAME':<{name_w}} {'PATH':<{path_w}} {'ACTIVE'}")
+    print("-" * (id_w + name_w + path_w + 10))
+
+    for p in projects:
+        active_marker = "✓" if p.id == active_id else ""
+        path_display = p.path
+        if len(path_display) > path_w:
+            path_display = path_display[: path_w - 3] + "..."
+        print(f"{p.id:<{id_w}} {p.name:<{name_w}} {path_display:<{path_w}} {active_marker}")
+
+
+@project_app.command("add")
+def project_add_cmd(
+    name: str = typer.Argument(..., help="Project name"),
+    path: str = typer.Option(None, "--path", "-p", help="Project directory path (default: current working directory)"),
+    description: str | None = typer.Option(None, "--description", "-d", help="Project description"),
+) -> None:
+    """Add a new project to the registry."""
+    from openharness.services.projects import create_project
+
+    if path is None:
+        path = str(Path.cwd())
+
+    try:
+        project = create_project(name=name, path=path, description=description)
+        print(f"Added project: {project.name} (id={project.id})")
+        print(f"  path: {project.path}")
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise typer.Exit(1)
+
+
+@project_app.command("remove")
+def project_remove_cmd(
+    identifier: str = typer.Argument(..., help="Project name or ID to remove"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+) -> None:
+    """Remove a project from the registry."""
+    from openharness.services.projects import delete_project, list_projects
+
+    projects, _ = list_projects()
+    project = _find_project_by_id_or_name(projects, identifier)
+    if project is None:
+        print(f"Project not found: {identifier}", file=sys.stderr)
+        raise typer.Exit(1)
+
+    if not force:
+        typer.echo(f"Remove project '{project.name}' (id={project.id})?")
+        typer.echo(f"  path: {project.path}")
+        if not typer.confirm("Confirm removal"):
+            print("Aborted.")
+            return
+
+    if delete_project(project.id):
+        print(f"Removed project: {project.name}")
+    else:
+        print("Failed to remove project.", file=sys.stderr)
+        raise typer.Exit(1)
+
+
+@project_app.command("switch")
+def project_switch_cmd(
+    identifier: str = typer.Argument(..., help="Project name or ID to activate"),
+) -> None:
+    """Switch the active project."""
+    from openharness.services.projects import activate_project, list_projects
+
+    projects, _ = list_projects()
+    project = _find_project_by_id_or_name(projects, identifier)
+    if project is None:
+        print(f"Project not found: {identifier}", file=sys.stderr)
+        raise typer.Exit(1)
+
+    activated = activate_project(project.id)
+    if activated:
+        print(f"Switched to project: {activated.name} (id={activated.id})")
+        print(f"  path: {activated.path}")
+    else:
+        print("Failed to switch project.", file=sys.stderr)
+        raise typer.Exit(1)
+
+
+@project_app.command("info")
+def project_info_cmd(
+    identifier: str | None = typer.Argument(None, help="Project name or ID (default: active project)"),
+) -> None:
+    """Show detailed info for a project."""
+    from openharness.services.projects import get_active_project, list_projects
+
+    if identifier is None:
+        project = get_active_project()
+        if project is None:
+            print("No active project. Use `oh project switch <name-or-id>` to activate one.")
+            return
+    else:
+        projects, _ = list_projects()
+        project = _find_project_by_id_or_name(projects, identifier)
+        if project is None:
+            print(f"Project not found: {identifier}", file=sys.stderr)
+            raise typer.Exit(1)
+
+    is_active = get_active_project()
+    is_active_marker = " (active)" if is_active and is_active.id == project.id else ""
+
+    print(f"Project: {project.name}{is_active_marker}")
+    print(f"  id:          {project.id}")
+    print(f"  path:        {project.path}")
+    if project.description:
+        print(f"  description: {project.description}")
+    if project.created_at:
+        print(f"  created_at:  {project.created_at[:19]}")
 
 
 # ---- auth subcommands ----

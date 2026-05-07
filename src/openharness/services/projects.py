@@ -138,7 +138,9 @@ def delete_project(project_id: str) -> bool:
         filtered = [p for p in projects if p.id != project_id]
         if len(filtered) == len(projects):
             return False
-        _save_projects(filtered, active_id)
+        # Clear active_project_id if we deleted the active project
+        new_active_id = None if active_id == project_id else active_id
+        _save_projects(filtered, new_active_id)
         return True
 
 
