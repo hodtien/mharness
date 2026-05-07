@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type ProjectProfile, type ProjectsResponse } from "../api/client";
+import { api, type Project, type ProjectsResponse } from "../api/client";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import { toast } from "../store/toast";
 
@@ -37,7 +37,7 @@ export default function ProjectsPage() {
       .finally(() => setLoading(false));
   };
 
-  const startEdit = (project: ProjectProfile) => {
+  const startEdit = (project: Project) => {
     setEditing(project.id);
     setDraft({ name: project.name, description: project.description ?? "" });
   };
@@ -51,7 +51,7 @@ export default function ProjectsPage() {
     if (!editing) return;
     setSaving(true);
     try {
-      const updated = await api.patchProject(editing, {
+      const updated = await api.updateProject(editing, {
         name: draft.name || undefined,
         description: draft.description || undefined,
       });
