@@ -914,15 +914,17 @@ def test_two_projects_have_isolated_autopilot_state(tmp_path: Path, monkeypatch)
     assert store_a.journal_path.parent == project_a / ".openharness" / "autopilot"
     assert store_b.journal_path.parent == project_b / ".openharness" / "autopilot"
 
-    # Journal entries are isolated
+    # Journal entries are isolated (enqueue_card also writes intake_added internally)
     journal_a = store_a.load_journal()
     journal_b = store_b.load_journal()
-    assert len(journal_a) == 1
-    assert "journal A entry" in journal_a[0].summary
-    assert "journal B entry" not in journal_a[0].summary
-    assert len(journal_b) == 1
-    assert "journal B entry" in journal_b[0].summary
-    assert "journal A entry" not in journal_b[0].summary
+    note_entries_a = [e for e in journal_a if e.kind == "note"]
+    note_entries_b = [e for e in journal_b if e.kind == "note"]
+    assert len(note_entries_a) == 1
+    assert "journal A entry" in note_entries_a[0].summary
+    assert len(note_entries_b) == 1
+    assert "journal B entry" in note_entries_b[0].summary
+    assert all("journal B entry" not in e.summary for e in journal_a)
+    assert all("journal A entry" not in e.summary for e in journal_b)
 
 
 def test_autopilot_run_card_opens_pr_and_waits_for_ci(tmp_path: Path, monkeypatch) -> None:

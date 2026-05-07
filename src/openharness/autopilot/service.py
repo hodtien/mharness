@@ -1975,12 +1975,14 @@ class RepoAutopilotStore:
                 "schedule": "*/30 * * * *",
                 "command": f"oh autopilot scan all --cwd {self._cwd}",
                 "cwd": str(self._cwd),
+                "project_path": str(self._cwd),
             },
             {
                 "name": "autopilot.tick",
                 "schedule": "*/10 * * * *",
                 "command": f"oh autopilot tick --cwd {self._cwd}",
                 "cwd": str(self._cwd),
+                "project_path": str(self._cwd),
             },
         ]
         for job in jobs:
