@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { api, type ProjectProfile, type ProjectsResponse } from "../api/client";
+import { api, type Project, type ProjectsResponse } from "../api/client";
 
 /** Truncates a path string for display: shows leading ~ or first segment + trailing segment. */
 function truncatePath(path: string, maxLen = 36): string {
@@ -59,7 +59,7 @@ export default function ProjectSelector() {
       .finally(() => setLoading(false));
   }, []);
 
-  const activeProject: ProjectProfile | undefined = data?.projects.find(
+  const activeProject: Project | undefined = data?.projects.find(
     (p) => p.id === data.active_project_id,
   );
 
