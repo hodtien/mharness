@@ -726,9 +726,8 @@ async def run_card_direct(
     """Start running a specific autopilot card immediately.
 
     The card must be in ``queued`` or ``accepted`` status (or ``paused`` for a
-    staged restart). Uses :meth:`pick_specific_card` to claim the card, then
-    spawns ``oh autopilot run-next`` as a background task. Returns HTTP 409
-    if the card is already active with a live worker.
+    staged restart). Spawns ``oh autopilot run-next --card-id`` as a background
+    task. Returns HTTP 409 if the card is already active with a live worker.
     """
     _ensure_safe_card_id(card_id)
     store = RepoAutopilotStore(state.cwd)
@@ -758,19 +757,8 @@ async def run_card_direct(
                 "message": "Card must be queued, accepted, or paused to start.",
             },
         )
-    worker_id = f"pid-{os.getpid()}-{uuid4().hex[:8]}"
-    claimed = store.pick_specific_card(card_id, worker_id)
-    if claimed is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": "claim_failed",
-                "card_id": card_id,
-                "message": "Could not claim the card. It may have been taken by another worker.",
-            },
-        )
     oh_executable = str(Path(sys.executable).with_name("oh"))
-    command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
+    command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))} --card-id {shlex.quote(card_id)}"
     manager = get_task_manager()
     task = await manager.create_shell_task(
         command=command,

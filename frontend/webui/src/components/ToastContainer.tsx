@@ -8,6 +8,7 @@ const KIND_STYLES = {
   success: "border-emerald-400/40 bg-emerald-500/20 text-emerald-100",
   error: "border-red-400/40 bg-red-500/20 text-red-200",
   info: "border-cyan-400/40 bg-cyan-500/20 text-cyan-100",
+  warn: "border-amber-400/40 bg-amber-500/20 text-amber-100",
 };
 
 export default function ToastContainer() {
@@ -29,7 +30,7 @@ export default function ToastContainer() {
           className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-sm shadow-xl ${KIND_STYLES[t.kind]}`}
         >
           <span aria-hidden="true">
-            {t.kind === "success" ? "✅" : t.kind === "error" ? "❌" : "ℹ️"}
+            {t.kind === "success" ? "✅" : t.kind === "error" ? "❌" : t.kind === "warn" ? "⚠️" : "ℹ️"}
           </span>
           <span className="flex-1">{t.message}</span>
           <button

@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type Project, type ProjectsResponse } from "../api/client";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import { toast } from "../store/toast";
+import { useSession } from "../store/session";
 
 export default function ProjectsPage() {
+  const { setActiveProjectId } = useSession();
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [data, setData] = useState<ProjectsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +29,9 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     loadProjects();
+    return () => {
+      if (reloadTimer.current !== null) clearTimeout(reloadTimer.current);
+    };
   }, []);
 
   const loadProjects = () => {
@@ -49,12 +55,27 @@ export default function ProjectsPage() {
 
   const saveEdit = async () => {
     if (!editing) return;
+    if (!draft.name.trim()) {
+      toast.error("Project name is required.");
+      return;
+    }
+    const original = data?.projects.find((p) => p.id === editing);
+    const noChanges =
+      original &&
+      draft.name.trim() === original.name.trim() &&
+      draft.description === (original.description ?? "");
+    if (noChanges) {
+      setEditing(null);
+      setSaving(false);
+      toast.warn("No changes to save.");
+      return;
+    }
     setSaving(true);
     try {
-      const updated = await api.updateProject(editing, {
-        name: draft.name || undefined,
-        description: draft.description || undefined,
-      });
+      const patch: Record<string, string | null> = {};
+      if (draft.name.trim()) patch.name = draft.name.trim();
+      if (draft.description !== undefined) patch.description = draft.description;
+      const updated = await api.updateProject(editing, patch);
       setData((prev) =>
         prev ? { ...prev, projects: prev.projects.map((p) => (p.id === editing ? updated : p)) } : prev,
       );
@@ -83,13 +104,18 @@ export default function ProjectsPage() {
   };
 
   const handleActivate = async (projectId: string) => {
+    if (activating !== null) return; // Prevent parallel activations
+    const projectName = data?.projects.find((p) => p.id === projectId)?.name ?? projectId;
     setActivating(projectId);
     try {
       await api.activateProject(projectId);
+      setActiveProjectId(projectId);
       setData((prev) =>
         prev ? { ...prev, active_project_id: projectId } : prev,
       );
-      toast.success("Project activated.");
+      toast.success(`Switched to project: ${projectName}`);
+      if (reloadTimer.current !== null) clearTimeout(reloadTimer.current);
+      reloadTimer.current = setTimeout(() => window.location.reload(), 300);
     } catch (err) {
       toast.error(String(err));
     } finally {

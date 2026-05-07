@@ -59,12 +59,15 @@ interface SessionStore {
   sessionId: string | null;
   /** The session ID that was resumed (shown in Transcript banner). */
   resumedFrom: string | null;
+  /** The currently active project ID (set when user activates a project). */
+  activeProjectId: string | null;
   /** Timestamp (ms) of the last project_switched event; used to trigger data reloads. */
   projectSwitchedAt: number | null;
   // setters
   setStatus: (s: "connecting" | "open" | "closed", detail?: string) => void;
   setSessionId: (id: string | null) => void;
   setResumedFrom: (id: string | null) => void;
+  setActiveProjectId: (id: string | null) => void;
   ingest: (evt: BackendEvent) => void;
   appendUser: (text: string) => void;
   setError: (msg: string | null) => void;
@@ -89,6 +92,7 @@ export const useSession = create<SessionStore>((set, get) => ({
   swarm: null,
   sessionId: null,
   resumedFrom: null,
+  activeProjectId: null,
   projectSwitchedAt: null,
 
   setSessionId: (id) => set({ sessionId: id }),
@@ -120,6 +124,8 @@ export const useSession = create<SessionStore>((set, get) => ({
   setError: (msg) => set({ errorBanner: msg }),
 
   setResumedFrom: (id) => set({ resumedFrom: id }),
+
+  setActiveProjectId: (id) => set({ activeProjectId: id }),
 
   reset: () =>
     set({
