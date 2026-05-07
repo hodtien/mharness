@@ -58,6 +58,8 @@ def upsert_cron_job(job: dict[str, Any]) -> None:
     """
     job.setdefault("enabled", True)
     job.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+    if "project_path" not in job and job.get("cwd") is not None:
+        job["project_path"] = job["cwd"]
 
     schedule = job.get("schedule", "")
     if validate_cron_expression(schedule):

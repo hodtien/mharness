@@ -902,6 +902,58 @@ def test_autopilot_install_default_cron_creates_jobs(tmp_path: Path, monkeypatch
     assert names == ["autopilot.scan", "autopilot.tick"]
     assert len(recorded) == 2
     assert recorded[0]["name"] == "autopilot.scan"
+    for job in recorded:
+        assert "project_path" in job
+        assert job["project_path"] == str(repo)
+
+
+def test_two_projects_have_isolated_autopilot_state(tmp_path: Path, monkeypatch) -> None:
+    """Cards, journal entries, and registry files of two projects must not bleed into each other."""
+    project_a = tmp_path / "project_a"
+    project_b = tmp_path / "project_b"
+    project_a.mkdir()
+    project_b.mkdir()
+
+    store_a = RepoAutopilotStore(project_a)
+    store_b = RepoAutopilotStore(project_b)
+
+    card_a, _ = store_a.enqueue_card(
+        source_kind="manual_idea",
+        title="Task for project A",
+        body="Only for A",
+    )
+    card_b, _ = store_b.enqueue_card(
+        source_kind="manual_idea",
+        title="Task for project B",
+        body="Only for B",
+    )
+
+    store_a.append_journal(kind="note", summary="journal A entry", task_id=card_a.id)
+    store_b.append_journal(kind="note", summary="journal B entry", task_id=card_b.id)
+
+    # Each store reads only its own registry
+    assert store_a.get_card(card_a.id) is not None
+    assert store_a.get_card(card_b.id) is None
+    assert store_b.get_card(card_b.id) is not None
+    assert store_b.get_card(card_a.id) is None
+
+    # Paths are scoped to their respective projects
+    assert store_a.registry_path.parent == project_a / ".openharness" / "autopilot"
+    assert store_b.registry_path.parent == project_b / ".openharness" / "autopilot"
+    assert store_a.journal_path.parent == project_a / ".openharness" / "autopilot"
+    assert store_b.journal_path.parent == project_b / ".openharness" / "autopilot"
+
+    # Journal entries are isolated (enqueue_card also writes intake_added internally)
+    journal_a = store_a.load_journal()
+    journal_b = store_b.load_journal()
+    note_entries_a = [e for e in journal_a if e.kind == "note"]
+    note_entries_b = [e for e in journal_b if e.kind == "note"]
+    assert len(note_entries_a) == 1
+    assert "journal A entry" in note_entries_a[0].summary
+    assert len(note_entries_b) == 1
+    assert "journal B entry" in note_entries_b[0].summary
+    assert all("journal B entry" not in e.summary for e in journal_a)
+    assert all("journal A entry" not in e.summary for e in journal_b)
 
 
 def test_autopilot_run_card_opens_pr_and_waits_for_ci(tmp_path: Path, monkeypatch) -> None:

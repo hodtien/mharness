@@ -21,6 +21,18 @@ class CronCreateToolInput(BaseModel):
     command: str = Field(description="Shell command to run when triggered")
     cwd: str | None = Field(default=None, description="Optional working directory override")
     enabled: bool = Field(default=True, description="Whether the job is active")
+    project_id: str | None = Field(
+        default=None,
+        description="Project ID this job belongs to (used for UI/CLI filtering)",
+    )
+    project_path: str | None = Field(
+        default=None,
+        description=(
+            "Absolute path of the project this job targets. "
+            "For autopilot jobs this should match the --cwd argument so the "
+            "scheduler scopes registry/journal/worktree access correctly."
+        ),
+    )
 
 
 class CronCreateTool(BaseTool):
@@ -48,6 +60,7 @@ class CronCreateTool(BaseTool):
                 is_error=True,
             )
 
+        project_path = arguments.project_path or arguments.cwd or str(context.cwd)
         upsert_cron_job(
             {
                 "name": arguments.name,
@@ -55,6 +68,8 @@ class CronCreateTool(BaseTool):
                 "command": arguments.command,
                 "cwd": arguments.cwd or str(context.cwd),
                 "enabled": arguments.enabled,
+                "project_id": arguments.project_id,
+                "project_path": project_path,
             }
         )
         status = "enabled" if arguments.enabled else "disabled"

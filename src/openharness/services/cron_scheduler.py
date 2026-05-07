@@ -172,7 +172,8 @@ async def execute_job(job: dict[str, Any]) -> dict[str, Any]:
     """Run a single cron job and return a history entry."""
     name = job["name"]
     command = job["command"]
-    cwd = Path(job.get("cwd") or ".").expanduser()
+    project_path = Path(job.get("project_path") or job.get("cwd") or ".").expanduser()
+    cwd = project_path
     timeout_seconds = _resolve_timeout(job)
     started_at = datetime.now(timezone.utc)
 
@@ -249,6 +250,10 @@ async def execute_job(job: dict[str, Any]) -> dict[str, Any]:
         "stdout": (stdout.decode("utf-8", errors="replace")[-2000:] if stdout else ""),
         "stderr": (stderr.decode("utf-8", errors="replace")[-2000:] if stderr else ""),
     }
+    if job.get("project_id") is not None:
+        entry["project_id"] = job.get("project_id")
+    if job.get("project_path") is not None:
+        entry["project_path"] = str(project_path)
     mark_job_run(name, success=success)
     append_history(entry)
     logger.info("Job %r finished: %s (rc=%s)", name, entry["status"], process.returncode)
