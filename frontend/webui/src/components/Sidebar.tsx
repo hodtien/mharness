@@ -52,6 +52,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
         <NavItem to="/history" label="History" icon="🕘" onClose={onClose} />
         <NavItem to="/autopilot" label="Autopilot" icon="🤖" onClose={onClose} />
         <NavItem to="/tasks" label="Jobs" icon="⚙️" onClose={onClose} />
+        <NavItem to="/projects" label="Projects" icon="📁" onClose={onClose} />
       </nav>
 
       <Section
