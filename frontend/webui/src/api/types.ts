@@ -60,7 +60,8 @@ export type BackendEventType =
   | "plan_mode_change"
   | "swarm_status"
   | "error"
-  | "shutdown";
+  | "shutdown"
+  | "project_switched";
 
 export interface BackendEvent {
   type: BackendEventType;
@@ -101,6 +102,9 @@ export interface BackendEvent {
   // swarm_status
   swarm_teammates?: Array<Record<string, unknown>>;
   swarm_notifications?: Array<Record<string, unknown>>;
+  // project_switched
+  project_id?: string;
+  project_path?: string;
 }
 
 export type FrontendRequestType =

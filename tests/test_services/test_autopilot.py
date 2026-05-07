@@ -664,6 +664,35 @@ def test_recover_stuck_waiting_ci_with_unreachable_pr(tmp_path: Path, monkeypatc
     assert refreshed.metadata.get("linked_pr_number") is None
 
 
+def test_recover_stuck_repairing_with_manual_intervention_fails_card(tmp_path: Path) -> None:
+    """A stale repairing card requiring human intervention should stop looking active."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Manual repair card",
+        body="needs a person to resolve branch sync",
+    )
+    registry = store._load_registry()
+    target = next(c for c in registry.cards if c.id == card.id)
+    target.status = "repairing"
+    target.updated_at = time.time() - (store.STUCK_CARD_STALE_SECONDS + 60)
+    target.metadata["manual_intervention_required"] = True
+    target.metadata["human_gate_pending"] = True
+    store._save_registry(registry)
+
+    recovered = store._recover_stuck_cards()
+
+    assert card.id in recovered
+    refreshed = store.get_card(card.id)
+    assert refreshed is not None
+    assert refreshed.status == "failed"
+    assert refreshed.metadata["stuck_recovery"]["from_status"] == "repairing"
+    assert refreshed.metadata["manual_intervention_required"] is True
+    assert refreshed.metadata["human_gate_pending"] is True
+
+
 def test_worktree_cleanup_on_exception(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -2563,6 +2592,66 @@ def test_rebase_on_advance_rebases_when_base_ahead(tmp_path: Path, monkeypatch) 
     assert ["rebase", "origin/main"] in calls
 
 
+def test_reset_worktree_prefers_remote_head_branch_when_present(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    calls = []
+
+    def fake_run_git(args, *, cwd=None, check=False):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(store, "_run_git", fake_run_git)
+
+    store._sync_worktree_to_base(
+        repo,
+        base_branch="main",
+        head_branch="autopilot/card",
+        reset=True,
+        rebase_strategy="on_conflict",
+        card_id="card",
+    )
+
+    assert calls == [
+        ["fetch", "origin", "main"],
+        ["fetch", "origin", "autopilot/card"],
+        ["checkout", "-B", "autopilot/card", "origin/autopilot/card"],
+    ]
+
+
+def test_reset_worktree_falls_back_to_base_when_remote_head_branch_missing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    calls = []
+
+    def fake_run_git(args, *, cwd=None, check=False):
+        calls.append(args)
+        if args == ["fetch", "origin", "autopilot/card"]:
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="missing")
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(store, "_run_git", fake_run_git)
+
+    store._sync_worktree_to_base(
+        repo,
+        base_branch="main",
+        head_branch="autopilot/card",
+        reset=True,
+        rebase_strategy="on_conflict",
+        card_id="card",
+    )
+
+    assert calls == [
+        ["fetch", "origin", "main"],
+        ["fetch", "origin", "autopilot/card"],
+        ["checkout", "-B", "autopilot/card", "origin/main"],
+    ]
+
+
 def test_rebase_conflict_aborts_cleanly_and_journals(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -3288,8 +3377,10 @@ def test_branch_sync_runs_before_push(tmp_path: Path, monkeypatch) -> None:
     assert call_order == ["sync", "upsert"], f"unexpected order: {call_order}"
 
 
-def test_branch_sync_non_fast_forward_retry_succeeds(tmp_path: Path, monkeypatch) -> None:
-    """If push is rejected with non-fast-forward, sync retries and second push succeeds."""
+def test_branch_sync_non_fast_forward_retry_succeeds_without_rebase_when_branch_is_current(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """If push is rejected with non-fast-forward, sync retries without rebasing an already-current branch."""
     import asyncio
 
     repo = tmp_path / "repo"
@@ -3361,7 +3452,9 @@ def test_branch_sync_non_fast_forward_retry_succeeds(tmp_path: Path, monkeypatch
     result = asyncio.run(store.run_card(card.id))
     assert result.status == "completed"
     assert len(push_calls) >= 2, f"expected at least 2 push attempts, got {push_calls}"
-    assert "origin/autopilot/ap-" in remote_rebases[0]
+    assert fetch_calls.count("main") >= 2
+    assert fetch_calls.count(f"autopilot/{card.id}") >= 2
+    assert remote_rebases == []
 
 
 def test_branch_sync_conflict_puts_card_in_repairing(tmp_path: Path, monkeypatch) -> None:
@@ -3392,6 +3485,69 @@ def test_branch_sync_conflict_puts_card_in_repairing(tmp_path: Path, monkeypatch
     assert updated.metadata.get("human_gate_pending") is True
     assert updated.metadata.get("manual_intervention_required") is True
     assert updated.metadata.get("last_failure_stage") == "branch_sync_conflict"
+
+
+def test_branch_sync_skips_rebase_when_remote_branch_and_base_are_current(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import subprocess as sp
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+
+    remote_rebases: list[str] = []
+    base_rebases: list[str] = []
+
+    def fake_run_git(self, args, *, cwd=None, check=False):
+        command = tuple(args)
+        if command[:2] == ("checkout", "autopilot/ap-test"):
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
+        if command[:3] == ("fetch", "origin", "main"):
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
+        if command[:3] == ("fetch", "origin", "autopilot/ap-test"):
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
+        if command[:3] == ("rev-list", "--count", "origin/autopilot/ap-test..HEAD"):
+            return sp.CompletedProcess(args, 0, stdout="0\n", stderr="")
+        if command[:3] == ("rev-list", "--count", "HEAD..origin/autopilot/ap-test"):
+            return sp.CompletedProcess(args, 0, stdout="0\n", stderr="")
+        if command[:3] == ("rev-list", "--count", "HEAD..origin/main"):
+            return sp.CompletedProcess(args, 0, stdout="0\n", stderr="")
+        raise AssertionError(f"unexpected git command: {args}")
+
+    def fake_remote_rebase(self, cwd, *, remote_branch, card_id=None):
+        remote_rebases.append(remote_branch)
+        return True
+
+    def fake_base_rebase(self, cwd, *, base_branch, card_id=None):
+        base_rebases.append(base_branch)
+        return True
+
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_git", fake_run_git)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._rebase_head_onto_remote_branch",
+        fake_remote_rebase,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._rebase_head_onto_base",
+        fake_base_rebase,
+    )
+
+    ok, stage, summary = store._sync_pr_branch_before_push(
+        worktree,
+        base_branch="main",
+        head_branch="autopilot/ap-test",
+        policies=store.load_policies(),
+        card_id=None,
+    )
+
+    assert ok is True
+    assert stage == "branch_sync_done"
+    assert summary == "Synced autopilot/ap-test onto origin/main."
+    assert remote_rebases == []
+    assert base_rebases == []
 
 
 def test_branch_sync_no_force_push_by_default(tmp_path: Path, monkeypatch) -> None:
@@ -3487,6 +3643,109 @@ def test_branch_sync_force_with_lease_when_policy_allows(tmp_path: Path, monkeyp
     assert ok is True
     assert stage == "branch_force_push_done"
     assert any(f for f in force_used), "expected --force-with-lease to have been used"
+
+
+def test_branch_sync_force_with_lease_for_autopilot_managed_pr_branch(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import subprocess as sp
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Managed PR", body="")
+    store.update_status(
+        card.id,
+        status="repairing",
+        metadata_updates={"autopilot_managed": True, "linked_pr_number": 97},
+    )
+
+    force_used: list[bool] = []
+    push_attempt: list[int] = []
+
+    def fake_git_push_branch(self, cwd, branch, *, force_with_lease: bool = False):
+        force_used.append(force_with_lease)
+        push_attempt.append(1)
+        if len(push_attempt) <= 2:
+            raise RuntimeError("non-fast-forward")
+
+    def fake_run_git(self, args, *, cwd=None, check=False):
+        return sp.CompletedProcess(args, 0, stdout="", stderr="")
+
+    def fake_rebase(self, cwd, *, base_branch, card_id=None):
+        return True
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch", fake_git_push_branch
+    )
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_git", fake_run_git)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._rebase_head_onto_base", fake_rebase
+    )
+
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    ok, stage, summary = store._push_pr_branch_with_sync(
+        worktree,
+        base_branch="main",
+        head_branch=f"autopilot/{card.id}",
+        policies=store.load_policies(),
+        card_id=card.id,
+    )
+
+    assert ok is True
+    assert stage == "branch_force_push_done"
+    assert force_used == [False, False, True]
+
+
+def test_branch_sync_does_not_force_for_unmanaged_branch(tmp_path: Path, monkeypatch) -> None:
+    import subprocess as sp
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Unmanaged PR", body="")
+    store.update_status(
+        card.id,
+        status="repairing",
+        metadata_updates={"autopilot_managed": False, "linked_pr_number": 97},
+    )
+
+    force_used: list[bool] = []
+    push_attempt: list[int] = []
+
+    def fake_git_push_branch(self, cwd, branch, *, force_with_lease: bool = False):
+        force_used.append(force_with_lease)
+        push_attempt.append(1)
+        raise RuntimeError("non-fast-forward")
+
+    def fake_run_git(self, args, *, cwd=None, check=False):
+        return sp.CompletedProcess(args, 0, stdout="", stderr="")
+
+    def fake_rebase(self, cwd, *, base_branch, card_id=None):
+        return True
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch", fake_git_push_branch
+    )
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_git", fake_run_git)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._rebase_head_onto_base", fake_rebase
+    )
+
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    ok, stage, summary = store._push_pr_branch_with_sync(
+        worktree,
+        base_branch="main",
+        head_branch=f"autopilot/{card.id}",
+        policies=store.load_policies(),
+        card_id=card.id,
+    )
+
+    assert ok is False
+    assert stage == "branch_push_rejected"
+    assert force_used == [False, False]
 
 
 def test_branch_sync_force_policy_does_not_force_on_other_retry_errors(
@@ -3610,6 +3869,83 @@ def test_existing_pr_card_conflicting_branch_passes_through_ci(tmp_path: Path, m
     assert result.pr_number == 42
     updated = store.get_card(card.id)
     assert updated is not None
+    assert updated.metadata.get("human_gate_pending") is True
+    assert call_order == ["sync", "ci"]
+
+
+def test_repair_exhausted_managed_pr_card_passes_through_ci(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import asyncio
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    sync_cwd = tmp_path / "worktrees" / "card-42"
+    sync_cwd.mkdir(parents=True)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Managed PR repair exhausted",
+        body="",
+        metadata={
+            "autopilot_managed": True,
+            "last_failure_stage": "repair_exhausted",
+            "linked_pr_number": 42,
+            "head_branch": "autopilot/card-42",
+            "worktree_path": str(sync_cwd),
+        },
+    )
+    store.update_status(card.id, status="failed", note="repair rounds exhausted")
+    call_order: list[str] = []
+
+    def fake_push_pr_branch_with_sync(
+        self, cwd, *, base_branch, head_branch, policies, card_id=None
+    ):
+        call_order.append("sync")
+        assert cwd == sync_cwd
+        assert head_branch == "autopilot/card-42"
+        assert card_id == card.id
+        return True, "branch_push_done", "Pushed autopilot/card-42."
+
+    async def fake_wait_for_pr_ci(self, pr_number, policies):
+        call_order.append("ci")
+        return (
+            "success",
+            "All remote checks passed.",
+            {"url": "https://example/pr/42", "labels": [], "isDraft": False},
+            [],
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo",
+        lambda self, cwd: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_same_git_common_dir",
+        lambda self, cwd: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        fake_push_pr_branch_with_sync,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: False,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    result = asyncio.run(store.run_card(card.id))
+
+    assert result.status == "completed"
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.status == "completed"
     assert updated.metadata.get("human_gate_pending") is True
     assert call_order == ["sync", "ci"]
 

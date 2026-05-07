@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef, type ChangeEvent, type FormEvent } from "react";
 import { api, apiFetch, getToken } from "../api/client";
+import { useSession } from "../store/session";
 import {
   LOG_FILTERS,
   type LogFilter,
@@ -1782,6 +1783,7 @@ export default function PipelinePage() {
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [policyDefaultModel, setPolicyDefaultModel] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const projectSwitchedAt = useSession((s) => s.projectSwitchedAt);
 
   useEffect(() => {
     const previous = document.title;
@@ -1829,6 +1831,12 @@ export default function PipelinePage() {
       cancelled = true;
     };
   }, []);
+
+  // Re-fetch cards when the active project changes.
+  useEffect(() => {
+    if (projectSwitchedAt === null) return;
+    refreshCards();
+  }, [projectSwitchedAt, refreshCards]);
 
   // Auto-refresh: start/stop polling based on active card presence
   useEffect(() => {

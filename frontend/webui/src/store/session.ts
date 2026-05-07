@@ -59,6 +59,8 @@ interface SessionStore {
   sessionId: string | null;
   /** The session ID that was resumed (shown in Transcript banner). */
   resumedFrom: string | null;
+  /** Timestamp (ms) of the last project_switched event; used to trigger data reloads. */
+  projectSwitchedAt: number | null;
   // setters
   setStatus: (s: "connecting" | "open" | "closed", detail?: string) => void;
   setSessionId: (id: string | null) => void;
@@ -87,6 +89,7 @@ export const useSession = create<SessionStore>((set, get) => ({
   swarm: null,
   sessionId: null,
   resumedFrom: null,
+  projectSwitchedAt: null,
 
   setSessionId: (id) => set({ sessionId: id }),
 
@@ -133,6 +136,7 @@ export const useSession = create<SessionStore>((set, get) => ({
       swarm: null,
       sessionId: null,
       resumedFrom: null,
+      projectSwitchedAt: null,
     }),
 
   ingest: (evt) => {
@@ -362,6 +366,15 @@ export const useSession = create<SessionStore>((set, get) => ({
       }
       case "shutdown": {
         set({ busy: false, connectionStatus: "closed" });
+        break;
+      }
+      case "project_switched": {
+        set((s) => ({
+          projectSwitchedAt: Date.now(),
+          appState: s.appState
+            ? { ...s.appState, cwd: evt.project_path ?? s.appState.cwd }
+            : s.appState,
+        }));
         break;
       }
       default:

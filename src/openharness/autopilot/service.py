@@ -916,10 +916,9 @@ class RepoAutopilotStore:
         linked_pr_number = self._linked_pr_number(card)
         use_worktree = bool(execution.get("use_worktree", True)) and self._is_git_repo(self._cwd)
 
-        if (
-            card.source_kind == "github_pr"
-            and linked_pr_number is not None
-            and not card.metadata.get("autopilot_managed")
+        if linked_pr_number is not None and (
+            (card.source_kind == "github_pr" and not card.metadata.get("autopilot_managed"))
+            or card.metadata.get("last_failure_stage") == "repair_exhausted"
         ):
             return await self._process_existing_pr_card(card, linked_pr_number, policies)
 
@@ -1855,6 +1854,13 @@ class RepoAutopilotStore:
         pr_linked_states = {"waiting_ci", "pr_open"}
         linked_pr = self._linked_pr_number(card)
 
+        if card.status == "repairing" and bool(card.metadata.get("manual_intervention_required")):
+            return (
+                "failed",
+                f"auto-recovered: manual repair required after {stale_minutes}m in repairing",
+                {},
+            )
+
         if card.status not in pr_linked_states or linked_pr is None:
             return (
                 "queued",
@@ -2035,6 +2041,26 @@ class RepoAutopilotStore:
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
         return bool(execution.get("allow_force_push_pr_branch", False))
 
+    def _should_force_push_pr_branch(
+        self,
+        *,
+        card_id: str | None,
+        head_branch: str,
+        policies: dict[str, Any],
+    ) -> bool:
+        if self._allow_force_push_pr_branch(policies):
+            return True
+        if not card_id:
+            return False
+        card = self.get_card(card_id)
+        if card is None:
+            return False
+        if not bool(card.metadata.get("autopilot_managed")):
+            return False
+        if self._linked_pr_number(card) is None:
+            return False
+        return self._head_branch(card, policies) == head_branch
+
     def _head_branch(self, card: RepoTaskCard, policies: dict[str, Any]) -> str:
         github_policy = dict(policies.get("autopilot", {}).get("github", {}))
         prefix = _safe_text(github_policy.get("pr_branch_prefix")) or "autopilot/"
@@ -2175,6 +2201,22 @@ class RepoAutopilotStore:
         except ValueError:
             return False
 
+    def _fetch_remote_branch(self, cwd: Path, *, branch: str) -> bool:
+        completed = self._run_git(["fetch", "origin", branch], cwd=cwd)
+        return completed.returncode == 0
+
+    def _branch_matches_remote(self, cwd: Path, *, branch: str) -> bool:
+        ahead = self._run_git(["rev-list", "--count", f"origin/{branch}..HEAD"], cwd=cwd)
+        behind = self._run_git(["rev-list", "--count", f"HEAD..origin/{branch}"], cwd=cwd)
+        if ahead.returncode != 0 or behind.returncode != 0:
+            return False
+        try:
+            ahead_count = int((ahead.stdout or "0").strip() or "0")
+            behind_count = int((behind.stdout or "0").strip() or "0")
+        except ValueError:
+            return False
+        return ahead_count == 0 and behind_count == 0
+
     def _rebase_head_onto_base(
         self, cwd: Path, *, base_branch: str, card_id: str | None = None
     ) -> bool:
@@ -2240,9 +2282,10 @@ class RepoAutopilotStore:
     ) -> None:
         self._run_git(["fetch", "origin", base_branch], cwd=cwd, check=True)
         if reset:
-            self._run_git(
-                ["checkout", "-B", head_branch, f"origin/{base_branch}"], cwd=cwd, check=True
-            )
+            start_ref = f"origin/{base_branch}"
+            if self._fetch_remote_branch(cwd, branch=head_branch):
+                start_ref = f"origin/{head_branch}"
+            self._run_git(["checkout", "-B", head_branch, start_ref], cwd=cwd, check=True)
             return
         self._run_git(["checkout", head_branch], cwd=cwd, check=True)
         if rebase_strategy == "none":
@@ -2271,13 +2314,13 @@ class RepoAutopilotStore:
             self._run_git(["fetch", "origin", base_branch], cwd=cwd, check=True)
             remote_head = self._run_git(["fetch", "origin", head_branch], cwd=cwd)
             success = True
-            if remote_head.returncode == 0:
+            if remote_head.returncode == 0 and not self._branch_matches_remote(cwd, branch=head_branch):
                 success = self._rebase_head_onto_remote_branch(
                     cwd,
                     remote_branch=f"origin/{head_branch}",
                     card_id=card_id,
                 )
-            if success:
+            if success and self._base_branch_has_advanced(cwd, base_branch=base_branch):
                 success = self._rebase_head_onto_base(
                     cwd,
                     base_branch=base_branch,
@@ -2350,7 +2393,11 @@ class RepoAutopilotStore:
             except Exception as retry_exc:
                 if not self._is_non_fast_forward_error(retry_exc):
                     return False, "branch_push_failed", str(retry_exc)
-                if self._allow_force_push_pr_branch(policies):
+                if self._should_force_push_pr_branch(
+                    card_id=card_id,
+                    head_branch=head_branch,
+                    policies=policies,
+                ):
                     self._git_push_branch(cwd, head_branch, force_with_lease=True)
                     return True, "branch_force_push_done", f"Force-with-lease pushed {head_branch}."
                 return False, "branch_push_rejected", str(retry_exc)
