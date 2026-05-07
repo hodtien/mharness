@@ -1910,7 +1910,7 @@ class RepoAutopilotStore:
 
     async def _cleanup_stale_worktrees(self) -> list[str]:
         worktree_manager = WorktreeManager()
-        terminal_statuses = {"completed", "merged", "failed", "rejected", "superseded"}
+        terminal_statuses = {"completed", "merged", "failed", "rejected", "superseded", "killed"}
         removed: list[str] = []
         try:
             worktrees = await worktree_manager.list_worktrees()
