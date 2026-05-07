@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import shlex
 import sys
 import time
 from pathlib import Path
 from typing import Any, AsyncIterator, Literal
+from uuid import uuid4
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -709,3 +711,233 @@ def delete_card_checkpoint(
     runs_dir = state.cwd / ".openharness" / "autopilot" / "runs"
     clear_checkpoints(runs_dir, card_id)
     return {"card_id": card_id, "cleared": True}
+
+
+# ---------------------------------------------------------------------------
+# Direct card control: run, pause, resume, retry-now
+# ---------------------------------------------------------------------------
+
+
+@router.post("/cards/{card_id}/run", status_code=status.HTTP_202_ACCEPTED, dependencies=_AUTH_DEPENDENCY)
+async def run_card_direct(
+    card_id: str,
+    state: WebUIState = Depends(get_state),
+) -> dict:
+    """Start running a specific autopilot card immediately.
+
+    The card must be in ``queued`` or ``accepted`` status (or ``paused`` for a
+    staged restart). Uses :meth:`pick_specific_card` to claim the card, then
+    spawns ``oh autopilot run-next`` as a background task. Returns HTTP 409
+    if the card is already active with a live worker.
+    """
+    _ensure_safe_card_id(card_id)
+    store = RepoAutopilotStore(state.cwd)
+    card = store.get_card(card_id)
+    if card is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "card_not_found", "card_id": card_id},
+        )
+    if card.status in _ACTIVE_STATUSES and card.metadata.get("worker_id"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "card_already_active",
+                "card_id": card_id,
+                "status": card.status,
+                "message": "Card is already running. Use /pause first.",
+            },
+        )
+    if card.status not in {"queued", "accepted", "paused"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "invalid_status_for_run",
+                "card_id": card_id,
+                "status": card.status,
+                "message": "Card must be queued, accepted, or paused to start.",
+            },
+        )
+    worker_id = f"pid-{os.getpid()}-{uuid4().hex[:8]}"
+    claimed = store.pick_specific_card(card_id, worker_id)
+    if claimed is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "claim_failed",
+                "card_id": card_id,
+                "message": "Could not claim the card. It may have been taken by another worker.",
+            },
+        )
+    oh_executable = str(Path(sys.executable).with_name("oh"))
+    command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
+    manager = get_task_manager()
+    task = await manager.create_shell_task(
+        command=command,
+        description=f"autopilot run {card_id}",
+        cwd=state.cwd,
+        task_type="local_bash",
+    )
+    return {"task_id": task.id, "card_id": card_id, "status": "accepted"}
+
+
+@router.post("/cards/{card_id}/pause", dependencies=_AUTH_DEPENDENCY)
+async def pause_card(
+    card_id: str,
+    state: WebUIState = Depends(get_state),
+) -> dict:
+    """Pause an active autopilot card by resetting its status to ``paused``.
+
+    Only cards in ``preparing``, ``running``, ``verifying``, or ``repairing``
+    status can be paused. Cards already in ``queued``, ``accepted``, ``paused``,
+    or terminal statuses return HTTP 409.
+    """
+    _ensure_safe_card_id(card_id)
+    store = RepoAutopilotStore(state.cwd)
+    card = store.get_card(card_id)
+    if card is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "card_not_found", "card_id": card_id},
+        )
+    if card.status not in {"preparing", "running", "verifying", "repairing"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "invalid_status_for_pause",
+                "card_id": card_id,
+                "status": card.status,
+                "message": f"Cannot pause a card in {card.status} status.",
+            },
+        )
+    updated = store.update_status(
+        card_id,
+        status="paused",
+        note="paused by user",
+        metadata_updates={"paused_by": "user"},
+    )
+    return _serialize_card(updated.model_dump(mode="json"))
+
+
+@router.post("/cards/{card_id}/resume", dependencies=_AUTH_DEPENDENCY)
+async def resume_card_direct(
+    card_id: str,
+    state: WebUIState = Depends(get_state),
+) -> dict:
+    """Resume a paused autopilot card by re-claiming and re-running it.
+
+    The card must be in ``paused`` status. Clears the ``paused_by`` metadata
+    and re-queues the card with a fresh worker_id, then spawns the run-next
+    background task.
+    """
+    _ensure_safe_card_id(card_id)
+    store = RepoAutopilotStore(state.cwd)
+    card = store.get_card(card_id)
+    if card is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "card_not_found", "card_id": card_id},
+        )
+    if card.status != "paused":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "invalid_status_for_resume",
+                "card_id": card_id,
+                "status": card.status,
+                "message": f"Cannot resume a card in {card.status} status. Only paused cards can be resumed.",
+            },
+        )
+    worker_id = f"pid-{os.getpid()}-{uuid4().hex[:8]}"
+    claimed = store.pick_specific_card(card_id, worker_id)
+    if claimed is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "claim_failed",
+                "card_id": card_id,
+                "message": "Could not claim the card for resume.",
+            },
+        )
+    # Clear paused metadata
+    store.update_status(
+        card_id,
+        status="preparing",
+        note="resumed by user",
+        metadata_updates={"resumed_by": "user"},
+    )
+    oh_executable = str(Path(sys.executable).with_name("oh"))
+    command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
+    manager = get_task_manager()
+    task = await manager.create_shell_task(
+        command=command,
+        description=f"autopilot resume {card_id}",
+        cwd=state.cwd,
+        task_type="local_bash",
+    )
+    return {"task_id": task.id, "card_id": card_id, "status": "accepted"}
+
+
+@router.post("/cards/{card_id}/retry-now", status_code=status.HTTP_202_ACCEPTED, dependencies=_AUTH_DEPENDENCY)
+async def retry_card_now(
+    card_id: str,
+    state: WebUIState = Depends(get_state),
+) -> dict:
+    """Retry a failed/killed card immediately by re-claiming and re-running it.
+
+    The card must be in ``failed``, ``killed``, or ``rejected`` status.
+    Increments the attempt counter, uses :meth:`pick_specific_card` to claim
+    the card, then spawns the run-next background task.
+    """
+    _ensure_safe_card_id(card_id)
+    store = RepoAutopilotStore(state.cwd)
+    card = store.get_card(card_id)
+    if card is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "card_not_found", "card_id": card_id},
+        )
+    if card.status not in {"failed", "killed", "rejected"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "invalid_status_for_retry",
+                "card_id": card_id,
+                "status": card.status,
+                "message": f"Can only retry failed/killed/rejected cards, got: {card.status}",
+            },
+        )
+    current_attempt = int(card.metadata.get("attempt_count", 0) or 0)
+    worker_id = f"pid-{os.getpid()}-{uuid4().hex[:8]}"
+    claimed = store.pick_specific_card(card_id, worker_id)
+    if claimed is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "claim_failed",
+                "card_id": card_id,
+                "message": "Could not claim the card for retry.",
+            },
+        )
+    # Update attempt count after claiming
+    store.update_status(
+        card_id,
+        status="queued",
+        metadata_updates={
+            "retry_requested": True,
+            "retry_by": "user",
+            "attempt_count": current_attempt + 1,
+        },
+    )
+    # Re-claim with fresh worker_id
+    store.pick_specific_card(card_id, worker_id)
+    oh_executable = str(Path(sys.executable).with_name("oh"))
+    command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
+    manager = get_task_manager()
+    task = await manager.create_shell_task(
+        command=command,
+        description=f"autopilot retry {card_id}",
+        cwd=state.cwd,
+        task_type="local_bash",
+    )
+    return {"task_id": task.id, "card_id": card_id, "status": "accepted", "attempt": current_attempt + 1}

@@ -24,7 +24,8 @@ export type RepoTaskStatus =
   | "merged"
   | "failed"
   | "rejected"
-  | "killed";
+  | "killed"
+  | "paused";
 
 export type RepoTaskSource =
   | "github_issue"
@@ -414,7 +415,7 @@ const COLUMNS: {
   {
     id: "rejected",
     label: "Rejected",
-    statuses: ["rejected", "killed"],
+    statuses: ["rejected", "killed", "paused"],
     badgeColor: "bg-gray-500/20 text-gray-400 border-gray-500/40",
   },
 ];
@@ -1498,19 +1499,22 @@ function ModelSection({ card, policyDefaultModel, onModelChange }: ModelSectionP
 
 // ─── Drawer ───────────────────────────────────────────────────────────────────
 
-const RESETTABLE_STATUSES: RepoTaskStatus[] = ["failed", "rejected", "killed"];
+const RESETTABLE_STATUSES: RepoTaskStatus[] = ["failed", "rejected", "killed", "paused"];
 
 interface DrawerProps {
   card: PipelineCard | null;
   onClose: () => void;
   onAction: (cardId: string, action: "accept" | "reject" | "retry" | "reset") => void;
+  onRun: (cardId: string) => void;
+  onPause: (cardId: string) => void;
   onResume: (cardId: string) => void;
+  onRetryNow: (cardId: string) => void;
   loadingAction: boolean;
   policyDefaultModel: string | null;
   onCardModelChange: (cardId: string, model: string | null) => void;
 }
 
-function Drawer({ card, onClose, onAction, onResume, loadingAction, policyDefaultModel, onCardModelChange }: DrawerProps) {
+function Drawer({ card, onClose, onAction, onRun, onPause, onResume, onRetryNow, loadingAction, policyDefaultModel, onCardModelChange }: DrawerProps) {
   const [drawerTab, setDrawerTab] = useState<"info" | "activity" | "logs">("info");
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
@@ -1711,29 +1715,52 @@ function Drawer({ card, onClose, onAction, onResume, loadingAction, policyDefaul
 
         {/* Actions */}
         <div className="sticky bottom-0 z-10 flex gap-2 border-t border-[var(--border)] bg-[var(--panel)] p-4">
-          {RESETTABLE_STATUSES.includes(card.status) || ACTIVE_STATUSES.includes(card.status) ? (
-            <>
-              {card.metadata?.resume_available ? (
-                <button
-                  onClick={() => onResume(card.id)}
-                  disabled={loadingAction}
-                  className="flex-1 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-40"
-                  title={card.metadata?.resume_phase ? `Resume from ${card.metadata.resume_phase}` : "Resume from checkpoint"}
-                >
-                  Resume{card.metadata?.resume_phase ? ` (${card.metadata.resume_phase})` : ""}
-                </button>
-              ) : null}
-              {RESETTABLE_STATUSES.includes(card.status) ? (
-                <button
-                  onClick={() => onAction(card.id, "reset")}
-                  disabled={loadingAction}
-                  className="flex-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-40"
-                >
-                  Reset to Queue
-                </button>
-              ) : null}
-            </>
-          ) : (
+          {/* Run button: for queued/accepted cards */}
+          {(card.status === "queued" || card.status === "accepted") && (
+            <button
+              onClick={() => onRun(card.id)}
+              disabled={loadingAction}
+              className="flex-1 rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-sm font-medium text-blue-300 transition hover:bg-blue-500/20 disabled:opacity-40"
+              title="Start this card immediately"
+            >
+              ▶ Run
+            </button>
+          )}
+          {/* Pause button: for active cards */}
+          {ACTIVE_STATUSES.includes(card.status) && (
+            <button
+              onClick={() => onPause(card.id)}
+              disabled={loadingAction}
+              className="flex-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-40"
+              title="Pause this card"
+            >
+              ⏸ Pause
+            </button>
+          )}
+          {/* Resume button: for paused cards */}
+          {card.status === "paused" && (
+            <button
+              onClick={() => onResume(card.id)}
+              disabled={loadingAction}
+              className="flex-1 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-40"
+              title="Resume this card"
+            >
+              ▶ Resume
+            </button>
+          )}
+          {/* Retry Now button: for failed/killed/rejected */}
+          {RESETTABLE_STATUSES.includes(card.status) && (
+            <button
+              onClick={() => onRetryNow(card.id)}
+              disabled={loadingAction}
+              className="flex-1 rounded-lg border border-orange-500/40 bg-orange-500/10 px-3 py-2 text-sm font-medium text-orange-300 transition hover:bg-orange-500/20 disabled:opacity-40"
+              title="Retry this card immediately"
+            >
+              ↻ Retry Now
+            </button>
+          )}
+          {/* Common: accept / reject for queued/accepted/paused */}
+          {(card.status === "queued" || card.status === "accepted" || card.status === "paused") && (
             <>
               <button
                 onClick={() => onAction(card.id, "accept")}
@@ -1749,14 +1776,26 @@ function Drawer({ card, onClose, onAction, onResume, loadingAction, policyDefaul
               >
                 Reject
               </button>
-              <button
-                onClick={() => onAction(card.id, "retry")}
-                disabled={loadingAction}
-                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm font-medium text-[var(--text)] transition hover:border-[var(--accent)]/40 disabled:opacity-40"
-              >
-                Retry
-              </button>
+              {(card.status === "queued" || card.status === "accepted") && (
+                <button
+                  onClick={() => onAction(card.id, "retry")}
+                  disabled={loadingAction}
+                  className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm font-medium text-[var(--text)] transition hover:border-[var(--accent)]/40 disabled:opacity-40"
+                >
+                  Retry
+                </button>
+              )}
             </>
+          )}
+          {/* Reset for non-active cards that aren't already in terminal */}
+          {card.status !== "preparing" && card.status !== "running" && !ACTIVE_STATUSES.includes(card.status) && (
+            <button
+              onClick={() => onAction(card.id, "reset")}
+              disabled={loadingAction}
+              className="flex-1 rounded-lg border border-gray-500/40 bg-gray-500/10 px-3 py-2 text-sm font-medium text-gray-300 transition hover:bg-gray-500/20 disabled:opacity-40"
+            >
+              Reset
+            </button>
           )}
         </div>
         </div>
@@ -1900,6 +1939,59 @@ export default function PipelinePage() {
         refreshCards();
       } catch (err) {
         console.error("action failed:", err);
+      } finally {
+        setLoadingAction(false);
+      }
+    },
+    [refreshCards],
+  );
+
+  const handleRun = useCallback(
+    async (cardId: string) => {
+      setLoadingAction(true);
+      try {
+        await apiFetch(`/api/pipeline/cards/${encodeURIComponent(cardId)}/run`, {
+          method: "POST",
+        });
+        setSelectedCard(null);
+        refreshCards();
+      } catch (err) {
+        console.error("run failed:", err);
+      } finally {
+        setLoadingAction(false);
+      }
+    },
+    [refreshCards],
+  );
+
+  const handlePause = useCallback(
+    async (cardId: string) => {
+      setLoadingAction(true);
+      try {
+        await apiFetch(`/api/pipeline/cards/${encodeURIComponent(cardId)}/pause`, {
+          method: "POST",
+        });
+        refreshCards();
+      } catch (err) {
+        console.error("pause failed:", err);
+      } finally {
+        setLoadingAction(false);
+      }
+    },
+    [refreshCards],
+  );
+
+  const handleRetryNow = useCallback(
+    async (cardId: string) => {
+      setLoadingAction(true);
+      try {
+        await apiFetch(`/api/pipeline/cards/${encodeURIComponent(cardId)}/retry-now`, {
+          method: "POST",
+        });
+        setSelectedCard(null);
+        refreshCards();
+      } catch (err) {
+        console.error("retry-now failed:", err);
       } finally {
         setLoadingAction(false);
       }
@@ -2068,7 +2160,10 @@ export default function PipelinePage() {
         card={selectedCard}
         onClose={() => setSelectedCard(null)}
         onAction={handleAction}
+        onRun={handleRun}
+        onPause={handlePause}
         onResume={handleResume}
+        onRetryNow={handleRetryNow}
         loadingAction={loadingAction}
         policyDefaultModel={policyDefaultModel}
         onCardModelChange={handleCardModelChange}

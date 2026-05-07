@@ -605,6 +605,40 @@ class RepoAutopilotStore:
             0
         ]
 
+    def pick_specific_card(self, card_id: str, worker_id: str) -> RepoTaskCard | None:
+        """Claim a specific card by ID for a worker (used for direct card control).
+
+        Returns None if the card does not exist or is not in a claimable state.
+        """
+        with RepoFileLock(self._registry_lock_path):
+            if not self._registry_path.exists():
+                return None
+            try:
+                payload = json.loads(self._registry_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                return None
+            registry = RepoAutopilotRegistry.model_validate(payload)
+            chosen = next((c for c in registry.cards if c.id == card_id), None)
+            if chosen is None:
+                return None
+            if chosen.status not in {"queued", "accepted"}:
+                return None
+            chosen.status = "preparing"
+            chosen.updated_at = time.time()
+            chosen.metadata["worker_id"] = worker_id
+            registry.updated_at = time.time()
+            atomic_write_text(
+                self._registry_path,
+                json.dumps(
+                    registry.model_dump(mode="json"),
+                    ensure_ascii=False,
+                    indent=2,
+                    default=_json_default,
+                )
+                + "\n",
+            )
+            return chosen
+
     def update_status(
         self,
         card_id: str,
