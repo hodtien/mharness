@@ -153,7 +153,7 @@ _DEFAULT_VERIFICATION_POLICY = {
         "uv run ruff check src tests scripts",
         {
             "command": (
-                "cd frontend/terminal && "
+                "cd frontend/webui && "
                 "([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && "
                 "./node_modules/.bin/tsc --noEmit"
             ),
@@ -311,8 +311,8 @@ def _looks_available(command: str, cwd: Path) -> bool:
         return (cwd / "pyproject.toml").exists()
     if "pytest" in lowered:
         return (cwd / "tests").exists()
-    if "tsc" in lowered or "frontend/terminal" in lowered:
-        return (cwd / "frontend" / "terminal" / "package.json").exists()
+    if "tsc" in lowered or "frontend/webui" in lowered:
+        return (cwd / "frontend" / "webui" / "package.json").exists()
     return True
 
 
