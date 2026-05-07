@@ -15,6 +15,7 @@ import ModelsSettingsPage from "./pages/ModelsSettingsPage";
 import AgentsSettingsPage from "./pages/AgentsSettingsPage";
 import AutopilotPage from "./pages/PipelinePage";
 import TasksPage from "./pages/TasksPage";
+import ProjectsPage from "./pages/ProjectsPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import ToastContainer from "./components/ToastContainer";
 
@@ -140,6 +141,7 @@ export default function App() {
           <Route path="/autopilot" element={<AutopilotPage />} />
           <Route path="/pipeline" element={<Navigate to="/autopilot" replace />} />
           <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
           <Route
             path="/settings/modes"
             element={<ModesSettingsPage />}

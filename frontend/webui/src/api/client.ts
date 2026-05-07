@@ -155,6 +155,32 @@ export interface AgentPatch {
   permission_mode?: string;
 }
 
+// ---------------- Projects ----------------
+
+export interface ProjectProfile {
+  id: string;
+  name: string;
+  path: string;
+  description: string | null;
+  created_at: string | null;
+}
+
+export interface ProjectsResponse {
+  projects: ProjectProfile[];
+  active_project_id: string | null;
+}
+
+export interface ProjectCreateBody {
+  name: string;
+  path: string;
+  description?: string | null;
+}
+
+export interface ProjectUpdateBody {
+  name?: string | null;
+  description?: string | null;
+}
+
 export const api = {
   health: () => apiFetch<{ status: string; version: string }>("/api/health"),
   meta: () => apiFetch<{ cwd?: string; model?: string; permission_mode?: string }>("/api/meta"),
@@ -219,6 +245,27 @@ export const api = {
     apiFetch<AgentProfile>(`/api/agents/${encodeURIComponent(name)}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
+    }),
+  listProjects: () => apiFetch<ProjectsResponse>("/api/projects"),
+  createProject: (body: ProjectCreateBody) =>
+    apiFetch<ProjectProfile>("/api/projects", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+    }),
+  patchProject: (projectId: string, body: ProjectUpdateBody) =>
+    apiFetch<ProjectProfile>(`/api/projects/${encodeURIComponent(projectId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+    }),
+  deleteProject: (projectId: string) =>
+    apiFetch<{ ok: boolean }>(`/api/projects/${encodeURIComponent(projectId)}`, {
+      method: "DELETE",
+    }),
+  activateProject: (projectId: string) =>
+    apiFetch<{ ok: boolean }>(`/api/projects/${encodeURIComponent(projectId)}/activate`, {
+      method: "POST",
     }),
 };
 
