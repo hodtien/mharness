@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api, type Project, type ProjectsResponse } from "../api/client";
 import { toast } from "../store/toast";
+import { useSession } from "../store/session";
 
 /** Truncates a path string for display: shows leading ~ or first segment + trailing segment. */
 function truncatePath(path: string, maxLen = 36): string {
@@ -22,6 +23,7 @@ function truncatePath(path: string, maxLen = 36): string {
 }
 
 export default function ProjectSelector() {
+  const { setActiveProjectId } = useSession();
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<ProjectsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,10 +72,10 @@ export default function ProjectSelector() {
     setActivating(projectId);
     try {
       await api.activateProject(projectId);
-      // Show toast before reloading
+      setActiveProjectId(projectId);
+      setData((prev) => (prev ? { ...prev, active_project_id: projectId } : prev));
+      setOpen(false);
       toast.success(`Switched to project: ${projectName}`);
-      // Reload the page so the backend re-initializes with the new project context.
-      window.location.reload();
     } catch (err) {
       setError(String(err));
       setActivating(null);

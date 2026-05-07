@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type Project, type ProjectsResponse } from "../api/client";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import { toast } from "../store/toast";
@@ -6,7 +6,6 @@ import { useSession } from "../store/session";
 
 export default function ProjectsPage() {
   const { setActiveProjectId } = useSession();
-  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [data, setData] = useState<ProjectsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,9 +28,6 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     loadProjects();
-    return () => {
-      if (reloadTimer.current !== null) clearTimeout(reloadTimer.current);
-    };
   }, []);
 
   const loadProjects = () => {
@@ -114,8 +110,6 @@ export default function ProjectsPage() {
         prev ? { ...prev, active_project_id: projectId } : prev,
       );
       toast.success(`Switched to project: ${projectName}`);
-      if (reloadTimer.current !== null) clearTimeout(reloadTimer.current);
-      reloadTimer.current = setTimeout(() => window.location.reload(), 300);
     } catch (err) {
       toast.error(String(err));
     } finally {

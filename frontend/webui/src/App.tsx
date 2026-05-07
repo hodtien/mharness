@@ -60,7 +60,7 @@ export function AppLayout({ onInterrupt, onResumeSession }: LayoutProps) {
 
 export default function App() {
   const wsRef = useRef<WsHandle | null>(null);
-  const { setStatus, setSessionId, ingest, appendUser, setResumedFrom } = useSession();
+  const { setStatus, setSessionId, ingest, appendUser, setResumedFrom, activeProjectId } = useSession();
 
   const setupSession = useCallback(
     async (resumeId?: string) => {
@@ -103,6 +103,12 @@ export default function App() {
     setupSession();
     return () => wsRef.current?.close();
   }, [setupSession]);
+
+  useEffect(() => {
+    if (activeProjectId === null) return;
+    wsRef.current?.close();
+    setupSession();
+  }, [activeProjectId, setupSession]);
 
   const sendLine = useCallback(
     (text: string) => {
