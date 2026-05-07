@@ -3939,15 +3939,18 @@ class RepoAutopilotStore:
             stderr=f"severity={severity}" if is_blocking else "",
         )
 
-    def _verification_commands(self, policies: dict[str, Any]) -> list[_VerificationCommand]:
+    def _verification_commands(
+        self, policies: dict[str, Any], *, cwd: Path | None = None
+    ) -> list[_VerificationCommand]:
         configured = policies.get("verification", {}).get("commands", [])
         parsed = [_parse_verification_entry(entry) for entry in configured]
+        check_cwd = cwd or self._cwd
         selected: list[_VerificationCommand] = []
         for cmd in parsed:
             if cmd.error is not None:
                 selected.append(cmd)
                 continue
-            if _looks_available(cmd.raw, self._cwd):
+            if _looks_available(cmd.raw, check_cwd):
                 selected.append(cmd)
         return selected
 
@@ -3960,7 +3963,7 @@ class RepoAutopilotStore:
         ignore_preexisting = bool(verification_policy.get("ignore_preexisting_failures", True))
         base_branch = self._base_branch(policies)
         active_cwd = cwd or self._cwd
-        for cmd in self._verification_commands(policies):
+        for cmd in self._verification_commands(policies, cwd=active_cwd):
             if cmd.error is not None:
                 steps.append(
                     RepoVerificationStep(
