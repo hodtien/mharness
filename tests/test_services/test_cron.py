@@ -190,6 +190,34 @@ class TestPreviewCronNextRuns:
         assert runs[0].tzinfo is not None
         offset = runs[0].utcoffset()
         assert offset is not None and offset.total_seconds() == -5 * 3600
+
+    def test_preview_deterministic_same_input_same_output(self) -> None:
+        """Given the same base, preview returns the same run times every call."""
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        expr = "*/15 * * * *"
+        runs_a = preview_cron_next_runs(expr, count=3, base=base)
+        runs_b = preview_cron_next_runs(expr, count=3, base=base)
+        assert runs_a == runs_b
+
+    def test_preview_deterministic_each_run_is_unique(self) -> None:
+        """Each successive run timestamp is strictly later than the previous."""
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        runs = preview_cron_next_runs("*/10 * * * *", count=5, base=base)
+        assert len(runs) == 5
+        for i in range(len(runs) - 1):
+            assert runs[i] < runs[i + 1]
+
+    def test_preview_deterministic_weekday_cron(self) -> None:
+        """Weekday-limited cron expressions produce unique, ordered runs."""
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)  # Thursday
+        runs = preview_cron_next_runs("0 9 * * 1-5", count=5, base=base)
+        assert len(runs) == 5
+        for i in range(len(runs) - 1):
+            assert runs[i] < runs[i + 1]
+        # Each should be on a weekday (Mon=1 to Fri=5)
+        for run in runs:
+            assert run.weekday() < 5
+
     def test_corrupt_json(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         bad_file = tmp_path / "data" / "cron_jobs.json"
         bad_file.parent.mkdir(parents=True, exist_ok=True)

@@ -201,6 +201,66 @@ class TestPatchCronConfig:
         assert r2.json()["scan_cron"] == "0 9 * * *"
 
 
+class TestCronConfigRoundTrip:
+    """Config round-trip: PATCH persists and GET reflects."""
+
+    def test_patch_install_mode_auto_persists(self, tmp_path) -> None:
+        """PATCH with install_mode=auto returns 200 and persists to settings."""
+        client = _client(tmp_path)
+
+        response = client.patch(
+            "/api/cron/config",
+            json={"install_mode": "auto"},
+            headers=AUTH,
+        )
+        assert response.status_code == 200
+        assert response.json()["install_mode"] == "auto"
+
+        settings = load_settings()
+        assert settings.cron_schedule.install_mode == "auto"
+
+    def test_patch_install_mode_manual_persists(self, tmp_path) -> None:
+        """PATCH with install_mode=manual returns 200 and persists to settings."""
+        client = _client(tmp_path)
+
+        response = client.patch(
+            "/api/cron/config",
+            json={"install_mode": "manual"},
+            headers=AUTH,
+        )
+        assert response.status_code == 200
+        assert response.json()["install_mode"] == "manual"
+
+        settings = load_settings()
+        assert settings.cron_schedule.install_mode == "manual"
+
+    def test_patch_timezone_returns_200(self, tmp_path) -> None:
+        """PATCH with a valid timezone returns 200 and the updated config."""
+        client = _client(tmp_path)
+
+        response = client.patch(
+            "/api/cron/config",
+            json={"timezone": "America/New_York"},
+            headers=AUTH,
+        )
+        assert response.status_code == 200
+        assert response.json()["timezone"] == "America/New_York"
+
+    def test_patch_timezone_persists(self, tmp_path) -> None:
+        """A valid PATCH with timezone persists to settings.json."""
+        client = _client(tmp_path)
+
+        response = client.patch(
+            "/api/cron/config",
+            json={"timezone": "Asia/Ho_Chi_Minh"},
+            headers=AUTH,
+        )
+        assert response.status_code == 200
+
+        settings = load_settings()
+        assert settings.cron_schedule.timezone == "Asia/Ho_Chi_Minh"
+
+
 class TestPatchCronConfigInvalid:
     def test_patch_invalid_scan_cron_returns_400(self, tmp_path) -> None:
         """PATCH with an invalid scan_cron returns 400 with a clear error."""

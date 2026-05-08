@@ -967,6 +967,42 @@ def test_autopilot_install_default_cron_creates_jobs(tmp_path: Path, monkeypatch
     assert "oh autopilot tick" in report["cron_lines"][1]
 
 
+def test_install_default_cron_uses_configured_schedules(tmp_path: Path, monkeypatch) -> None:
+    """install_default_cron reads scan_cron/tick_cron from settings, not hardcoded values."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    # Override the config dir so load_settings() picks up our custom values
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+
+    from openharness.config.settings import Settings, CronScheduleConfig, save_settings
+    custom_cfg = CronScheduleConfig(
+        scan_cron="*/5 * * * *",
+        tick_cron="30 */3 * * *",
+        enabled=True,
+    )
+    save_settings(Settings(cron_schedule=custom_cfg), config_dir / "settings.json")
+
+    recorded: list[dict[str, str]] = []
+    monkeypatch.setattr(
+        "openharness.services.cron.upsert_cron_job",
+        lambda job: recorded.append(job),
+    )
+
+    store = RepoAutopilotStore(repo)
+    report = store.install_default_cron()
+
+    # The installed jobs must use the configured schedules, not hardcoded defaults
+    scan_job = next(j for j in report["installed"] if j["name"] == "autopilot.scan")
+    tick_job = next(j for j in report["installed"] if j["name"] == "autopilot.tick")
+    assert scan_job["schedule"] == "*/5 * * * *"
+    assert tick_job["schedule"] == "30 */3 * * *"
+    assert recorded[0]["schedule"] == "*/5 * * * *"
+    assert recorded[1]["schedule"] == "30 */3 * * *"
+
+
 def test_two_projects_have_isolated_autopilot_state(tmp_path: Path, monkeypatch) -> None:
     """Cards, journal entries, and registry files of two projects must not bleed into each other."""
     project_a = tmp_path / "project_a"
