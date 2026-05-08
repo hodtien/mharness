@@ -137,7 +137,7 @@ async def activate_project_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
     state.switch_project(project)
-    manager._config.cwd = str(state.cwd)
+    manager.update_cwd(str(state.cwd))
     await _broadcast_project_switched(manager, state.cwd, project.id)
 
     return {"ok": True, "project": asdict(project)}

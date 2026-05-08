@@ -79,6 +79,16 @@ class SessionManager:
         """Return all session entries (used by /modes to find active session state)."""
         return list(self._sessions.values())
 
+    def update_cwd(self, cwd: str) -> None:
+        """Update cwd for all active sessions and the shared config.
+
+        Called when switching projects to ensure existing sessions use the new path.
+        """
+        self._config.cwd = cwd
+        for entry in self._sessions.values():
+            if entry.host._bundle is not None:
+                entry.host._bundle.cwd = cwd
+
     def update_provider_defaults(
         self,
         *,
