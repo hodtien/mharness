@@ -2,6 +2,7 @@
 
 from openharness.autopilot.service import RepoAutopilotStore
 from openharness.autopilot.types import (
+    CronScheduleConfig,
     RepoAutopilotRegistry,
     RepoJournalEntry,
     RepoRunResult,
@@ -12,6 +13,7 @@ from openharness.autopilot.types import (
 )
 
 __all__ = [
+    "CronScheduleConfig",
     "RepoAutopilotRegistry",
     "RepoAutopilotStore",
     "RepoJournalEntry",
