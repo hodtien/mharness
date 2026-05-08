@@ -318,6 +318,20 @@ export default function CronSettingsPage() {
                 >
                   Conservative (30m / 2h)
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraftEnabled(false);
+                    applyDraft({ enabled: false });
+                  }}
+                  disabled={saving}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text-dim)] transition hover:border-cyan-400/40 hover:text-[var(--text)] disabled:opacity-50"
+                >
+                  Disabled
+                </button>
+              </div>
+              <div className="mt-2 text-xs text-[var(--text-dim)] opacity-60">
+                More frequent schedules increase API usage and system load. Presets fill the form but you can still adjust values manually.
               </div>
             </div>
           </div>
