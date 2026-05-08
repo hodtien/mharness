@@ -199,6 +199,50 @@ describe("CronSettingsPage", () => {
     expect((applyButton as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("renders Disabled preset and resource usage note", async () => {
+    mockLocalStorage();
+    mockGetCron();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Disabled")).toBeTruthy();
+      expect(screen.getByText(/More frequent schedules increase API usage/i)).toBeTruthy();
+    });
+  });
+
+  it("calls PATCH with enabled:false when Disabled preset is clicked", async () => {
+    mockLocalStorage();
+    const patchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/cron/config" && init?.method === "PATCH") {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        return Promise.resolve(jsonResponse({ ...defaultCronConfig, ...body, enabled: body.enabled ?? true }));
+      }
+      return Promise.resolve(jsonResponse(defaultCronConfig));
+    });
+    vi.stubGlobal("fetch", patchMock);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Disabled")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("Disabled"));
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith(
+        "/api/cron/config",
+        expect.objectContaining({ method: "PATCH" }),
+      );
+    });
+    const calls = patchMock.mock.calls;
+    const patchCall = calls.find(([u, i]) => u === "/api/cron/config" && i?.method === "PATCH");
+    expect(patchCall).toBeDefined();
+    const bodyStr = patchCall?.[1]?.body as string;
+    expect(bodyStr).toContain('"enabled":false');
+  });
+
   it("shows too-frequent warning when scan interval is under 5 minutes", async () => {
     mockLocalStorage();
     mockGetCron({ ...defaultCronConfig, scan_cron: "*/1 * * * *" });
