@@ -942,15 +942,16 @@ class RepoAutopilotStore:
         model: str | None = None,
         max_turns: int | None = None,
         permission_mode: str | None = None,
+        card_id: str | None = None,
     ) -> RepoRunResult:
         self._reap_dead_worker_cards()
         policies = self.load_policies()
         if not self.has_capacity(policies):
             raise ValueError("Maximum parallel runs reached.")
         worker_id = f"pid-{os.getpid()}-{uuid4().hex[:8]}"
-        card = self.pick_and_claim_card(worker_id)
+        card = self.pick_specific_card(card_id, worker_id) if card_id else self.pick_and_claim_card(worker_id)
         if card is None:
-            raise ValueError("No queued autopilot cards.")
+            raise ValueError("No queued autopilot cards." if card_id is None else f"No queued autopilot card found with ID: {card_id}")
         return await self.run_card(
             card.id,
             model=model,

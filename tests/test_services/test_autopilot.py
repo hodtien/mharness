@@ -452,7 +452,7 @@ def test_autopilot_tick_scans_then_runs_next(tmp_path: Path) -> None:
     def fake_scan_all_sources(self, *, issue_limit: int = 10, pr_limit: int = 10):
         return {"github_issue": 0, "github_pr": 0, "claude_code_candidate": 0}
 
-    async def fake_run_next(self, *, model=None, max_turns=None, permission_mode=None):
+    async def fake_run_next(self, *, model=None, max_turns=None, permission_mode=None, card_id=None):
         from openharness.autopilot import RepoRunResult
 
         return RepoRunResult(
@@ -473,6 +473,38 @@ def test_autopilot_tick_scans_then_runs_next(tmp_path: Path) -> None:
 
     assert result is not None
     assert result.card_id == "ap-test"
+
+
+def test_run_next_claims_specific_card_id(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    first, _ = store.enqueue_card(source_kind="manual_idea", title="First card", body="body")
+    second, _ = store.enqueue_card(source_kind="manual_idea", title="Second card", body="body")
+
+    async def fake_run_card(card_id, *, model=None, max_turns=None, permission_mode=None, _claimed_by=None):
+        from openharness.autopilot import RepoRunResult
+
+        return RepoRunResult(
+            card_id=card_id,
+            status="completed",
+            assistant_summary="done",
+            run_report_path=str(store.runs_dir / f"{card_id}-run.md"),
+            verification_report_path=str(store.runs_dir / f"{card_id}-verification.md"),
+            verification_steps=[],
+        )
+
+    store.run_card = fake_run_card
+
+    import asyncio
+
+    result = asyncio.run(store.run_next(card_id=second.id))
+
+    assert result.card_id == second.id
+    assert store.get_card(second.id).status == "preparing"
+    assert store.get_card(second.id).metadata.get("worker_id")
+    assert store.get_card(first.id).status == "queued"
+
 
 
 def test_autopilot_tick_recovers_stuck_card(tmp_path: Path) -> None:
@@ -508,7 +540,7 @@ def test_autopilot_tick_recovers_stuck_card(tmp_path: Path) -> None:
     def fake_scan_all_sources(self, *, issue_limit: int = 10, pr_limit: int = 10):
         return {"github_issue": 0, "github_pr": 0, "claude_code_candidate": 0}
 
-    async def fake_run_next(self, *, model=None, max_turns=None, permission_mode=None):
+    async def fake_run_next(self, *, model=None, max_turns=None, permission_mode=None, card_id=None):
         return None
 
     store.scan_all_sources = MethodType(fake_scan_all_sources, store)

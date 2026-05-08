@@ -1332,6 +1332,7 @@ def autopilot_run_next_cmd(
     model: str | None = typer.Option(None, "--model", help="Override execution model"),
     max_turns: int | None = typer.Option(None, "--max-turns", help="Override execution max turns"),
     permission_mode: str | None = typer.Option(None, "--permission-mode", help="Override execution permission mode"),
+    card_id: str | None = typer.Option(None, "--card-id", help="Run a specific queued autopilot card"),
 ) -> None:
     """Run the highest-priority queued autopilot card end-to-end."""
     import asyncio
@@ -1343,6 +1344,7 @@ def autopilot_run_next_cmd(
                 model=model,
                 max_turns=max_turns,
                 permission_mode=permission_mode,
+                card_id=card_id,
             )
         )
     except ValueError as exc:
