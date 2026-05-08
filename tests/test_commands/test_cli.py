@@ -451,7 +451,16 @@ def test_autopilot_install_cron_cli(monkeypatch, tmp_path: Path):
             self.cwd = cwd
 
         def install_default_cron(self):
-            return ["autopilot.scan", "autopilot.tick"]
+            return {
+                "installed": [
+                    {"name": "autopilot.scan", "schedule": "*/15 * * * *", "command": "scan_cmd", "cwd": str(tmp_path), "project_path": str(tmp_path)},
+                    {"name": "autopilot.tick", "schedule": "0 * * * *", "command": "tick_cmd", "cwd": str(tmp_path), "project_path": str(tmp_path)},
+                ],
+                "cron_lines": [
+                    "*/15 * * * * oh autopilot scan --cwd " + str(tmp_path),
+                    "0 * * * * oh autopilot tick --cwd " + str(tmp_path),
+                ],
+            }
 
     monkeypatch.setattr("openharness.autopilot.RepoAutopilotStore", FakeStore)
 
@@ -459,6 +468,7 @@ def test_autopilot_install_cron_cli(monkeypatch, tmp_path: Path):
 
     assert result.exit_code == 0
     assert "autopilot.scan" in result.output
+    assert "Cron lines" in result.output
 
 
 def test_autopilot_export_dashboard_cli(monkeypatch, tmp_path: Path):
