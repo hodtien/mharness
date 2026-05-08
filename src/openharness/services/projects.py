@@ -170,3 +170,28 @@ def get_active_project() -> Project | None:
         if p.id == active_id:
             return p
     return None
+
+
+def ensure_default_project(cwd: str | Path) -> Project:
+    """Return the project for cwd, creating and activating it when needed."""
+    resolved = Path(cwd).resolve()
+    if not resolved.is_dir():
+        raise ValueError(f"Path is not a directory: {cwd}")
+    resolved_path = str(resolved)
+    with exclusive_file_lock(_projects_lock_path()):
+        raw = _load_raw()
+        projects = _load_projects()
+        for project in projects:
+            if project.path == resolved_path:
+                if raw.get("active_project_id") != project.id:
+                    _save_projects(projects, project.id)
+                return project
+        project = Project(
+            id=secrets.token_urlsafe(8),
+            name=resolved.name or "workspace",
+            path=resolved_path,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        projects.append(project)
+        _save_projects(projects, project.id)
+        return project

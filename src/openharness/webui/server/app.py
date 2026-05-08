@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from openharness.config.projects import ProjectRegistry
+from openharness.services.projects import ensure_default_project
 from openharness.webui.server.config import WebUIConfig
 from openharness.webui.server.routes import agents as agents_routes
 from openharness.webui.server.routes import cron as cron_routes
@@ -129,15 +129,9 @@ def create_app(
     explicit_cwd = cwd is not None
     resolved_cwd = Path(cwd).expanduser().resolve() if explicit_cwd else Path.cwd()
 
-    registry = ProjectRegistry()
-    active_project = registry.ensure_default(resolved_cwd)
-    if explicit_cwd:
-        active_project_id = active_project.id if active_project.path == resolved_cwd else None
-    elif active_project is not None:
-        resolved_cwd = active_project.path
-        active_project_id = active_project.id
-    else:
-        active_project_id = None
+    active_project = ensure_default_project(resolved_cwd)
+    resolved_cwd = Path(active_project.path)
+    active_project_id = active_project.id
 
     app.state.webui = WebUIState(
         token=resolved_token,

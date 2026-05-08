@@ -39,12 +39,34 @@ def client(token: str, tmp_path: Path) -> TestClient:
 
 
 class TestProjectsApiCrud:
-    def test_list_empty(self, client) -> None:
+    def test_list_includes_startup_default_project(self, client, tmp_path) -> None:
         r = client.get("/api/projects")
         assert r.status_code == 200
         data = r.json()
-        assert "projects" in data
-        assert "active_project_id" in data
+        assert data["active_project_id"] is not None
+        assert len(data["projects"]) == 1
+        assert data["projects"][0]["id"] == data["active_project_id"]
+        assert data["projects"][0]["path"] == str(tmp_path.resolve())
+
+    def test_explicit_startup_cwd_becomes_active_project(self, token, tmp_path) -> None:
+        first = tmp_path / "first"
+        second = tmp_path / "second"
+        first.mkdir()
+        second.mkdir()
+
+        first_app = create_app(token=token, cwd=str(first), spa_dir="")
+        with TestClient(first_app, raise_server_exceptions=False) as c:
+            c.headers["Authorization"] = f"Bearer {token}"
+            assert c.get("/api/projects").json()["projects"][0]["path"] == str(first.resolve())
+
+        second_app = create_app(token=token, cwd=str(second), spa_dir="")
+        with TestClient(second_app, raise_server_exceptions=False) as c:
+            c.headers["Authorization"] = f"Bearer {token}"
+            data = c.get("/api/projects").json()
+
+        active = next(project for project in data["projects"] if project["id"] == data["active_project_id"])
+        assert active["path"] == str(second.resolve())
+        assert second_app.state.webui.cwd == second.resolve()
 
     def test_create_and_list(self, client, tmp_path) -> None:
         project_dir = tmp_path / "myapp"
