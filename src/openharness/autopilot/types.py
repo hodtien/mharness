@@ -122,3 +122,22 @@ class RepoRunResult(BaseModel):
     pr_url: str = ""
 
 
+class PreflightCheck(BaseModel):
+    """Result of one individual preflight check."""
+
+    name: str
+    status: Literal["ok", "warn", "fail", "error"]
+    reason: str = ""
+    transient: bool = False
+    detail: str = ""
+
+
+class PreflightResult(BaseModel):
+    """Aggregated result of all preflight checks before running a card."""
+
+    passed: bool
+    checks: list[PreflightCheck] = Field(default_factory=list)
+    fatal: list[PreflightCheck] = Field(default_factory=list)
+    transient: list[PreflightCheck] = Field(default_factory=list)
+
+

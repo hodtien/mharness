@@ -22,6 +22,8 @@ import yaml
 
 from openharness.autopilot.locking import RepoFileLock
 from openharness.autopilot.types import (
+    PreflightCheck,
+    PreflightResult,
     RepoAutopilotRegistry,
     RepoJournalEntry,
     RepoRunResult,
@@ -973,6 +975,207 @@ class RepoAutopilotStore:
             _claimed_by=worker_id,
         )
 
+    def run_preflight(self, card: RepoTaskCard) -> PreflightResult:
+        """Run pre-flight checks before running a card.
+
+        Returns a PreflightResult with checks for:
+        - provider/model availability
+        - auth/API key status
+        - network/GitHub availability (for PR flows)
+        - repo state minimums (cwd exists, git repo if required)
+
+        Transient failures cause card to move to pending rather than failed.
+        """
+        checks: list[PreflightCheck] = []
+        fatal: list[PreflightCheck] = []
+        transient: list[PreflightCheck] = []
+
+        # 1. Check that cwd exists
+        checks.append(self._check_cwd_exists())
+
+        # 2. Check git repo state if worktree mode requires it
+        policies = self.load_policies()
+        execution = dict(policies.get("autopilot", {}).get("execution", {}))
+        use_worktree = bool(execution.get("use_worktree", True))
+        if use_worktree:
+            checks.append(self._check_git_repo())
+        else:
+            checks.append(PreflightCheck(name="git_repo", status="ok", reason="worktree not required"))
+
+        # 3. Check provider/model availability
+        effective_model = (
+            self._resolve_model_for_card(card, execution)
+        )
+        checks.append(self._check_model_available(effective_model))
+
+        # 4. Check auth/API key
+        checks.append(self._check_auth_status())
+
+        # 5. Check GitHub/network availability for PR flows
+        if card.source_kind in {"github_issue", "github_pr"}:
+            checks.append(self._check_github_available())
+        else:
+            checks.append(PreflightCheck(name="github_available", status="ok", reason="not a GitHub flow"))
+
+        # Categorize checks
+        for check in checks:
+            if check.status == "error":
+                (transient if check.transient else fatal).append(check)
+            elif check.status == "fail":
+                fatal.append(check)
+            # warn status is logged but does not affect execution
+
+        passed = not fatal and not transient
+        return PreflightResult(passed=passed, checks=checks, fatal=fatal, transient=transient)
+
+    def _resolve_model_for_card(self, card: RepoTaskCard, execution: dict[str, Any]) -> str | None:
+        """Resolve the effective model for a card."""
+        implement_agent = _safe_text(execution.get("implement_agent"))
+        model = (
+            card.model
+            or (implement_agent and _resolve_agent_model(implement_agent))
+            or _safe_text(execution.get("default_model"))
+            or None
+        )
+        return model
+
+    def _check_cwd_exists(self) -> PreflightCheck:
+        """Check that the working directory exists."""
+        try:
+            if self._cwd.exists() and self._cwd.is_dir():
+                return PreflightCheck(name="cwd_exists", status="ok", reason=f"cwd is {self._cwd}")
+            return PreflightCheck(
+                name="cwd_exists",
+                status="error",
+                reason=f"cwd does not exist: {self._cwd}",
+                transient=True,
+                detail="Directory may have been deleted or unmounted",
+            )
+        except Exception as exc:
+            return PreflightCheck(
+                name="cwd_exists",
+                status="error",
+                reason=f"cannot access cwd: {exc}",
+                transient=True,
+                detail=str(exc),
+            )
+
+    def _check_git_repo(self) -> PreflightCheck:
+        """Check that the directory is a git repository.
+
+        For cards that don't require PR flows, this is a warning rather than fatal.
+        Only github_issue/github_pr cards require git repo state.
+        """
+        if self._is_git_repo(self._cwd):
+            return PreflightCheck(name="git_repo", status="ok", reason="valid git repository")
+        # Non-GitHub cards can run without git repo in worktree mode - it's a warning
+        return PreflightCheck(
+            name="git_repo",
+            status="warn",
+            reason="not a git repository",
+            transient=True,
+            detail="GitHub flows will require git repo; non-GitHub cards can proceed",
+        )
+
+    def _check_model_available(self, model: str | None) -> PreflightCheck:
+        """Check that the configured model is available."""
+        if model is None:
+            return PreflightCheck(
+                name="model_available",
+                status="warn",
+                reason="no model configured",
+                transient=True,
+                detail="default_model/implement_agent model not set",
+            )
+        try:
+            from openharness.auth.manager import AuthManager
+            auth = AuthManager()
+            provider = auth.get_active_provider()
+            profiles = auth.list_profiles()
+            profile = profiles.get(auth.get_active_profile())
+            if profile and profile.allowed_models:
+                if model in profile.allowed_models:
+                    return PreflightCheck(
+                        name="model_available",
+                        status="ok",
+                        reason=f"model {model} is in allowed_models",
+                        detail=f"provider={provider}",
+                    )
+                return PreflightCheck(
+                    name="model_available",
+                    status="error",
+                    reason=f"model {model} not in allowed_models",
+                    transient=True,
+                    detail=f"allowed: {profile.allowed_models}",
+                )
+            return PreflightCheck(
+                name="model_available",
+                status="ok",
+                reason=f"model {model} configured (no allowed_models restriction)",
+                detail=f"provider={provider}",
+            )
+        except Exception as exc:
+            return PreflightCheck(
+                name="model_available",
+                status="warn",
+                reason=f"could not verify model availability: {exc}",
+                transient=True,
+                detail=str(exc),
+            )
+
+    def _check_auth_status(self) -> PreflightCheck:
+        """Check that authentication is configured."""
+        try:
+            from openharness.auth.manager import AuthManager
+            auth = AuthManager()
+            provider = auth.get_active_provider()
+            auth_statuses = auth.get_auth_status()
+            active_status = auth_statuses.get(provider, {})
+            if active_status.get("configured"):
+                return PreflightCheck(
+                    name="auth_ok",
+                    status="ok",
+                    reason=f"auth configured for {provider}",
+                    detail=f"source={active_status.get('source', 'unknown')}",
+                )
+            return PreflightCheck(
+                name="auth_ok",
+                status="error",
+                reason=f"no auth configured for {provider}",
+                transient=True,
+                detail="Set ANTHROPIC_API_KEY or configure credentials",
+            )
+        except Exception as exc:
+            return PreflightCheck(
+                name="auth_ok",
+                status="error",
+                reason=f"could not check auth status: {exc}",
+                transient=True,
+                detail=str(exc),
+            )
+
+    def _check_github_available(self) -> PreflightCheck:
+        """Check GitHub CLI availability and network connectivity."""
+        try:
+            result = self._run_gh_json(["gh", "auth", "status", "--json", "authenticated"])
+            if result and result[0].get("authenticated"):
+                return PreflightCheck(name="github_available", status="ok", reason="GitHub CLI authenticated")
+            return PreflightCheck(
+                name="github_available",
+                status="error",
+                reason="GitHub CLI not authenticated",
+                transient=True,
+                detail="Run 'gh auth login' to authenticate",
+            )
+        except Exception as exc:
+            return PreflightCheck(
+                name="github_available",
+                status="error",
+                reason=f"GitHub unavailable: {exc}",
+                transient=True,
+                detail="Check network connectivity and GitHub token",
+            )
+
     async def run_card(
         self,
         card_id: str,
@@ -989,6 +1192,59 @@ class RepoAutopilotStore:
             # Allow re-entry if we just claimed this card ourselves
             if not (_claimed_by and card.metadata.get("worker_id") == _claimed_by):
                 raise ValueError(f"Autopilot card {card.id} is already active.")
+
+        # Run preflight checks before execution
+        preflight = self.run_preflight(card)
+        if preflight.fatal:
+            # Non-transient failures: mark as failed immediately
+            failure_reasons = "; ".join(c.reason for c in preflight.fatal)
+            self.update_status(
+                card.id,
+                status="failed",
+                note=f"preflight fatal failure: {failure_reasons}",
+                metadata_updates={
+                    "preflight_result": preflight.model_dump(),
+                    "last_failure_stage": "preflight_fatal",
+                    "last_failure_summary": failure_reasons,
+                },
+            )
+            self.append_journal(
+                kind="preflight_failed",
+                summary=f"{card.title}: preflight fatal failure ({failure_reasons})",
+                task_id=card.id,
+                metadata={"fatal_checks": [c.model_dump() for c in preflight.fatal]},
+            )
+            return RepoRunResult(
+                card_id=card.id,
+                status="failed",
+                run_report_path=str(self._runs_dir / f"{card.id}-run.md"),
+                verification_report_path=str(self._runs_dir / f"{card.id}-verification.md"),
+            )
+        if preflight.transient:
+            # Transient failures: move to pending
+            transient_reasons = "; ".join(c.reason for c in preflight.transient)
+            self.update_status(
+                card.id,
+                status="pending",
+                note=f"preflight transient failure: {transient_reasons}",
+                metadata_updates={
+                    "preflight_result": preflight.model_dump(),
+                    "pending_reason": "preflight_transient",
+                    "preflight_transient_reasons": [c.reason for c in preflight.transient],
+                },
+            )
+            self.append_journal(
+                kind="preflight_pending",
+                summary=f"{card.title}: preflight transient failure ({transient_reasons}), moved to pending",
+                task_id=card.id,
+                metadata={"transient_checks": [c.model_dump() for c in preflight.transient]},
+            )
+            return RepoRunResult(
+                card_id=card.id,
+                status="pending",
+                run_report_path=str(self._runs_dir / f"{card.id}-run.md"),
+                verification_report_path=str(self._runs_dir / f"{card.id}-verification.md"),
+            )
 
         policies = self.load_policies()
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
