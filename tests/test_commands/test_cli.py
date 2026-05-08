@@ -426,7 +426,7 @@ def test_autopilot_run_next_cli(monkeypatch, tmp_path: Path):
         def __init__(self, cwd):
             self.cwd = cwd
 
-        async def run_next(self, *, model=None, max_turns=None, permission_mode=None):
+        async def run_next(self, *, model=None, max_turns=None, permission_mode=None, card_id=None):
             class Result:
                 card_id = "ap-1234"
                 status = "completed"
