@@ -39,12 +39,15 @@ class TestGetCronConfig:
         assert response.status_code == 200
         body = response.json()
         for field in ("enabled", "scan_cron", "tick_cron", "timezone", "install_mode",
-                     "scan_cron_description", "tick_cron_description"):
+                     "scan_cron_description", "tick_cron_description",
+                     "next_scan_runs", "next_tick_runs"):
             assert field in body, f"Missing field: {field}"
         assert isinstance(body["scan_cron"], str)
         assert isinstance(body["tick_cron"], str)
         assert isinstance(body["scan_cron_description"], str)
         assert isinstance(body["tick_cron_description"], str)
+        assert isinstance(body["next_scan_runs"], list)
+        assert isinstance(body["next_tick_runs"], list)
 
     def test_get_returns_default_values(self, tmp_path) -> None:
         """Default cron schedule values are returned."""
@@ -70,6 +73,37 @@ class TestGetCronConfig:
         body = response.json()
         assert body["scan_cron_description"] != ""
         assert "*/15" in body["scan_cron"] or "15" in body["scan_cron_description"]
+
+    def test_get_includes_next_runs_when_enabled(self, tmp_path) -> None:
+        """GET /api/cron/config returns 3 next scan/tick run timestamps when enabled."""
+        client = _client(tmp_path)
+
+        response = client.get("/api/cron/config", headers=AUTH)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["enabled"] is True
+        assert len(body["next_scan_runs"]) == 3
+        assert len(body["next_tick_runs"]) == 3
+        # Timestamps should be valid ISO-8601
+        for ts in body["next_scan_runs"]:
+            assert "T" in ts
+        for ts in body["next_tick_runs"]:
+            assert "T" in ts
+
+    def test_get_returns_empty_runs_when_disabled(self, tmp_path) -> None:
+        """GET /api/cron/config returns empty run lists when cron is disabled."""
+        client = _client(tmp_path)
+        # Disable first
+        client.patch("/api/cron/config", json={"enabled": False}, headers=AUTH)
+
+        response = client.get("/api/cron/config", headers=AUTH)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["enabled"] is False
+        assert body["next_scan_runs"] == []
+        assert body["next_tick_runs"] == []
 
 
 class TestPatchCronConfig:
@@ -120,6 +154,8 @@ class TestPatchCronConfig:
         assert body["enabled"] is False
         assert body["scan_cron"] == "*/20 * * * *"
         assert body["tick_cron"] == "30 */3 * * *"
+        assert body["next_scan_runs"] == []
+        assert body["next_tick_runs"] == []
 
     def test_patch_valid_persists_to_settings(self, tmp_path) -> None:
         """A valid PATCH persists scan_cron to settings.json."""

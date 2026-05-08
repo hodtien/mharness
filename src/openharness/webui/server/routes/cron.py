@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from openharness.config.settings import CronScheduleConfig, load_settings, save_settings
-from openharness.services.cron import load_cron_jobs
+from openharness.services.cron import load_cron_jobs, preview_cron_next_runs
 from openharness.webui.server.state import require_token
 
 router = APIRouter(
@@ -68,6 +68,14 @@ class CronConfigResponse(BaseModel):
     install_mode: str
     scan_cron_description: str = Field(description="Human-readable description of scan_cron")
     tick_cron_description: str = Field(description="Human-readable description of tick_cron")
+    next_scan_runs: list[str] = Field(
+        default_factory=list,
+        description="ISO-8601 timestamps for the next 3 scan runs. Empty when disabled.",
+    )
+    next_tick_runs: list[str] = Field(
+        default_factory=list,
+        description="ISO-8601 timestamps for the next 3 tick runs. Empty when disabled.",
+    )
 
 
 class CronConfigPatch(BaseModel):
@@ -97,15 +105,7 @@ def get_cron_config() -> CronConfigResponse:
     """Return the current cron schedule configuration."""
     settings = load_settings()
     cfg = settings.cron_schedule
-    return CronConfigResponse(
-        enabled=cfg.enabled,
-        scan_cron=cfg.scan_cron,
-        tick_cron=cfg.tick_cron,
-        timezone=cfg.timezone,
-        install_mode=cfg.install_mode,
-        scan_cron_description=_describe_cron(cfg.scan_cron),
-        tick_cron_description=_describe_cron(cfg.tick_cron),
-    )
+    return _build_cron_config_response(cfg)
 
 
 @router.patch("/config", response_model=CronConfigResponse)
@@ -144,12 +144,26 @@ def patch_cron_config(payload: CronConfigPatch) -> CronConfigResponse:
     )
     save_settings(settings)
 
+    return _build_cron_config_response(proposed)
+
+
+def _build_cron_config_response(cfg: CronScheduleConfig) -> CronConfigResponse:
+    """Construct CronConfigResponse, including empty run lists when disabled."""
+    if cfg.enabled:
+        scan_runs = [dt.isoformat() for dt in preview_cron_next_runs(cfg.scan_cron, 3, tz_name=cfg.timezone)]
+        tick_runs = [dt.isoformat() for dt in preview_cron_next_runs(cfg.tick_cron, 3, tz_name=cfg.timezone)]
+    else:
+        scan_runs = []
+        tick_runs = []
+
     return CronConfigResponse(
-        enabled=proposed.enabled,
-        scan_cron=proposed.scan_cron,
-        tick_cron=proposed.tick_cron,
-        timezone=proposed.timezone,
-        install_mode=proposed.install_mode,
-        scan_cron_description=_describe_cron(proposed.scan_cron),
-        tick_cron_description=_describe_cron(proposed.tick_cron),
+        enabled=cfg.enabled,
+        scan_cron=cfg.scan_cron,
+        tick_cron=cfg.tick_cron,
+        timezone=cfg.timezone,
+        install_mode=cfg.install_mode,
+        scan_cron_description=_describe_cron(cfg.scan_cron),
+        tick_cron_description=_describe_cron(cfg.tick_cron),
+        next_scan_runs=scan_runs,
+        next_tick_runs=tick_runs,
     )
