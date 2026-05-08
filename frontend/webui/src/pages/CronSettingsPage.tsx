@@ -86,7 +86,7 @@ export default function CronSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [lastApplied, setLastApplied] = useState<{ scan_cron: string; tick_cron: string; enabled: boolean; install_mode: string; project_path: string; install_result?: CronConfigResponse["install_result"] } | null>(null);
+  const [lastApplied, setLastApplied] = useState<{ scan_cron: string; tick_cron: string; enabled: boolean; install_mode: string; install_result?: CronConfigResponse["install_result"] } | null>(null);
   const [installMode, setInstallMode] = useState<"auto" | "manual">("auto");
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -137,7 +137,6 @@ export default function CronSettingsPage() {
           tick_cron: updated.tick_cron,
           enabled: updated.enabled,
           install_mode: (updated as CronConfigResponse).install_mode || "auto",
-          project_path: (updated as CronConfigResponse).project_path || "",
           install_result: updated.install_result,
         });
         toast.success("Cron schedule updated.");
@@ -621,13 +620,13 @@ export default function CronSettingsPage() {
                 <div className="mb-1 text-xs font-medium text-amber-200/60">Scan Job</div>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 overflow-x-auto rounded border border-amber-400/20 bg-[var(--panel-2)] px-3 py-2 font-mono text-xs text-amber-100">
-                    {`(crontab -l 2>/dev/null | grep -v 'oh autopilot scan all'; echo "${lastApplied?.scan_cron || "*/15 * * * *"} oh autopilot scan all --cwd ${lastApplied?.project_path || "/path/to/project"}") | crontab -`}
+                    {`(crontab -l 2>/dev/null | grep -v 'oh autopilot scan all'; echo "${config?.scan_cron || "*/15 * * * *"} oh autopilot scan all --cwd <your-project-path>") | crontab -`}
                   </code>
                   <button
                     type="button"
                     onClick={() =>
                       copyToClipboard(
-                        `(crontab -l 2>/dev/null | grep -v 'oh autopilot scan all'; echo "${lastApplied?.scan_cron || "*/15 * * * *"} oh autopilot scan all --cwd ${lastApplied?.project_path || "/path/to/project"}") | crontab -`,
+                        `(crontab -l 2>/dev/null | grep -v 'oh autopilot scan all'; echo "${config?.scan_cron || "*/15 * * * *"} oh autopilot scan all --cwd <your-project-path>") | crontab -`,
                         "manual-scan"
                       )
                     }
@@ -641,13 +640,13 @@ export default function CronSettingsPage() {
                 <div className="mb-1 text-xs font-medium text-amber-200/60">Tick Job</div>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 overflow-x-auto rounded border border-amber-400/20 bg-[var(--panel-2)] px-3 py-2 font-mono text-xs text-amber-100">
-                    {`(crontab -l 2>/dev/null | grep -v 'oh autopilot tick'; echo "${lastApplied?.tick_cron || "0 * * * *"} oh autopilot tick --cwd ${lastApplied?.project_path || "/path/to/project"}") | crontab -`}
+                    {`(crontab -l 2>/dev/null | grep -v 'oh autopilot tick'; echo "${config?.tick_cron || "0 * * * *"} oh autopilot tick --cwd <your-project-path>") | crontab -`}
                   </code>
                   <button
                     type="button"
                     onClick={() =>
                       copyToClipboard(
-                        `(crontab -l 2>/dev/null | grep -v 'oh autopilot tick'; echo "${lastApplied?.tick_cron || "0 * * * *"} oh autopilot tick --cwd ${lastApplied?.project_path || "/path/to/project"}") | crontab -`,
+                        `(crontab -l 2>/dev/null | grep -v 'oh autopilot tick'; echo "${config?.tick_cron || "0 * * * *"} oh autopilot tick --cwd <your-project-path>") | crontab -`,
                         "manual-tick"
                       )
                     }
@@ -658,7 +657,7 @@ export default function CronSettingsPage() {
                 </div>
               </div>
               <p className="mt-2 text-xs text-amber-200/60">
-                Copy-paste these commands into your terminal. Adjust the path if needed.
+                Copy-paste these commands into your terminal. Replace &lt;your-project-path&gt; with your actual project directory.
               </p>
             </div>
           </div>

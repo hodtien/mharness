@@ -80,7 +80,6 @@ class CronConfigResponse(BaseModel):
     tick_cron: str
     timezone: str
     install_mode: str
-    project_path: str = Field(description="Absolute path of the project")
     scan_cron_description: str = Field(description="Human-readable description of scan_cron")
     tick_cron_description: str = Field(description="Human-readable description of tick_cron")
     next_scan_runs: list[str] = Field(
@@ -224,7 +223,7 @@ def patch_cron_config(payload: CronConfigPatch) -> CronConfigResponse:
                 manual_commands=_build_manual_commands(proposed.scan_cron, proposed.tick_cron, cwd),
             )
 
-    return _build_cron_config_response(proposed, install_result=install_result, project_path=str(cwd))
+    return _build_cron_config_response(proposed, install_result=install_result)
 
 
 def _build_manual_commands(scan_cron: str, tick_cron: str, cwd: Path) -> list[str]:
@@ -238,7 +237,6 @@ def _build_manual_commands(scan_cron: str, tick_cron: str, cwd: Path) -> list[st
 def _build_cron_config_response(
     cfg: CronScheduleConfig,
     install_result: InstallResult | None = None,
-    project_path: str | None = None,
 ) -> CronConfigResponse:
     """Construct CronConfigResponse, including empty run lists when disabled."""
     if cfg.enabled:
@@ -254,7 +252,6 @@ def _build_cron_config_response(
         tick_cron=cfg.tick_cron,
         timezone=cfg.timezone,
         install_mode=cfg.install_mode,
-        project_path=project_path or str(Path.cwd()),
         scan_cron_description=_describe_cron(cfg.scan_cron),
         tick_cron_description=_describe_cron(cfg.tick_cron),
         next_scan_runs=scan_runs,
