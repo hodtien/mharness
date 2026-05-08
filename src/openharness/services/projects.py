@@ -131,10 +131,16 @@ def update_project(project_id: str, *, name: str | None = None, description: str
     return None
 
 
-def delete_project(project_id: str) -> bool:
-    """Delete a project by ID. Returns True if found and deleted."""
+def delete_project(project_id: str) -> bool | None:
+    """Delete a project by ID.
+
+    Returns True if found and deleted, False if not found,
+    or None if attempting to delete the currently active project.
+    """
     with exclusive_file_lock(_projects_lock_path()):
         projects, active_id = _load_projects(), _load_raw().get("active_project_id")
+        if active_id == project_id:
+            return None
         filtered = [p for p in projects if p.id != project_id]
         if len(filtered) == len(projects):
             return False
