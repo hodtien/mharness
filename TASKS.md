@@ -16,8 +16,27 @@
   - [P7 — Gap Fixes: WebUI Integration](#p7--gap-fixes-webui-integration)
   - [P8 — Autopilot UI Polish](#p8--autopilot-ui-polish)
   - [P9 — Parallel Autopilot Execution](#p9--parallel-autopilot-execution)
-  - [P10 — WebUI UX/UI Polish & Bug Fixes](#p10--webui-uxui-polish--bug-fixes) *(16 tasks, nhóm A–F)*
+  - [P10 — WebUI UX/UI Polish \& Bug Fixes](#p10--webui-uxui-polish--bug-fixes)
+    - [P10.A — Sidebar \& Navigation](#p10a--sidebar--navigation)
+    - [P10.B — Autopilot Board](#p10b--autopilot-board)
+    - [P10.C — History Page](#p10c--history-page)
+    - [P10.D — Jobs Page](#p10d--jobs-page)
+    - [P10.E — Settings Pages](#p10e--settings-pages)
+    - [P10.F — Chat \& Misc](#p10f--chat--misc)
   - [Cross-cutting](#cross-cutting)
+  - [P11 — Multi-Project Support](#p11--multi-project-support)
+    - [P11.A — Backend](#p11a--backend)
+    - [P11.B — Frontend](#p11b--frontend)
+    - [P11.C — CLI, Tests, Docs](#p11c--cli-tests-docs)
+  - [P12 — Autopilot Cron Scheduling Configuration](#p12--autopilot-cron-scheduling-configuration)
+    - [P12.A — Backend](#p12a--backend)
+    - [P12.B — Frontend](#p12b--frontend)
+    - [P12.C — CLI \& Tests](#p12c--cli--tests)
+  - [P13 — Autopilot Task Resilience (Pre-flight + Pending/Resume)](#p13--autopilot-task-resilience-pre-flight--pendingresume)
+    - [P13.A — Status \& Pre-flight](#p13a--status--pre-flight)
+    - [P13.B — Core Logic](#p13b--core-logic)
+    - [P13.C — API, Frontend \& Tests](#p13c--api-frontend--tests)
+  - [P14 — Settings Review \& Polish](#p14--settings-review--polish)
 
 ---
 
@@ -664,6 +683,450 @@ oh autopilot add idea "[X2] Frontend: Error handling + loading states nhất qu�
 
 ---
 
-**Tổng cộng**: 92 tasks (P0=3, P1=8, P2=6, P3=6, P4=7, P5=10, P6=8, P7=8, P8=7, P9=11, P10=16, Cross=2)
+## P11 — Multi-Project Support
+
+> **Mục tiêu**: Cho phép OpenHarness quản lý nhiều project (folder), mỗi project có lịch sử chat, autopilot tasks, sessions riêng biệt. Chuyển đổi project qua Web UI và CLI.
+> **Registry**: `~/.openharness/projects.json` lưu danh sách project với name/path/description.
+> **Backward compat**: Khi registry rỗng, tự tạo default project từ cwd hiện tại.
+
+### P11.A — Backend
+
+```bash
+oh autopilot add idea "[P11.1] Backend: Project model và registry" --body "Tạo src/openharness/config/projects.py:
+1. Project(BaseModel): id (slug từ name), name, path (abs), description, created_at, updated_at, is_active
+2. ProjectRegistry class:
+   - REGISTRY_PATH = ~/.openharness/projects.json
+   - load() -> {projects: list[Project], active_project_id: str}
+   - save(registry) với atomic_write_text + file lock (theo pattern _cron_lock_path trong services/cron.py)
+   - add_project(name, path, description) -> Project. Slugify name cho id, validate path là directory
+   - remove_project(id) -> bool. Không xoá folder thật
+   - update_project(id, name?, description?) -> Project
+   - activate_project(id) -> Project. Set is_active, clear others
+   - get_active_project() -> Project | None
+   - ensure_default(cwd: Path) -> tạo default project từ cwd nếu registry rỗng
+3. Validate: không duplicate paths, không duplicate names, path phải là directory tồn tại
+
+Tests: test_project_crud, test_activate, test_ensure_default, test_duplicate_prevention.
+Spawn agents: code-reviewer." --labels "backend,multi-project"
+
+oh autopilot add idea "[P11.2] Backend: Project CRUD API endpoints" --body "Tạo src/openharness/webui/server/routes/projects.py:
+1. GET /api/projects -> {projects: [...], active_project_id: str}
+2. POST /api/projects -> Body: {name, path, description?} -> Project (201). 400 nếu path không phải dir, 409 nếu duplicate.
+3. PATCH /api/projects/{id} -> {name?, description?} -> updated Project. 404 nếu không tìm thấy.
+4. DELETE /api/projects/{id} -> {ok: true}. 404 nếu không tồn tại, 400 nếu đang active.
+5. POST /api/projects/{id}/activate -> {ok: true, project: Project}. Trigger project switch (xem P11.3).
+
+Register trong app.py: app.include_router(projects_routes.router). Tất cả endpoints yêu cầu require_token.
+
+Tests: test_projects_api_crud, test_activate_endpoint, test_validation_errors.
+Spawn agents: code-reviewer.
+Depends on: P11.1." --labels "backend,multi-project,api"
+
+oh autopilot add idea "[P11.3] Backend: Logic chuyển đổi project trong WebUIState" --body "Sửa state.py và app.py:
+1. Thêm vào WebUIState: active_project_id: str | None = None
+2. Thêm method switch_project(self, project: Project): cập nhật self.cwd và self.active_project_id
+3. Trong create_app(): gọi ProjectRegistry.ensure_default(resolved_cwd), load active project, set state.active_project_id. Nếu active project tồn tại, dùng path của nó làm cwd.
+4. Trong routes/projects.py activate endpoint: gọi state.switch_project(project), recreate SessionManager với WebUIConfig(cwd=project.path, ...), cập nhật app.state.webui_session_manager
+5. Broadcast event 'project_switched' qua WebSocket tới tất cả connected clients
+
+Tests: test_switch_project_updates_cwd, test_session_manager_recreated.
+Spawn agents: planner → code-reviewer.
+Depends on: P11.1, P11.2." --labels "backend,multi-project"
+
+oh autopilot add idea "[P11.4] Backend: Audit session/chat isolation theo project" --body "Audit và verify per-project isolation cho session/chat layer:
+1. Xác nhận get_project_session_dir(cwd) dùng cwd hash cho directory naming — đã OK
+2. Verify tất cả session operations trong sessions.py, history routes, snapshot loading dùng state.cwd (dynamic)
+3. Verify routes/ws.py WebSocket streams và reconnect path không leak state của project cũ sau khi switch
+4. Verify latest session pointer, history list, resume flow đều scoped theo active project
+5. Thêm integration test: hai projects, sessions/history không cross-contaminate
+
+Không cover autopilot/cron ở task này — phần đó tách riêng ở P11.5.
+
+Spawn agents: code-reviewer.
+Depends on: P11.3." --labels "backend,multi-project"
+```
+
+### P11.B — Frontend
+
+```bash
+oh autopilot add idea "[P11.5] Frontend: ProjectSelector dropdown + active project state" --body "Thêm UI chọn project ở header/sidebar:
+1. Tạo ProjectSelector.tsx: dropdown hiển thị active project name + path tooltip
+2. Fetch GET /api/projects khi mount -> list projects + active_project_id
+3. Khi user chọn project khác: POST /api/projects/{id}/activate
+4. Update global store (zustand) activeProject và project list
+5. Sau activate thành công: reset current session/transcript state, reconnect WebSocket với project mới, refresh History/Autopilot/Jobs data
+6. Hiển thị toast 'Switched to <project>'
+
+Không reload full page; giữ SPA state và trigger data refetch.
+
+Tests: component state transitions, API call sequence.
+Spawn agents: planner → code-reviewer.
+Depends on: P11.2, P11.3." --labels "frontend,multi-project"
+
+oh autopilot add idea "[P11.6] Frontend: Project API client + shared types" --body "Tạo/extend frontend/webui/src/api/client.ts và types.ts:
+1. type Project, ProjectListResponse
+2. api.listProjects(), api.createProject(), api.updateProject(), api.deleteProject(), api.activateProject()
+3. Handle error mapping 400/404/409 với message rõ ràng cho UI
+4. Export hooks/helper để pages khác reuse
+
+Refactor ProjectSelector và future Projects page dùng chung API layer này.
+
+Spawn agents: code-reviewer.
+Depends on: P11.2." --labels "frontend,multi-project"
+
+oh autopilot add idea "[P11.7] Frontend: Projects management page" --body "Tạo page /projects:
+1. List tất cả projects với name, path, description, active badge
+2. Form thêm project mới: name, path, description
+3. Inline edit name/description
+4. Delete project (confirm modal), disable delete nếu active
+5. Button 'Activate' cho project không active
+6. Validation UI: path required, duplicate warning, backend error display
+
+UI nên đơn giản nhưng rõ ràng; không cần drag/drop.
+
+Tests: create/edit/delete/activate flows.
+Spawn agents: planner → code-reviewer.
+Depends on: P11.2, P11.6." --labels "frontend,multi-project,ui"
+
+oh autopilot add idea "[P11.8] Frontend: Chuyển project không reload + reconnect đúng cách" --body "Fix regression-prone flow khi switch project:
+1. WebSocket/session reconnect phải dùng cwd/project mới
+2. Hủy subscriptions/polling của project cũ
+3. Reset pipeline/history/jobs caches về loading state trước khi refetch
+4. Nếu session hiện tại đang mở transcript, clear transcript để tránh hiển thị message project cũ
+5. Tránh full-page reload; chỉ soft reconnect + data reload
+
+Đây là task UX correctness quan trọng cho multi-project.
+
+Tests: switch project while connected, ensure transcript/history/pipeline đều đổi theo project mới.
+Spawn agents: tdd-guide → code-reviewer.
+Depends on: P11.5, P11.6." --labels "frontend,multi-project,critical"
+```
+
+### P11.C — CLI, Tests, Docs
+
+```bash
+oh autopilot add idea "[P11.9] CLI: project commands cơ bản" --body "Mở rộng CLI với namespace project:
+1. `oh project list`
+2. `oh project add <path> [--name ...] [--description ...]`
+3. `oh project activate <id-or-name>`
+4. `oh project remove <id-or-name>`
+5. `oh project current`
+
+CLI dùng chung ProjectRegistry từ P11.1. Output human-readable + JSON mode nếu framework CLI hiện có hỗ trợ.
+
+Tests: command happy path + error cases.
+Spawn agents: code-reviewer.
+Depends on: P11.1." --labels "cli,multi-project"
+
+oh autopilot add idea "[P11.10] Tests: Multi-project integration coverage" --body "Thêm integration tests end-to-end cho multi-project:
+1. create 2 temp project dirs
+2. ensure history/session isolation
+3. switch active project qua API -> state.cwd đổi
+4. pipeline/journal endpoints đọc dữ liệu theo project active
+5. websocket reconnect sau switch project không leak messages cũ
+
+Ưu tiên test backend + light frontend integration; không cần full browser e2e ở task này.
+
+Spawn agents: tdd-guide → code-reviewer.
+Depends on: P11.3, P11.5, P11.8." --labels "testing,multi-project"
+
+oh autopilot add idea "[P11.11] Docs: Multi-project user guide" --body "Cập nhật docs cho multi-project:
+1. GUIDE.md: section Projects / quản lý nhiều repo
+2. AUTOPILOT.md: giải thích registry theo project và switching
+3. Nếu có docs WebUI riêng: thêm screenshots hoặc flow mô tả ProjectSelector + Projects page
+4. Nêu rõ backward compatibility: project mặc định được tạo từ cwd hiện tại
+
+Spawn agents: doc-updater.
+Depends on: P11.1, P11.5." --labels "docs,multi-project"
+
+oh autopilot add idea "[P11.12] Docs/Test snapshot: refresh docs snapshot sau multi-project" --body "Sau khi P11 hoàn tất:
+1. rebuild frontend docs snapshot nếu project có generated static docs
+2. cập nhật docs/autopilot/snapshot.json hoặc artifact tương tự nếu cần
+3. verify docs references /projects routes đúng
+
+Task này dành cho final polish + consistency.
+Spawn agents: doc-updater.
+Depends on: P11.11." --labels "docs,multi-project,polish"
+```
+
+---
+
+## P12 — Autopilot Cron Scheduling Configuration
+
+### P12.A — Backend
+
+```bash
+oh autopilot add idea "[P12.1] Backend: Cron schedule config model + persistence" --body "Thêm cấu hình lịch chạy autopilot vào settings/policy:
+1. CronScheduleConfig model: enabled, scan_cron, tick_cron, timezone?, install_mode
+2. Persist trong file policy hoặc settings phù hợp với cấu trúc hiện tại
+3. Default: scan mỗi 15 phút, tick mỗi giờ (giữ behavior cũ)
+4. Validate cron expression bằng helper/library sẵn có; nếu chưa có, validate format 5 trường cơ bản
+
+Không cài cron ở task này; chỉ model + persistence.
+
+Tests: load/save/validation/defaults.
+Spawn agents: code-reviewer." --labels "backend,cron"
+
+oh autopilot add idea "[P12.2] Backend: GET/PATCH cron scheduling API" --body "Tạo/extend API cho cron scheduling config:
+1. GET /api/cron/config -> current config
+2. PATCH /api/cron/config -> update enabled/scan_cron/tick_cron
+3. Response gồm preview human-readable ('Every 15 minutes', ...)
+4. Return validation errors rõ ràng nếu cron invalid
+
+Reuse config model từ P12.1.
+
+Tests: GET, PATCH valid, PATCH invalid.
+Spawn agents: code-reviewer.
+Depends on: P12.1." --labels "backend,cron,api"
+
+oh autopilot add idea "[P12.3] Backend: Cron preview + next-run computation" --body "Thêm helper tính toán next run times cho scan/tick schedule:
+1. Hàm preview cron -> next 3 run timestamps
+2. API response include next_scan_runs, next_tick_runs
+3. Nếu disabled -> arrays rỗng
+4. Timezone handling rõ ràng; nếu app chưa support timezone custom thì dùng local timezone hiện tại và expose label
+
+Tests: deterministic preview với frozen time.
+Spawn agents: code-reviewer.
+Depends on: P12.1, P12.2." --labels "backend,cron"
+
+oh autopilot add idea "[P12.4] Backend: install-cron endpoint/command integration" --body "Bridge config với luồng install cron hiện có:
+1. expose action để apply config hiện tại vào crontab/install routine
+2. nếu project có endpoint/CLI install-cron hiện hữu, refactor để đọc từ config thay vì hardcode scan 15m/tick 1h
+3. response trả installed commands và cron lines để user audit
+4. không silent overwrite; log rõ thay đổi
+
+Tests: install payload/command generation.
+Spawn agents: planner → code-reviewer.
+Depends on: P12.1." --labels "backend,cron"
+```
+
+### P12.B — Frontend
+
+```bash
+oh autopilot add idea "[P12.5] Frontend: Cron scheduling settings UI" --body "Thêm UI cấu hình cron schedule trong Settings hoặc Autopilot Policy page:
+1. Toggle enabled
+2. Input scan_cron và tick_cron
+3. Helper text ví dụ cron patterns
+4. Preview next 3 runs từ API
+5. Nút Save / Apply
+
+UX ưu tiên an toàn: hiển thị warning nếu schedule quá dày.
+
+Tests: form state + validation rendering.
+Spawn agents: planner → code-reviewer.
+Depends on: P12.2, P12.3." --labels "frontend,cron,ui"
+
+oh autopilot add idea "[P12.6] Frontend: Preset schedule shortcuts" --body "Trong cron scheduling UI thêm preset buttons:
+- Conservative: scan 30m / tick 2h
+- Default: scan 15m / tick 1h
+- Aggressive: scan 5m / tick 15m
+- Disabled
+
+Click preset sẽ fill form nhưng vẫn cho user chỉnh tay sau đó. Hiển thị note về tradeoff resource usage.
+
+Spawn agents: code-reviewer.
+Depends on: P12.5." --labels "frontend,cron,ux"
+
+oh autopilot add idea "[P12.7] Frontend: Install/apply cron action feedback" --body "Sau khi user apply cron config:
+1. Hiển thị result panel/toast với cron lines đã cài
+2. Hiển thị lỗi rõ ràng nếu install thất bại
+3. Có nút copy cron config / command
+4. Nếu app không thể cài tự động trong current env, hiển thị manual instructions fallback
+
+Spawn agents: code-reviewer.
+Depends on: P12.4, P12.5." --labels "frontend,cron,ux"
+```
+
+### P12.C — CLI & Tests
+
+```bash
+oh autopilot add idea "[P12.8] Tests: cron scheduling integration" --body "Thêm coverage cho scheduling config end-to-end:
+1. config round-trip API
+2. preview next runs deterministic
+3. install routine consumes configured cron values thay vì hardcode
+4. frontend form submits đúng payload
+
+Spawn agents: tdd-guide → code-reviewer.
+Depends on: P12.2, P12.4, P12.5." --labels "testing,cron"
+```
+
+---
+
+## P13 — Autopilot Task Resilience (Pre-flight + Pending/Resume)
+
+### P13.A — Status & Pre-flight
+
+```bash
+oh autopilot add idea "[P13.1] Backend: Pre-flight check trước khi run card" --body "Thêm pre-flight step trước khi autopilot thực sự chạy agent:
+1. Kiểm tra provider/model available
+2. Kiểm tra auth/token/API key nếu cần
+3. Kiểm tra network / GitHub availability cho flow cần PR
+4. Kiểm tra repo state tối thiểu (cwd tồn tại, git repo nếu policy yêu cầu)
+5. Nếu fail do transient reason -> không mark failed ngay, chuyển sang pending
+
+Record structured reason trong metadata để UI/CLI hiển thị.
+
+Tests: preflight success, auth failure, network failure.
+Spawn agents: planner → code-reviewer." --labels "backend,resilience"
+
+oh autopilot add idea "[P13.2] Backend: Thêm trạng thái pending + retry metadata" --body "Mở rộng lifecycle autopilot với trạng thái `pending` cho lỗi tạm thời:
+1. cho phép status pending trong card model/registry
+2. metadata: pending_reason, next_retry_at, retry_count
+3. scheduler/tick bỏ qua pending card cho tới next_retry_at
+4. policy retry/backoff cơ bản: exponential hoặc fixed schedule đơn giản
+5. pending không tính là failed terminal
+
+Cần cập nhật serialize, filters, counts, journal.
+
+Tests: status transition pending, retry timing, pending not counted as active capacity.
+Spawn agents: code-reviewer.
+Depends on: P13.1." --labels "backend,resilience"
+
+oh autopilot add idea "[P13.3] Backend: Pre-flight API endpoint" --body "Expose pre-flight diagnostics qua API:
+1. GET /api/pipeline/preflight hoặc POST on-demand
+2. trả checks list: provider_ok, auth_ok, github_ok, repo_ok, messages
+3. frontend dùng endpoint này để hiển thị health trước khi user bấm run-next
+4. cache ngắn nếu cần để tránh spam external checks
+
+Tests: endpoint payload + failure mapping.
+Spawn agents: code-reviewer.
+Depends on: P13.1." --labels "backend,resilience,api"
+```
+
+### P13.B — Core Logic
+
+```bash
+oh autopilot add idea "[P13.4] Backend: Pending retry scheduler + resume logic" --body "Implement core logic cho pending cards:
+1. tick() hoặc scheduler chọn lại card pending khi đến next_retry_at
+2. reset status pending -> accepted/preparing trước khi retry
+3. retry_count vượt ngưỡng thì chuyển failed với summary rõ ràng
+4. journal ghi transition pending/resumed/retry_exhausted
+5. manual retry action có thể clear pending ngay
+
+Tests: scheduler retries pending card, retry exhausted -> failed, manual retry resets pending.
+Spawn agents: planner → code-reviewer.
+Depends on: P13.2." --labels "backend,resilience"
+
+oh autopilot add idea "[P13.9] Backend: Auto-merge autopilot_managed PR khi CI pass" --body "Gap hiện tại: run_card() chỉ gọi _process_existing_pr_card() (check CI + merge) cho source_kind='github_pr' external hoặc last_failure_stage='repair_exhausted'. Card autopilot_managed=True với PR open + CI pass không có path merge tự động — bị kẹt ở waiting_ci hoặc rerun repair vô tận.
+
+Fix:
+1. Trong run_card(), sau khi tạo worktree và trước khi chạy agent: check nếu card có linked_pr_number + metadata.autopilot_managed=True + last_ci_conclusion='success' -> gọi trực tiếp _try_merge_pr() thay vì chạy repair loop.
+2. Hoặc tạo _check_and_merge_if_ci_passed(card) helper: query GitHub PR status, nếu CI pass -> merge -> update status='merged'.
+3. Gọi helper này trong tick() sau _recover_stuck_cards() cho các card ở waiting_ci + autopilot_managed=True.
+
+Tests:
+- test_autopilot_managed_card_merged_when_ci_pass: card autopilot_managed=True + waiting_ci + CI pass -> tick() -> status=merged
+- test_autopilot_managed_card_stays_waiting_when_ci_pending: CI pending -> không merge
+- test_autopilot_managed_card_repairs_when_ci_fail: CI fail -> vào repair flow
+
+Spawn agents: code-reviewer.
+Depends on: P11.5." --labels "backend,autopilot,reliability"
+```
+
+### P13.C — API, Frontend & Tests
+
+```bash
+oh autopilot add idea "[P13.5] Backend: Pipeline API hỗ trợ pending status" --body "Cập nhật routes/pipeline.py serialization + counts:
+1. pending xuất hiện trong cards list/detail
+2. include pending_reason, next_retry_at, retry_count trong payload
+3. run-next/capacity logic bỏ qua pending card trừ khi due
+4. action endpoint thêm 'retry-now' cho pending card
+
+Spawn agents: code-reviewer.
+Depends on: P13.2." --labels "backend,resilience,api"
+
+oh autopilot add idea "[P13.6] Frontend: Pending status trong autopilot board" --body "Cập nhật board UI để hiển thị pending rõ ràng:
+1. thêm column hoặc group cho Pending
+2. card hiển thị pending_reason + next retry relative time
+3. button 'Retry now' trong card detail
+4. không gộp pending vào failed để tránh gây hiểu nhầm
+
+Tests: render pending card + retry-now action.
+Spawn agents: code-reviewer.
+Depends on: P13.5." --labels "frontend,resilience,ui"
+
+oh autopilot add idea "[P13.7] Tests: Task resilience integration tests" --body "Thêm integration coverage cho pending/resume flow:
+1. preflight network failure -> pending
+2. transient runtime error -> pending
+3. scheduler retries when due
+4. exhausted retries -> failed
+5. manual retry-now recovers pending card
+
+Spawn agents: tdd-guide → code-reviewer.
+Depends on: P13.4, P13.5, P13.6." --labels "testing,resilience"
+
+oh autopilot add idea "[P13.8] Backend: Pre-flight check API endpoint cho WebUI/CLI" --body "Nếu P13.3 mới cover nội bộ, task này hoàn thiện contract public:
+1. endpoint callable từ WebUI và CLI
+2. standardized payload cho human-readable + machine-readable diagnostics
+3. CLI command `oh autopilot preflight`
+4. docs/help text ngắn cho từng failure type
+
+Spawn agents: code-reviewer.
+Depends on: P13.3." --labels "backend,resilience,api"
+```
+
+---
+
+## P14 — Settings Review & Polish
+
+```bash
+oh autopilot add idea "[P14.1] UI: Modes page — thêm notifications và auto-compact settings" --body "Enhance ModesSettingsPage.tsx:
+1. Add toggle for notification preferences relevant to WebUI/autopilot events
+2. Add auto-compact / transcript compaction related setting nếu app đã support ở backend/settings
+3. Group related controls rõ ràng hơn, tách runtime controls vs UX preferences
+4. Show helper text ngắn cho mỗi advanced option
+
+Tests: settings form render + submit payload.
+Spawn agents: code-reviewer." --labels "frontend,settings,ux"
+
+oh autopilot add idea "[P14.2] UI: Provider page — connection status và batch verify" --body "Enhance ProviderSettingsPage.tsx:
+1. Hiển thị connection status badge realtime-ish cho từng provider
+2. Add 'Verify all configured providers' action
+3. Improve result presentation: latency, model count, last verified time
+4. Disable noisy actions khi verify đang chạy
+
+Spawn agents: planner → code-reviewer.
+Depends on: P3.4." --labels "frontend,settings,ux"
+
+oh autopilot add idea "[P14.3] UI: Models page — capabilities info và search" --body "Enhance ModelsSettingsPage.tsx:
+1. Search/filter models by id/label
+2. Show capability badges nếu available (vision, tools, long-context, fast, etc.)
+3. Better grouping/sorting of custom vs built-in models
+4. Improve empty state when provider has no models
+
+Spawn agents: code-reviewer." --labels "frontend,settings,ux"
+
+oh autopilot add idea "[P14.4] UI: Agents page — system prompt preview, clone, test" --body "Enhance AgentsSettingsPage.tsx:
+1. Preview full system prompt/body with expand modal
+2. Add clone/copy agent config flow để tạo agent mới từ template
+3. Add lightweight test action or validation for edited config
+4. Surface source file path + changed status clearly
+
+Spawn agents: planner → code-reviewer." --labels "frontend,settings,ux"
+
+oh autopilot add idea "[P14.5] UI: Cross-cutting settings form validation và UX" --body "Improvements cho tất cả settings pages:
+1. consistent dirty state indicator
+2. unsaved changes warning khi rời page
+3. inline validation messages nhất quán
+4. save/apply success state rõ ràng
+5. keyboard/focus UX polish
+
+Depends on: P14.1, P14.2, P14.3, P14.4." --labels "frontend,settings,ux"
+
+oh autopilot add idea "[P14.6] Tests: Settings pages integration tests" --body "Tạo tests/test_settings_improvements.py:
+1. modes settings advanced fields
+2. provider batch verify UI flow
+3. model search/filter
+4. agent prompt preview/clone flow
+5. dirty-state + unsaved warning behavior
+
+Depends on: P14.1, P14.2, P14.3, P14.4, P14.5.
+" --labels "testing,settings"
+```
+
+---
+
+**Tổng cộng**: 126 tasks (P0=3, P1=8, P2=6, P3=6, P4=7, P5=10, P6=8, P7=8, P8=7, P9=11, P10=16, P11=12, P12=8, P13=8, P14=6, Cross=2)
 
 > P10 được tổ chức lại thành 6 nhóm: A=Sidebar/Nav (4), B=Autopilot Board (3), C=History (4), D=Jobs (2), E=Settings (2), F=Misc (1)
+> P11-P14 bổ sung ngày 2026-05-06: Multi-Project (12), Cron Scheduling (8), Task Resilience (8), Settings Polish (6)
