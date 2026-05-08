@@ -1014,6 +1014,73 @@ class RepoAutopilotStore:
         ):
             return await self._process_existing_pr_card(card, linked_pr_number, policies)
 
+        # autopilot_managed cards with linked PR + CI pass: merge directly, skip repair loop
+        if linked_pr_number is not None and bool(card.metadata.get("autopilot_managed")):
+            ci_state, ci_summary, pr_snapshot, _checks = await self._wait_for_pr_ci(
+                linked_pr_number, policies
+            )
+            pr_url = _safe_text(pr_snapshot.get("url"))
+            if ci_state == "success" and self._automerge_eligible(pr_snapshot, policies):
+                self._merge_pull_request(linked_pr_number)
+                self.update_status(
+                    card.id,
+                    status="merged",
+                    note=f"autopilot managed PR #{linked_pr_number} CI passed, merged automatically",
+                    metadata_updates={
+                        "linked_pr_number": linked_pr_number,
+                        "linked_pr_url": pr_url,
+                    },
+                )
+                return RepoRunResult(
+                    card_id=card.id,
+                    status="merged",
+                    run_report_path="",
+                    verification_report_path="",
+                    pr_number=linked_pr_number,
+                    pr_url=pr_url,
+                )
+            # CI not yet passed or not eligible — stay in waiting_ci, don't re-run
+            if ci_state != "success":
+                # Pending CI: update status and return so tick can check later
+                if ci_state == "pending":
+                    self.update_status(
+                        card.id,
+                        status="waiting_ci",
+                        note=f"autopilot managed PR #{linked_pr_number} CI still running, waiting",
+                        metadata_updates={
+                            "linked_pr_number": linked_pr_number,
+                            "linked_pr_url": pr_url,
+                        },
+                    )
+                    return RepoRunResult(
+                        card_id=card.id,
+                        status="waiting_ci",
+                        run_report_path="",
+                        verification_report_path="",
+                        pr_number=linked_pr_number,
+                        pr_url=pr_url,
+                    )
+                # Failed CI
+                self.update_status(
+                    card.id,
+                    status="failed",
+                    note=f"autopilot managed PR #{linked_pr_number} CI failed: {ci_summary}",
+                    metadata_updates={
+                        "linked_pr_number": linked_pr_number,
+                        "linked_pr_url": pr_url,
+                        "last_failure_stage": "remote_ci_failed",
+                        "last_failure_summary": ci_summary,
+                    },
+                )
+                return RepoRunResult(
+                    card_id=card.id,
+                    status="failed",
+                    run_report_path="",
+                    verification_report_path="",
+                    pr_number=linked_pr_number,
+                    pr_url=pr_url,
+                )
+
         worktree_manager = WorktreeManager()
         worktree_info = None
         working_cwd = self._cwd
@@ -2036,6 +2103,73 @@ class RepoAutopilotStore:
                 )
         return removed
 
+    async def _check_and_merge_managed_prs(self, policies: dict[str, Any]) -> list[str]:
+        """Check autopilot_managed cards in waiting_ci with linked PRs — merge if CI passes.
+
+        Cards that are autopilot_managed=True and in waiting_ci with a linked_pr_number
+        should be auto-merged when CI is green and automerge is eligible. This prevents
+        them from getting stuck in waiting_ci indefinitely.
+
+        Returns list of card IDs that were merged.
+        """
+        merged: list[str] = []
+        for card in self.list_cards():
+            if card.status != "waiting_ci":
+                continue
+            if not bool(card.metadata.get("autopilot_managed")):
+                continue
+            linked_pr = self._linked_pr_number(card)
+            if linked_pr is None:
+                continue
+            try:
+                pr_snapshot = self._pr_status_snapshot(linked_pr)
+                ci_state, ci_summary, _checks = self._ci_rollup(pr_snapshot)
+                pr_url = _safe_text(pr_snapshot.get("url"))
+                pr_state = _safe_text(pr_snapshot.get("state")).upper()
+                if pr_state == "MERGED":
+                    # Already merged externally — sync status
+                    self.update_status(
+                        card.id,
+                        status="merged",
+                        note=f"PR #{linked_pr} was merged externally",
+                        metadata_updates={
+                            "linked_pr_url": pr_url,
+                            "human_gate_pending": False,
+                        },
+                    )
+                    merged.append(card.id)
+                    continue
+                if ci_state != "success":
+                    # Still running or failed — skip for now
+                    continue
+                if not self._automerge_eligible(pr_snapshot, policies):
+                    continue
+                self._merge_pull_request(linked_pr)
+                self.update_status(
+                    card.id,
+                    status="merged",
+                    note=f"autopilot managed PR #{linked_pr} CI passed, merged automatically",
+                    metadata_updates={
+                        "linked_pr_number": linked_pr,
+                        "linked_pr_url": pr_url,
+                    },
+                )
+                self._comment_on_pr(linked_pr, self._comment_merged(linked_pr))
+                self.append_journal(
+                    kind="autopilot_managed_merged",
+                    summary=f"Auto-merged autopilot managed PR #{linked_pr} (CI passed)",
+                    task_id=card.id,
+                    metadata={"pr_number": linked_pr, "pr_url": pr_url},
+                )
+                merged.append(card.id)
+            except Exception as exc:
+                self.append_journal(
+                    kind="autopilot_managed_merge_failed",
+                    summary=f"Failed to check/merge managed PR #{linked_pr}: {exc}",
+                    task_id=card.id,
+                )
+        return merged
+
     async def tick(
         self,
         *,
@@ -2049,6 +2183,13 @@ class RepoAutopilotStore:
         self._recover_stuck_cards()
         await self._cleanup_stale_worktrees()
         policies = self.load_policies()
+        merged = await self._check_and_merge_managed_prs(policies)
+        if merged:
+            self.append_journal(
+                kind="autopilot_managed_batch_merged",
+                summary=f"Auto-merged {len(merged)} autopilot managed PR(s) after CI check",
+                metadata={"card_ids": merged},
+            )
         if not self.has_capacity(policies):
             self.append_journal(
                 kind="tick_skip",
