@@ -4654,3 +4654,194 @@ def test_run_card_with_already_merged_pr_short_circuits(tmp_path: Path, monkeypa
     assert updated.status == "merged"
     assert updated.metadata.get("human_gate_pending") is False
     assert updated.metadata.get("linked_pr_url") == "https://example/pr/42"
+
+
+def test_repair_prompt_injects_reviewer_feedback_on_code_review_failure(tmp_path: Path) -> None:
+    """Test that code reviewer feedback is injected into repair prompt after code_review failure."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Test card",
+        body="Original task description",
+    )
+
+    # Create a fake verification report with CRITICAL issues
+    verification_report = runs_dir / f"{card.id}-attempt-01-verification.md"
+    verification_report.write_text(
+        """# Verification Report: test-card
+
+## FAILED :: agent:code-reviewer (diff vs main)
+
+Return code: 1
+
+### stdout
+```text
+Severity: CRITICAL
+Findings:
+  - src/example.py:42 security SQL injection vulnerability in query construction
+  - src/example.py:89 correctness Missing input validation on user-provided path
+Summary: Critical security issues found that must be fixed before merge.
+```
+
+### stderr
+```text
+severity=critical
+```
+""",
+        encoding="utf-8",
+    )
+
+    # Prepare repair prompt with code_review failure
+    policies = store.load_policies()
+    prompt = store._prepare_repair_prompt(
+        card,
+        policies,
+        attempt_count=2,
+        prior_summary="Previous attempt summary",
+        failure_stage="code_review",
+        failure_summary="Code review failed with CRITICAL issues",
+    )
+
+    # Assert that the prompt contains the reviewer feedback
+    assert "Previous attempt #1 failed code review" in prompt
+    assert "Severity: CRITICAL" in prompt
+    assert "SQL injection vulnerability" in prompt
+    assert "Missing input validation" in prompt
+    assert "End of reviewer constraints" in prompt
+
+
+def test_repair_prompt_no_feedback_injection_on_first_attempt(tmp_path: Path) -> None:
+    """Test that feedback is not injected on first attempt (attempt_count=1)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Test card",
+        body="Original task description",
+    )
+
+    # Create verification report (should be ignored on first attempt)
+    verification_report = runs_dir / f"{card.id}-attempt-01-verification.md"
+    verification_report.write_text(
+        """# Verification Report
+
+Severity: CRITICAL
+Findings:
+  - src/example.py:42 security Issue found
+""",
+        encoding="utf-8",
+    )
+
+    policies = store.load_policies()
+    prompt = store._prepare_repair_prompt(
+        card,
+        policies,
+        attempt_count=1,
+        prior_summary=None,
+        failure_stage="code_review",
+        failure_summary="Failed",
+    )
+
+    # Should return base prompt without repair context
+    assert "Repair context:" not in prompt
+    assert "Previous attempt" not in prompt
+    assert "Severity: CRITICAL" not in prompt
+
+
+def test_repair_prompt_no_feedback_injection_on_non_review_failure(tmp_path: Path) -> None:
+    """Test that feedback is not injected when failure stage is not code_review or verifying."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Test card",
+        body="Original task description",
+    )
+
+    # Create verification report
+    verification_report = runs_dir / f"{card.id}-attempt-01-verification.md"
+    verification_report.write_text(
+        """# Verification Report
+
+Severity: CRITICAL
+Findings:
+  - src/example.py:42 security Issue found
+""",
+        encoding="utf-8",
+    )
+
+    policies = store.load_policies()
+    prompt = store._prepare_repair_prompt(
+        card,
+        policies,
+        attempt_count=2,
+        prior_summary="Previous summary",
+        failure_stage="running",  # Not code_review or verifying
+        failure_summary="Agent failed",
+    )
+
+    # Should have repair context but no reviewer feedback
+    assert "Repair context:" in prompt
+    assert "Previous failure stage: running" in prompt
+    assert "Severity: CRITICAL" not in prompt
+    assert "SQL injection" not in prompt
+
+
+def test_extract_reviewer_feedback_handles_missing_file(tmp_path: Path) -> None:
+    """Test that _extract_reviewer_feedback returns empty string when file doesn't exist."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    feedback = store._extract_reviewer_feedback("nonexistent-card-id")
+
+    assert feedback == ""
+
+
+def test_extract_reviewer_feedback_handles_high_severity(tmp_path: Path) -> None:
+    """Test that _extract_reviewer_feedback extracts HIGH severity issues."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card_id = "test-card-high"
+
+    verification_report = runs_dir / f"{card_id}-attempt-01-verification.md"
+    verification_report.write_text(
+        """# Verification Report
+
+## FAILED :: agent:code-reviewer (diff vs main)
+
+### stdout
+```text
+Severity: HIGH
+Findings:
+  - src/utils.py:10 performance N+1 query detected in loop
+  - src/utils.py:25 maintainability Large function should be split
+Summary: High priority issues found.
+```
+""",
+        encoding="utf-8",
+    )
+
+    feedback = store._extract_reviewer_feedback(card_id)
+
+    assert "Severity: HIGH" in feedback
+    assert "N+1 query detected" in feedback
+    assert "Large function should be split" in feedback
+

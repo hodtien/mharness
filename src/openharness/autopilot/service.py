@@ -3205,6 +3205,73 @@ class RepoAutopilotStore:
             check=True,
         )
 
+    def _extract_reviewer_feedback(self, card_id: str) -> str:
+        """Extract CRITICAL/HIGH issues from verification report.
+
+        Returns formatted feedback string, or empty string if no issues found.
+        """
+        # Find most recent attempt verification file
+        attempt_files = sorted(
+            self._runs_dir.glob(f"{card_id}-attempt-*-verification.md"),
+            reverse=True
+        )
+        if attempt_files:
+            verification_file = attempt_files[0]
+        else:
+            verification_file = self._runs_dir / f"{card_id}-verification.md"
+
+        if not verification_file.exists():
+            return ""
+
+        try:
+            content = verification_file.read_text(encoding="utf-8")
+        except Exception:
+            return ""
+
+        # Look for code-reviewer section with CRITICAL or HIGH severity
+        issues = []
+        lines = content.split("\n")
+        in_reviewer_section = False
+        in_findings = False
+        current_severity = None
+
+        for line in lines:
+            # Detect code-reviewer section
+            if "agent:code-reviewer" in line.lower():
+                in_reviewer_section = True
+                continue
+
+            # Exit reviewer section on next major heading
+            if in_reviewer_section and line.startswith("## ") and "code-reviewer" not in line.lower():
+                break
+
+            if not in_reviewer_section:
+                continue
+
+            # Parse severity
+            if line.strip().startswith("Severity:"):
+                severity_text = line.split(":", 1)[1].strip().upper()
+                if severity_text in ("CRITICAL", "HIGH"):
+                    current_severity = severity_text
+
+            # Parse findings section
+            if "Findings:" in line:
+                in_findings = True
+                continue
+
+            # Collect finding bullets
+            if in_findings and line.strip().startswith("-"):
+                issues.append(line.strip())
+
+            # Stop at summary or next section
+            if in_findings and (line.strip().startswith("Summary:") or line.startswith("##")):
+                in_findings = False
+
+        if not issues or not current_severity:
+            return ""
+
+        return "\n".join([f"Severity: {current_severity}"] + issues)
+
     def _prepare_repair_prompt(
         self,
         card: RepoTaskCard,
@@ -3227,6 +3294,23 @@ class RepoAutopilotStore:
         ]
         if prior_summary:
             extras.append(f"- Previous agent summary: {_shorten(prior_summary, limit=600)}")
+
+        # Inject code reviewer feedback if previous failure was in code_review or verifying stage
+        if failure_stage in ("code_review", "verifying"):
+            reviewer_feedback = self._extract_reviewer_feedback(card.id)
+            if reviewer_feedback:
+                extras.extend(
+                    [
+                        "",
+                        f"[Previous attempt #{attempt_count - 1} failed code review. "
+                        "Code reviewer identified these issues that MUST be fixed:]",
+                        "",
+                        reviewer_feedback,
+                        "",
+                        "[End of reviewer constraints — address ALL of the above in your implementation.]",
+                    ]
+                )
+
         extras.extend(
             [
                 "",
