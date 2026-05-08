@@ -30,6 +30,7 @@ from openharness.autopilot.types import (
     RepoTaskStatus,
     RepoVerificationStep,
 )
+from openharness.config import load_settings
 from openharness.config.paths import (
     get_project_active_repo_context_path,
     get_project_autopilot_policy_path,
@@ -2290,28 +2291,67 @@ class RepoAutopilotStore:
             permission_mode=permission_mode,
         )
 
-    def install_default_cron(self) -> list[str]:
-        from openharness.services.cron import upsert_cron_job
+    def install_default_cron(self) -> dict[str, Any]:
+        """Install cron jobs using configured schedules and return a full report.
+
+        Reads ``cron_schedule.scan_cron`` and ``cron_schedule.tick_cron`` from
+        the global settings file.  Falls back to safe defaults if the settings
+        are absent or corrupt, then logs the resolved values and what changed
+        so the caller can display them to the user.
+        """
+        from openharness.services.cron import get_cron_job, upsert_cron_job
+
+        settings = load_settings()
+        cron_cfg = settings.cron_schedule
+
+        log.info(
+            "install_default_cron: enabled=%s scan_cron=%r tick_cron=%r",
+            cron_cfg.enabled,
+            cron_cfg.scan_cron,
+            cron_cfg.tick_cron,
+        )
 
         jobs = [
             {
                 "name": "autopilot.scan",
-                "schedule": "*/30 * * * *",
+                "schedule": cron_cfg.scan_cron,
                 "command": f"oh autopilot scan all --cwd {self._cwd}",
                 "cwd": str(self._cwd),
                 "project_path": str(self._cwd),
             },
             {
                 "name": "autopilot.tick",
-                "schedule": "*/10 * * * *",
+                "schedule": cron_cfg.tick_cron,
                 "command": f"oh autopilot tick --cwd {self._cwd}",
                 "cwd": str(self._cwd),
                 "project_path": str(self._cwd),
             },
         ]
+
+        installed: list[dict[str, Any]] = []
         for job in jobs:
+            prior = get_cron_job(job["name"])
+            if prior is not None:
+                if prior["schedule"] == job["schedule"] and prior["command"] == job["command"]:
+                    log.info("install_cron: no change for %s (schedule=%r)", job["name"], job["schedule"])
+                else:
+                    log.info(
+                        "install_cron: updating %s schedule=%r (was %r), command=%r",
+                        job["name"],
+                        job["schedule"],
+                        prior.get("schedule"),
+                        job["command"],
+                    )
+            else:
+                log.info("install_cron: creating %s schedule=%r command=%r", job["name"], job["schedule"], job["command"])
             upsert_cron_job(job)
-        return [job["name"] for job in jobs]
+            installed.append(job)
+
+        return {
+            "installed": installed,
+            "cron_lines": [f"{j['schedule']} oh autopilot {name} --cwd {self._cwd}"
+                           for name, j in zip(("scan", "tick"), installed)],
+        }
 
     def export_dashboard(self, output_dir: str | Path | None = None) -> Path:
         target_dir = (

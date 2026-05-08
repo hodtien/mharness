@@ -1392,11 +1392,15 @@ def autopilot_tick_cmd(
 def autopilot_install_cron_cmd(
     cwd: str = typer.Option(str(Path.cwd()), "--cwd", help="Repository root"),
 ) -> None:
-    """Install default cron jobs for repo autopilot scan/tick."""
+    """Install cron jobs for repo autopilot scan/tick using settings from config."""
     from openharness.autopilot import RepoAutopilotStore
 
-    names = RepoAutopilotStore(cwd).install_default_cron()
+    report = RepoAutopilotStore(cwd).install_default_cron()
+    names = [job["name"] for job in report["installed"]]
     print("Installed cron jobs: " + ", ".join(names))
+    print("\nCron lines (for manual audit):")
+    for line in report["cron_lines"]:
+        print("  " + line)
 
 
 @autopilot_app.command("export-dashboard")

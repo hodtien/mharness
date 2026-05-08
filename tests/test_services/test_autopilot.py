@@ -952,14 +952,19 @@ def test_autopilot_install_default_cron_creates_jobs(tmp_path: Path, monkeypatch
         lambda job: recorded.append(job),
     )
 
-    names = store.install_default_cron()
+    report = store.install_default_cron()
 
+    names = [job["name"] for job in report["installed"]]
     assert names == ["autopilot.scan", "autopilot.tick"]
     assert len(recorded) == 2
     assert recorded[0]["name"] == "autopilot.scan"
     for job in recorded:
         assert "project_path" in job
         assert job["project_path"] == str(repo)
+    # Response includes cron_lines for user audit
+    assert len(report["cron_lines"]) == 2
+    assert "oh autopilot scan" in report["cron_lines"][0]
+    assert "oh autopilot tick" in report["cron_lines"][1]
 
 
 def test_two_projects_have_isolated_autopilot_state(tmp_path: Path, monkeypatch) -> None:

@@ -1743,8 +1743,15 @@ def create_default_command_registry(
             )
 
         if action == "install-cron":
-            names = store.install_default_cron()
-            return CommandResult(message="Installed autopilot cron jobs: " + ", ".join(names))
+            report = store.install_default_cron()
+            names = [job["name"] for job in report["installed"]]
+            lines = "\n".join("  " + line for line in report["cron_lines"])
+            return CommandResult(
+                message="Installed autopilot cron jobs: "
+                + ", ".join(names)
+                + "\nCron lines:\n"
+                + lines
+            )
 
         if action == "export-dashboard":
             output = tokens[1] if len(tokens) >= 2 else None
