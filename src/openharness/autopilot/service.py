@@ -1011,7 +1011,10 @@ class RepoAutopilotStore:
 
         if linked_pr_number is not None and (
             (card.source_kind == "github_pr" and not card.metadata.get("autopilot_managed"))
-            or card.metadata.get("last_failure_stage") == "repair_exhausted"
+            or (
+                card.metadata.get("last_failure_stage") == "repair_exhausted"
+                and int(card.metadata.get("attempt_count", 0) or 0) >= max_attempts
+            )
         ):
             return await self._process_existing_pr_card(card, linked_pr_number, policies)
         if linked_pr_number is not None:
