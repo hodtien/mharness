@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import threading
 import time
+from typing import Any
 from unittest.mock import AsyncMock
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -4232,3 +4233,363 @@ def test_reap_dead_worker_cards_resets_orphaned_cards(tmp_path: Path) -> None:
     assert store.get_card(card_dead.id).status == "queued"
     assert store.get_card(card_live.id).status == "running"
     assert store.get_card(card_waiting.id).status == "waiting_ci"
+
+
+# ---------------------------------------------------------------------------
+# P13.9: autopilot_managed PR auto-merge when CI passes
+# ---------------------------------------------------------------------------
+
+
+def test_autopilot_managed_card_merged_when_ci_pass(tmp_path: Path, monkeypatch) -> None:
+    """run_card() with autopilot_managed=True, linked PR, CI pass → merges directly."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Managed PR auto-merge test",
+        body="autopilot managed card, CI will pass",
+    )
+    store.update_status(
+        card.id,
+        status="queued",
+        metadata_updates={
+            "autopilot_managed": True,
+            "linked_pr_number": 77,
+            "head_branch": f"autopilot/{card.id}",
+        },
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        assert pr_number == 77
+        return (
+            "success",
+            "All reported remote checks passed.",
+            {"url": "https://example/pr/77", "labels": ["autopilot:merge"], "isDraft": False},
+            [],
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    assert result.status == "merged"
+    assert result.pr_number == 77
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.status == "merged"
+
+
+def test_autopilot_managed_card_stays_waiting_when_ci_pending(tmp_path: Path, monkeypatch) -> None:
+    """run_card() with autopilot_managed=True, linked PR, CI pending → falls through to worktree path."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Managed PR CI pending",
+        body="autopilot managed card, CI still running",
+    )
+    store.update_status(
+        card.id,
+        status="queued",
+        metadata_updates={
+            "autopilot_managed": True,
+            "linked_pr_number": 88,
+            "head_branch": f"autopilot/{card.id}",
+        },
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        assert pr_number == 88
+        return ("pending", "Remote CI is still running.", {}, [])
+
+    async def fake_run_agent_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
+        return "done"
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree",
+        lambda self, repo_path, slug, branch=None, agent_id=None: AsyncMock(return_value=SimpleNamespace(path=worktree))(),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree",
+        lambda self, slug: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt", fake_run_agent_prompt
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        lambda self, policies, *, cwd=None: [
+            RepoVerificationStep(command="echo ok", returncode=0, status="success")
+        ],
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_commit_all",
+        lambda self, cwd, message: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
+            True,
+            "branch_push_done",
+            f"Pushed {head_branch}.",
+        ),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
+        lambda self, card, *, head_branch, base_branch, run_report_path, verification_report_path: {
+            "number": 88,
+            "url": "https://example/pr/88",
+        },
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    asyncio.run(store.run_card(card.id))
+    # CI pending → card stays in waiting_ci (don't re-run worktree)
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.status == "waiting_ci"
+
+
+def test_autopilot_managed_card_repairs_when_ci_fail(tmp_path: Path, monkeypatch) -> None:
+    """run_card() with autopilot_managed=True, linked PR, CI fail → marks failed."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Managed PR CI fail test",
+        body="autopilot managed card, CI will fail",
+    )
+    store.update_status(
+        card.id,
+        status="queued",
+        metadata_updates={
+            "autopilot_managed": True,
+            "linked_pr_number": 99,
+            "head_branch": f"autopilot/{card.id}",
+        },
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        assert pr_number == 99
+        return ("failed", "test/check=failure", {"url": "https://example/pr/99"}, [])
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    assert result.status == "failed"
+    assert result.pr_number == 99
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.status == "failed"
+    assert updated.metadata.get("last_failure_stage") == "remote_ci_failed"
+
+
+def test_check_and_merge_managed_prs_merges_when_ci_pass_in_tick(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """_check_and_merge_managed_prs called in tick() merges waiting_ci autopilot_managed card."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Tick CI pass merge test",
+        body="autopilot managed card in waiting_ci",
+    )
+    store.update_status(
+        card.id,
+        status="waiting_ci",
+        metadata_updates={
+            "autopilot_managed": True,
+            "linked_pr_number": 55,
+            "head_branch": f"autopilot/{card.id}",
+        },
+    )
+
+    merge_calls: list[int] = []
+
+    def fake_pr_status_snapshot(self, pr_number: int) -> dict[str, Any]:
+        return {
+            "state": "OPEN",
+            "url": f"https://example/pr/{pr_number}",
+            "labels": ["autopilot:merge"],
+            "isDraft": False,
+            "statusCheckRollup": [
+                {"name": "test", "status": "COMPLETED", "conclusion": "SUCCESS"}
+            ],
+        }
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
+        fake_pr_status_snapshot,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._ci_rollup",
+        lambda self, pr_snapshot: ("success", "All passed", []),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: merge_calls.append(pr_number),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    policies = store.load_policies()
+    merged = asyncio.run(store._check_and_merge_managed_prs(policies))
+
+    assert card.id in merged
+    assert 55 in merge_calls
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.status == "merged"
+
+
+def test_check_and_merge_managed_prs_skips_pending_ci(tmp_path: Path, monkeypatch) -> None:
+    """_check_and_merge_managed_prs skips card when CI is still pending."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Tick CI pending skip test",
+        body="autopilot managed card in waiting_ci",
+    )
+    store.update_status(
+        card.id,
+        status="waiting_ci",
+        metadata_updates={
+            "autopilot_managed": True,
+            "linked_pr_number": 66,
+            "head_branch": f"autopilot/{card.id}",
+        },
+    )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
+        lambda self, pr_number: {
+            "state": "OPEN",
+            "url": f"https://example/pr/{pr_number}",
+            "labels": [],
+            "isDraft": False,
+            "statusCheckRollup": [],
+        },
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._ci_rollup",
+        lambda self, pr_snapshot: ("pending", "Remote CI is still running.", []),
+    )
+
+    import asyncio
+
+    policies = store.load_policies()
+    merged = asyncio.run(store._check_and_merge_managed_prs(policies))
+
+    assert card.id not in merged
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.status == "waiting_ci"
+
+
+def test_check_and_merge_managed_prs_syncs_externally_merged(tmp_path: Path, monkeypatch) -> None:
+    """_check_and_merge_managed_prs syncs card status when PR was merged externally."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="External merge sync test",
+        body="autopilot managed card in waiting_ci",
+    )
+    store.update_status(
+        card.id,
+        status="waiting_ci",
+        metadata_updates={
+            "autopilot_managed": True,
+            "linked_pr_number": 44,
+            "head_branch": f"autopilot/{card.id}",
+        },
+    )
+
+    merge_calls: list[int] = []
+
+    def fake_pr_status_snapshot(self, pr_number: int) -> dict[str, Any]:
+        return {
+            "state": "MERGED",
+            "url": f"https://example/pr/{pr_number}",
+            "labels": [],
+            "isDraft": False,
+            "statusCheckRollup": [],
+        }
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
+        fake_pr_status_snapshot,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._ci_rollup",
+        lambda self, pr_snapshot: ("pending", "No checks.", []),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: merge_calls.append(pr_number),
+    )
+
+    import asyncio
+
+    policies = store.load_policies()
+    merged = asyncio.run(store._check_and_merge_managed_prs(policies))
+
+    assert card.id in merged
+    assert 44 not in merge_calls  # No need to merge — already merged
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.status == "merged"
