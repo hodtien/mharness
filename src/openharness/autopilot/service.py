@@ -3470,16 +3470,41 @@ class RepoAutopilotStore:
         ci_state, ci_summary, pr_snapshot, _checks = await self._wait_for_pr_ci(pr_number, policies)
         pr_url = _safe_text(pr_snapshot.get("url"))
         if ci_state == "failed":
+            ci_meta = {
+                "linked_pr_number": pr_number,
+                "linked_pr_url": pr_url,
+                "last_failure_stage": "remote_ci_failed",
+                "last_failure_summary": ci_summary,
+                "last_ci_conclusion": "failed",
+                "last_ci_summary": ci_summary,
+            }
+            max_attempts = self._max_attempts(policies)
+            if attempt_count < max_attempts:
+                self.update_status(
+                    card.id,
+                    status="queued",
+                    note=f"existing PR CI failed; queued repair retry (attempt {attempt_count})",
+                    metadata_updates={**ci_meta, "attempt_count": attempt_count},
+                )
+                self.append_journal(
+                    kind="ci_failed",
+                    summary=f"{card.title}: remote CI failed, retrying",
+                    task_id=card.id,
+                    metadata={"attempt_count": attempt_count},
+                )
+                return RepoRunResult(
+                    card_id=card.id,
+                    status="queued",
+                    run_report_path=str(current_run_report),
+                    verification_report_path=str(current_verification_report),
+                    pr_number=pr_number,
+                    pr_url=pr_url,
+                )
             self.update_status(
                 card.id,
                 status="failed",
                 note=f"existing PR CI failed: {ci_summary}",
-                metadata_updates={
-                    "linked_pr_number": pr_number,
-                    "linked_pr_url": pr_url,
-                    "last_failure_stage": "remote_ci_failed",
-                    "last_failure_summary": ci_summary,
-                },
+                metadata_updates=ci_meta,
             )
             self._comment_on_pr(pr_number, self._comment_terminal_failure(ci_summary))
             return RepoRunResult(
