@@ -80,6 +80,7 @@ def create_session(
         restore_messages=restore_messages,
         restore_tool_metadata=restore_tool_metadata,
         resumed_from=resumed_from,
+        cwd=str(state.cwd),
     )
     return _entry_payload(entry)
 

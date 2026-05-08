@@ -42,6 +42,7 @@ class SessionManager:
         restore_messages: list[dict] | None = None,
         restore_tool_metadata: dict[str, object] | None = None,
         resumed_from: str | None = None,
+        cwd: str | None = None,
     ) -> SessionEntry:
         session_id = uuid4().hex[:12]
         host_config = BackendHostConfig(
@@ -50,7 +51,7 @@ class SessionManager:
             system_prompt=self._config.system_prompt,
             api_key=self._config.api_key,
             api_format=self._config.api_format,
-            cwd=self._config.cwd,
+            cwd=cwd or self._config.cwd,
             permission_mode=self._config.permission_mode,
             enforce_max_turns=False,
             restore_messages=list(restore_messages) if restore_messages else None,

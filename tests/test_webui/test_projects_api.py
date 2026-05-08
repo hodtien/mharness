@@ -179,6 +179,29 @@ class TestActivateEndpoint:
         assert events[0].project_id == project_id
         assert events[0].project_path == str(project_dir.resolve())
 
+    def test_new_session_uses_current_state_cwd(self, client, tmp_path) -> None:
+        """Verify that newly created sessions use the current WebUIState.cwd."""
+        state = client.app.state.webui
+        manager = client.app.state.webui_session_manager
+
+        # Switch to a different project
+        project_dir = tmp_path / "new-project"
+        project_dir.mkdir()
+        cr = client.post("/api/projects", json={"name": "NewProject", "path": str(project_dir)})
+        project_id = cr.json()["id"]
+        client.post(f"/api/projects/{project_id}/activate")
+
+        # Create a new session via API
+        r = client.post("/api/sessions")
+        assert r.status_code == 200
+        session_id = r.json()["session_id"]
+
+        # Verify the session was created with the correct cwd
+        entry = manager.get(session_id)
+        assert entry is not None
+        assert entry.host._config.cwd == str(project_dir.resolve())
+        assert state.cwd == project_dir.resolve()
+
 
 class TestValidationErrors:
     def test_create_requires_name(self, client, tmp_path) -> None:
