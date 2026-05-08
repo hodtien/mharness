@@ -113,6 +113,15 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
             >
               <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>🤖</span>
             </NavLink>
+            <NavLink
+              to="/settings/cron"
+              className={({ isActive }) =>
+                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)]"}`
+              }
+              onClick={onClose}
+            >
+              <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>⏰</span>
+            </NavLink>
           </div>
         ) : (
           <nav aria-label="Settings" className="flex flex-col gap-1">
@@ -120,6 +129,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
             <NavItem to="/settings/provider" label="Provider" icon="🔌" onClose={onClose} />
             <NavItem to="/settings/models" label="Models" icon="🧠" onClose={onClose} />
             <NavItem to="/settings/agents" label="Agents" icon="🤖" onClose={onClose} />
+            <NavItem to="/settings/cron" label="Schedule" icon="⏰" onClose={onClose} />
           </nav>
         )}
       </Section>
