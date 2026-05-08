@@ -2369,9 +2369,13 @@ class RepoAutopilotStore:
         return target_dir
 
     def _max_attempts(self, policies: dict[str, Any]) -> int:
+        import sys
+        
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
         repair = dict(policies.get("autopilot", {}).get("repair", {}))
-        execution_attempts = int(execution.get("max_attempts", 3) or 3)
+        raw_execution = int(execution.get("max_attempts", 3) or 3)
+        # 0 means unlimited — use sys.maxsize so range() and comparisons work unchanged
+        execution_attempts = sys.maxsize if raw_execution == 0 else raw_execution
         repair_rounds = int(repair.get("max_rounds", 2) or 2)
         return max(execution_attempts, repair_rounds + 1, 1)
 
