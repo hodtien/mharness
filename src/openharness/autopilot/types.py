@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from openharness.config.settings import CronScheduleConfig  # noqa: F401
+
 RepoTaskStatus = Literal[
     "pending",
     "queued",
@@ -118,3 +120,5 @@ class RepoRunResult(BaseModel):
     worktree_path: str = ""
     pr_number: int | None = None
     pr_url: str = ""
+
+

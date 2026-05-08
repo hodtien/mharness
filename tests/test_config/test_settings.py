@@ -9,6 +9,7 @@ import pytest
 
 from openharness.auth.storage import store_credential
 from openharness.config.settings import (
+    CronScheduleConfig,
     ProviderProfile,
     Settings,
     display_model_setting,
@@ -675,3 +676,88 @@ class TestQwenProvider:
         assert materialized.model == "qwen-plus"
         assert materialized.provider == "dashscope"
         assert materialized.api_format == "openai"
+
+
+class TestCronScheduleConfig:
+    """Tests for CronScheduleConfig in Settings."""
+
+    def test_settings_has_cron_schedule_field(self):
+        s = Settings()
+        assert hasattr(s, "cron_schedule")
+        assert isinstance(s.cron_schedule, CronScheduleConfig)
+
+    def test_cron_schedule_defaults(self):
+        cfg = CronScheduleConfig()
+        assert cfg.enabled is True
+        assert cfg.scan_cron == "*/15 * * * *"
+        assert cfg.tick_cron == "0 * * * *"
+        assert cfg.timezone == "UTC"
+        assert cfg.install_mode == "auto"
+
+    def test_cron_schedule_serialization_in_settings(self, tmp_path: Path, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+        monkeypatch.delenv("OPENHARNESS_MODEL", raising=False)
+
+        path = tmp_path / "settings.json"
+        original = Settings(
+            cron_schedule=CronScheduleConfig(
+                enabled=False,
+                scan_cron="*/10 * * * *",
+                tick_cron="30 */2 * * *",
+                timezone="Asia/Ho_Chi_Minh",
+                install_mode="manual",
+            )
+        )
+        save_settings(original, path)
+
+        loaded = load_settings(path)
+        assert loaded.cron_schedule.enabled is False
+        assert loaded.cron_schedule.scan_cron == "*/10 * * * *"
+        assert loaded.cron_schedule.tick_cron == "30 */2 * * *"
+        assert loaded.cron_schedule.timezone == "Asia/Ho_Chi_Minh"
+        assert loaded.cron_schedule.install_mode == "manual"
+
+    def test_cron_schedule_validate_crons_valid(self):
+        cfg = CronScheduleConfig(scan_cron="*/5 * * * *", tick_cron="0 */2 * * *")
+        errors = cfg.validate_crons()
+        assert errors == []
+
+    def test_cron_schedule_validate_crons_invalid_scan(self):
+        cfg = CronScheduleConfig(scan_cron="not a cron")
+        errors = cfg.validate_crons()
+        assert len(errors) == 1
+        assert "scan_cron" in errors[0]
+
+    def test_cron_schedule_validate_crons_invalid_tick(self):
+        cfg = CronScheduleConfig(tick_cron="60 * * * *")  # 60 invalid in minute
+        errors = cfg.validate_crons()
+        assert len(errors) == 1
+        assert "tick_cron" in errors[0]
+
+    def test_cron_schedule_validate_crons_both_invalid(self):
+        cfg = CronScheduleConfig(scan_cron="bad", tick_cron="also bad")
+        errors = cfg.validate_crons()
+        assert len(errors) == 2
+
+    def test_load_settings_preserves_defaults_when_no_cron_schedule_in_file(
+        self, tmp_path: Path, monkeypatch
+    ):
+        """When settings.json has no cron_schedule, defaults are used."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+        monkeypatch.delenv("OPENHARNESS_MODEL", raising=False)
+
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps({"model": "claude-sonnet-4-6"}))
+        loaded = load_settings(path)
+        assert loaded.cron_schedule.scan_cron == "*/15 * * * *"
+        assert loaded.cron_schedule.tick_cron == "0 * * * *"
+        assert loaded.cron_schedule.timezone == "UTC"
+        assert loaded.cron_schedule.install_mode == "auto"

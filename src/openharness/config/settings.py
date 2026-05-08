@@ -103,6 +103,30 @@ class AutoReviewSettings(BaseModel):
     max_wait_seconds: int = 300
 
 
+class CronScheduleConfig(BaseModel):
+    """Cron schedule configuration for autopilot background jobs.
+
+    Persisted in ``settings.json`` under the ``cron_schedule`` key.
+    """
+
+    enabled: bool = True
+    scan_cron: str = "*/15 * * * *"  # scan every 15 minutes
+    tick_cron: str = "0 * * * *"  # tick every hour
+    timezone: str = "UTC"
+    install_mode: str = "auto"  # "auto" | "manual"
+
+    def validate_crons(self) -> list[str]:
+        """Validate all cron expressions. Returns list of error messages (empty if all valid)."""
+        from croniter import croniter
+
+        errors: list[str] = []
+        if not croniter.is_valid(self.scan_cron):
+            errors.append(f"Invalid scan_cron expression: {self.scan_cron!r}")
+        if not croniter.is_valid(self.tick_cron):
+            errors.append(f"Invalid tick_cron expression: {self.tick_cron!r}")
+        return errors
+
+
 class SandboxSettings(BaseModel):
     """Sandbox-runtime integration settings."""
 
@@ -482,6 +506,7 @@ class Settings(BaseModel):
     mcp_servers: dict[str, McpServerConfig] = Field(default_factory=dict)
 
     auto_review: AutoReviewSettings = Field(default_factory=AutoReviewSettings)
+    cron_schedule: CronScheduleConfig = Field(default_factory=CronScheduleConfig)
 
     # UI
     theme: str = "default"
