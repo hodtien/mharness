@@ -86,6 +86,9 @@ export default function CronSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [lastApplied, setLastApplied] = useState<{ scan_cron: string; tick_cron: string; enabled: boolean; install_mode: string } | null>(null);
+  const [installMode, setInstallMode] = useState<"auto" | "manual">("auto");
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Draft inputs (separate from saved config)
   const [draftScanCron, setDraftScanCron] = useState("");
@@ -104,6 +107,7 @@ export default function CronSettingsPage() {
         setDraftScanCron(data.scan_cron);
         setDraftTickCron(data.tick_cron);
         setDraftEnabled(data.enabled);
+        setInstallMode((data.install_mode as "auto" | "manual") || "auto");
       })
       .catch((err) => {
         if (!cancelled) setError(String(err));
@@ -128,6 +132,12 @@ export default function CronSettingsPage() {
         setDraftEnabled(updated.enabled);
         setScanDirty(false);
         setTickDirty(false);
+        setLastApplied({
+          scan_cron: updated.scan_cron,
+          tick_cron: updated.tick_cron,
+          enabled: updated.enabled,
+          install_mode: (updated as CronConfigResponse).install_mode || "auto",
+        });
         toast.success("Cron schedule updated.");
       })
       .catch((err) => {
@@ -143,6 +153,14 @@ export default function CronSettingsPage() {
       .finally(() => {
         setSaving(false);
       });
+  };
+
+  const copyToClipboard = (text: string, field: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(field);
+      toast.success("Copied to clipboard!");
+      setTimeout(() => setCopiedField(null), 2000);
+    });
   };
 
   const handleApply = () => {
@@ -173,6 +191,11 @@ export default function CronSettingsPage() {
     setDraftEnabled(checked);
     // Apply immediately since toggle is a meaningful state change
     applyDraft({ enabled: checked });
+  };
+
+  const handleInstallModeChange = (mode: "auto" | "manual") => {
+    setInstallMode(mode);
+    applyDraft({ install_mode: mode });
   };
 
   const hasChanges = scanDirty || tickDirty;
@@ -398,6 +421,154 @@ export default function CronSettingsPage() {
             {saving ? "Saving…" : "Apply"}
           </button>
         </div>
+
+        {/* Install mode toggle */}
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-lg">
+          <div className="mb-4">
+            <h2 className="text-base font-semibold text-[var(--text)]">Installation Mode</h2>
+            <p className="mt-1 text-xs text-[var(--text-dim)]">
+              Choose how to install cron jobs on your system.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => handleInstallModeChange("auto")}
+              disabled={saving}
+              className={`flex-1 rounded-lg border px-4 py-3 text-sm font-medium transition ${
+                installMode === "auto"
+                  ? "border-cyan-400/50 bg-cyan-400/20 text-cyan-100"
+                  : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)] hover:border-cyan-400/30"
+              }`}
+            >
+              <div className="text-left">
+                <div className="font-medium">⚡ Auto Install</div>
+                <div className="mt-0.5 text-xs opacity-70">Automatically install crontab entries</div>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleInstallModeChange("manual")}
+              disabled={saving}
+              className={`flex-1 rounded-lg border px-4 py-3 text-sm font-medium transition ${
+                installMode === "manual"
+                  ? "border-cyan-400/50 bg-cyan-400/20 text-cyan-100"
+                  : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)] hover:border-cyan-400/30"
+              }`}
+            >
+              <div className="text-left">
+                <div className="font-medium">📋 Manual</div>
+                <div className="mt-0.5 text-xs opacity-70">Show commands to install manually</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Result panel - shown after successful apply */}
+        {lastApplied && (
+          <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-5 shadow-lg">
+            <div className="mb-4 flex items-center gap-2">
+              <span className="text-lg">✅</span>
+              <h2 className="text-base font-semibold text-emerald-200">Configuration Applied</h2>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-lg border border-emerald-400/20 bg-[var(--panel-2)] px-4 py-2">
+                <div>
+                  <div className="text-xs text-emerald-200/60">Scan Cron</div>
+                  <div className="font-mono text-sm text-emerald-100">{lastApplied.scan_cron}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(lastApplied.scan_cron, "scan")}
+                  className="rounded border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-xs text-emerald-200 transition hover:bg-emerald-400/20"
+                >
+                  {copiedField === "scan" ? "✓ Copied" : "Copy"}
+                </button>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-emerald-400/20 bg-[var(--panel-2)] px-4 py-2">
+                <div>
+                  <div className="text-xs text-emerald-200/60">Tick Cron</div>
+                  <div className="font-mono text-sm text-emerald-100">{lastApplied.tick_cron}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(lastApplied.tick_cron, "tick")}
+                  className="rounded border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-xs text-emerald-200 transition hover:bg-emerald-400/20"
+                >
+                  {copiedField === "tick" ? "✓ Copied" : "Copy"}
+                </button>
+              </div>
+              {lastApplied.enabled ? (
+                <div className="text-xs text-emerald-200/70">
+                  Scheduling is <span className="font-medium text-emerald-200">enabled</span>.
+                </div>
+              ) : (
+                <div className="text-xs text-amber-200/70">
+                  Scheduling is <span className="font-medium text-amber-200">disabled</span>.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Manual instructions fallback */}
+        {installMode === "manual" && (
+          <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-5 shadow-lg">
+            <div className="mb-4 flex items-center gap-2">
+              <span className="text-lg">📋</span>
+              <h2 className="text-base font-semibold text-amber-200">Manual Installation</h2>
+            </div>
+            <p className="mb-4 text-sm text-amber-200/80">
+              Run these commands in your terminal to install the cron jobs manually:
+            </p>
+            <div className="space-y-3">
+              <div>
+                <div className="mb-1 text-xs font-medium text-amber-200/60">Scan Job</div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 overflow-x-auto rounded border border-amber-400/20 bg-[var(--panel-2)] px-3 py-2 font-mono text-xs text-amber-100">
+                    {"(crontab -l 2>/dev/null | grep -v \"openharness-scan\"; echo \"*/15 * * * * cd /path/to/project && uv run openharness scan\") | crontab -"}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copyToClipboard(
+                        `(crontab -l 2>/dev/null | grep -v "openharness-scan"; echo "*/15 * * * * cd /path/to/project && uv run openharness scan") | crontab -`,
+                        "manual-scan"
+                      )
+                    }
+                    className="shrink-0 rounded border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-xs text-amber-200 transition hover:bg-amber-400/20"
+                  >
+                    {copiedField === "manual-scan" ? "✓ Copied" : "Copy"}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-medium text-amber-200/60">Tick Job</div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 overflow-x-auto rounded border border-amber-400/20 bg-[var(--panel-2)] px-3 py-2 font-mono text-xs text-amber-100">
+                    {"(crontab -l 2>/dev/null | grep -v \"openharness-tick\"; echo \"0 * * * * cd /path/to/project && uv run openharness tick\") | crontab -"}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copyToClipboard(
+                        `(crontab -l 2>/dev/null | grep -v "openharness-tick"; echo "0 * * * * cd /path/to/project && uv run openharness tick") | crontab -`,
+                        "manual-tick"
+                      )
+                    }
+                    className="shrink-0 rounded border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-xs text-amber-200 transition hover:bg-amber-400/20"
+                  >
+                    {copiedField === "manual-tick" ? "✓ Copied" : "Copy"}
+                  </button>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-amber-200/60">
+                Replace <code className="font-mono text-amber-200/80">/path/to/project</code> with your actual project path
+                and adjust cron expressions as needed. Current values: Scan=<span className="font-mono text-amber-200">{lastApplied?.scan_cron}</span>, Tick=<span className="font-mono text-amber-200">{lastApplied?.tick_cron}</span>.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Helper text */}
         <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-lg">
