@@ -155,6 +155,28 @@ export interface AgentPatch {
   permission_mode?: string;
 }
 
+// ---------------- Cron Schedule Config ----------------
+
+export interface CronConfigResponse {
+  enabled: boolean;
+  scan_cron: string;
+  tick_cron: string;
+  timezone: string;
+  install_mode: string;
+  scan_cron_description: string;
+  tick_cron_description: string;
+  next_scan_runs: string[];
+  next_tick_runs: string[];
+}
+
+export interface CronConfigPatch {
+  enabled?: boolean;
+  scan_cron?: string;
+  tick_cron?: string;
+  timezone?: string;
+  install_mode?: string;
+}
+
 // ---------------- Projects ----------------
 
 export interface Project {
@@ -202,6 +224,12 @@ export const api = {
     ),
   listCron: () =>
     apiFetch<{ jobs: Array<Record<string, unknown>>; error?: string }>("/api/cron/jobs"),
+  getCronConfig: () => apiFetch<CronConfigResponse>("/api/cron/config"),
+  patchCronConfig: (patch: CronConfigPatch) =>
+    apiFetch<CronConfigResponse>("/api/cron/config", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
   getModes: () => apiFetch<ModesPayload>("/api/modes"),
   patchModes: (patch: ModesPatch) =>
     apiFetch<ModesPayload>("/api/modes", {

@@ -13,6 +13,7 @@ import ModesSettingsPage from "./pages/ModesSettingsPage";
 import ProviderSettingsPage from "./pages/ProviderSettingsPage";
 import ModelsSettingsPage from "./pages/ModelsSettingsPage";
 import AgentsSettingsPage from "./pages/AgentsSettingsPage";
+import CronSettingsPage from "./pages/CronSettingsPage";
 import AutopilotPage from "./pages/PipelinePage";
 import TasksPage from "./pages/TasksPage";
 import ProjectsPage from "./pages/ProjectsPage";
@@ -163,6 +164,10 @@ export default function App() {
           <Route
             path="/settings/agents"
             element={<AgentsSettingsPage />}
+          />
+          <Route
+            path="/settings/cron"
+            element={<CronSettingsPage />}
           />
           <Route
             path="/settings/*"
