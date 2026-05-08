@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from croniter import croniter
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -58,6 +60,18 @@ def _describe_cron(expression: str) -> str:
 # Request/response models
 # ---------------------------------------------------------------------------
 
+class InstallResult(BaseModel):
+    """Result of a cron installation attempt."""
+
+    success: bool
+    message: str = ""
+    scan_installed: bool = False
+    tick_installed: bool = False
+    scan_line: str = ""
+    tick_line: str = ""
+    manual_commands: list[str] = Field(default_factory=list)
+
+
 class CronConfigResponse(BaseModel):
     """Current cron schedule configuration."""
 
@@ -66,6 +80,7 @@ class CronConfigResponse(BaseModel):
     tick_cron: str
     timezone: str
     install_mode: str
+    project_path: str = Field(description="Absolute path of the project")
     scan_cron_description: str = Field(description="Human-readable description of scan_cron")
     tick_cron_description: str = Field(description="Human-readable description of tick_cron")
     next_scan_runs: list[str] = Field(
@@ -75,6 +90,10 @@ class CronConfigResponse(BaseModel):
     next_tick_runs: list[str] = Field(
         default_factory=list,
         description="ISO-8601 timestamps for the next 3 tick runs. Empty when disabled.",
+    )
+    install_result: InstallResult | None = Field(
+        default=None,
+        description="Result of the most recent install attempt. Only present after a PATCH.",
     )
 
 
@@ -113,6 +132,7 @@ def patch_cron_config(payload: CronConfigPatch) -> CronConfigResponse:
     """Update cron schedule configuration fields.
 
     Raises HTTP 400 if any cron expression is invalid.
+    When install_mode is "auto", also triggers cron job installation.
     """
     updates = payload.model_dump(exclude_none=True)
     if not updates:
@@ -144,10 +164,82 @@ def patch_cron_config(payload: CronConfigPatch) -> CronConfigResponse:
     )
     save_settings(settings)
 
-    return _build_cron_config_response(proposed)
+    # Trigger installation if in auto mode and cron is enabled
+    install_result: InstallResult | None = None
+    cwd = Path.cwd()
+    if proposed.install_mode == "auto" and proposed.enabled:
+        from openharness.services.cron import upsert_cron_job
+
+        cwd = Path.cwd()
+        scan_job = {
+            "name": "autopilot.scan",
+            "schedule": proposed.scan_cron,
+            "command": f"oh autopilot scan all --cwd {cwd}",
+            "cwd": str(cwd),
+            "project_path": str(cwd),
+        }
+        tick_job = {
+            "name": "autopilot.tick",
+            "schedule": proposed.tick_cron,
+            "command": f"oh autopilot tick --cwd {cwd}",
+            "cwd": str(cwd),
+            "project_path": str(cwd),
+        }
+        scan_line = f"{scan_job['schedule']} oh autopilot scan all --cwd {cwd}"
+        tick_line = f"{tick_job['schedule']} oh autopilot tick --cwd {cwd}"
+
+        scan_installed = False
+        tick_installed = False
+        errors: list[str] = []
+
+        try:
+            upsert_cron_job(scan_job)
+            scan_installed = True
+        except Exception as e:
+            errors.append(f"Scan: {e}")
+
+        try:
+            upsert_cron_job(tick_job)
+            tick_installed = True
+        except Exception as e:
+            errors.append(f"Tick: {e}")
+
+        if scan_installed and tick_installed:
+            install_result = InstallResult(
+                success=True,
+                message="Cron jobs installed successfully.",
+                scan_installed=True,
+                tick_installed=True,
+                scan_line=scan_line,
+                tick_line=tick_line,
+            )
+        else:
+            install_result = InstallResult(
+                success=False,
+                message="; ".join(errors) if errors else "Installation partially failed.",
+                scan_installed=scan_installed,
+                tick_installed=tick_installed,
+                scan_line=scan_line,
+                tick_line=tick_line,
+                manual_commands=_build_manual_commands(proposed.scan_cron, proposed.tick_cron, cwd),
+            )
+
+    return _build_cron_config_response(proposed, install_result=install_result, project_path=str(cwd))
 
 
-def _build_cron_config_response(cfg: CronScheduleConfig) -> CronConfigResponse:
+def _build_manual_commands(scan_cron: str, tick_cron: str, cwd: Path) -> list[str]:
+    """Build manual crontab installation commands."""
+    return [
+        f"(crontab -l 2>/dev/null | grep -v 'oh autopilot scan all'; echo \"{scan_cron} oh autopilot scan all --cwd {cwd}\") | crontab -",
+        f"(crontab -l 2>/dev/null | grep -v 'oh autopilot tick'; echo \"{tick_cron} oh autopilot tick --cwd {cwd}\") | crontab -",
+    ]
+
+
+def _build_cron_config_response(
+    cfg: CronScheduleConfig,
+    install_result: InstallResult | None = None,
+    project_path: str | None = None,
+) -> CronConfigResponse:
     """Construct CronConfigResponse, including empty run lists when disabled."""
     if cfg.enabled:
         scan_runs = [dt.isoformat() for dt in preview_cron_next_runs(cfg.scan_cron, 3, tz_name=cfg.timezone)]
@@ -162,8 +254,10 @@ def _build_cron_config_response(cfg: CronScheduleConfig) -> CronConfigResponse:
         tick_cron=cfg.tick_cron,
         timezone=cfg.timezone,
         install_mode=cfg.install_mode,
+        project_path=project_path or str(Path.cwd()),
         scan_cron_description=_describe_cron(cfg.scan_cron),
         tick_cron_description=_describe_cron(cfg.tick_cron),
         next_scan_runs=scan_runs,
         next_tick_runs=tick_runs,
+        install_result=install_result,
     )

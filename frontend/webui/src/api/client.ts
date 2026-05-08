@@ -163,10 +163,20 @@ export interface CronConfigResponse {
   tick_cron: string;
   timezone: string;
   install_mode: string;
+  project_path: string;
   scan_cron_description: string;
   tick_cron_description: string;
   next_scan_runs: string[];
   next_tick_runs: string[];
+  install_result?: {
+    success: boolean;
+    message: string;
+    scan_installed: boolean;
+    tick_installed: boolean;
+    scan_line: string;
+    tick_line: string;
+    manual_commands: string[];
+  };
 }
 
 export interface CronConfigPatch {

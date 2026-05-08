@@ -86,7 +86,7 @@ export default function CronSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [lastApplied, setLastApplied] = useState<{ scan_cron: string; tick_cron: string; enabled: boolean; install_mode: string } | null>(null);
+  const [lastApplied, setLastApplied] = useState<{ scan_cron: string; tick_cron: string; enabled: boolean; install_mode: string; project_path: string; install_result?: CronConfigResponse["install_result"] } | null>(null);
   const [installMode, setInstallMode] = useState<"auto" | "manual">("auto");
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -137,6 +137,8 @@ export default function CronSettingsPage() {
           tick_cron: updated.tick_cron,
           enabled: updated.enabled,
           install_mode: (updated as CronConfigResponse).install_mode || "auto",
+          project_path: (updated as CronConfigResponse).project_path || "",
+          install_result: updated.install_result,
         });
         toast.success("Cron schedule updated.");
       })
@@ -465,11 +467,33 @@ export default function CronSettingsPage() {
         </div>
 
         {/* Result panel - shown after successful apply */}
-        {lastApplied && (
-          <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-5 shadow-lg">
+        {lastApplied && lastApplied.install_result && (
+          <div className={`rounded-xl border p-5 shadow-lg ${
+            lastApplied.install_result
+              ? lastApplied.install_result.success
+                ? "rounded-xl border-emerald-400/30 bg-emerald-500/10"
+                : "rounded-xl border-red-400/30 bg-red-500/10"
+              : "rounded-xl border-emerald-400/30 bg-emerald-500/10"
+          }`}>
             <div className="mb-4 flex items-center gap-2">
-              <span className="text-lg">✅</span>
-              <h2 className="text-base font-semibold text-emerald-200">Configuration Applied</h2>
+              {lastApplied.install_result ? (
+                lastApplied.install_result.success ? (
+                  <>
+                    <span className="text-lg">✅</span>
+                    <h2 className="text-base font-semibold text-emerald-200">Configuration Applied</h2>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-lg">❌</span>
+                    <h2 className="text-base font-semibold text-red-200">Installation Failed</h2>
+                  </>
+                )
+              ) : (
+                <>
+                  <span className="text-lg">✅</span>
+                  <h2 className="text-base font-semibold text-emerald-200">Configuration Applied</h2>
+                </>
+              )}
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between rounded-lg border border-emerald-400/20 bg-[var(--panel-2)] px-4 py-2">
@@ -498,6 +522,77 @@ export default function CronSettingsPage() {
                   {copiedField === "tick" ? "✓ Copied" : "Copy"}
                 </button>
               </div>
+
+              {/* Install result details */}
+              {lastApplied.install_result && (
+                <>
+                  {lastApplied.install_result.success ? (
+                    <div className="space-y-2">
+                      {lastApplied.install_result.scan_line && (
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 overflow-x-auto rounded border border-emerald-400/20 bg-[var(--panel-2)] px-3 py-2 font-mono text-xs text-emerald-100">
+                            {lastApplied.install_result.scan_line}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(lastApplied.install_result!.scan_line, "scan-line")}
+                            className="shrink-0 rounded border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-xs text-emerald-200 transition hover:bg-emerald-400/20"
+                          >
+                            {copiedField === "scan-line" ? "✓" : "Copy"}
+                          </button>
+                        </div>
+                      )}
+                      {lastApplied.install_result.tick_line && (
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 overflow-x-auto rounded border border-emerald-400/20 bg-[var(--panel-2)] px-3 py-2 font-mono text-xs text-emerald-100">
+                            {lastApplied.install_result.tick_line}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(lastApplied.install_result!.tick_line, "tick-line")}
+                            className="shrink-0 rounded border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-xs text-emerald-200 transition hover:bg-emerald-400/20"
+                          >
+                            {copiedField === "tick-line" ? "✓" : "Copy"}
+                          </button>
+                        </div>
+                      )}
+                      <div className="text-xs text-emerald-200/70">
+                        {lastApplied.install_result.scan_installed && lastApplied.install_result.tick_installed
+                          ? "Both scan and tick cron jobs installed."
+                          : lastApplied.install_result.scan_installed
+                            ? "Only scan cron job installed."
+                            : lastApplied.install_result.tick_installed
+                              ? "Only tick cron job installed."
+                              : "Cron jobs registered in local registry."}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="rounded-md border border-red-400/20 bg-red-900/20 px-3 py-2 text-sm text-red-200">
+                        {lastApplied.install_result.message}
+                      </div>
+                      <div className="text-xs text-red-200/60">
+                        Falling back to manual installation. Use the commands below:
+                      </div>
+                      {lastApplied.install_result.manual_commands?.map((cmd, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <code className="flex-1 overflow-x-auto rounded border border-red-400/20 bg-[var(--panel-2)] px-3 py-2 font-mono text-xs text-red-100">
+                            {cmd}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(cmd, `manual-${i}`)}
+                            className="shrink-0 rounded border border-red-400/30 bg-red-400/10 px-2 py-1 text-xs text-red-200 transition hover:bg-red-400/20"
+                          >
+                            {copiedField === `manual-${i}` ? "✓" : "Copy"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
               {lastApplied.enabled ? (
                 <div className="text-xs text-emerald-200/70">
                   Scheduling is <span className="font-medium text-emerald-200">enabled</span>.
@@ -526,13 +621,13 @@ export default function CronSettingsPage() {
                 <div className="mb-1 text-xs font-medium text-amber-200/60">Scan Job</div>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 overflow-x-auto rounded border border-amber-400/20 bg-[var(--panel-2)] px-3 py-2 font-mono text-xs text-amber-100">
-                    {"(crontab -l 2>/dev/null | grep -v \"openharness-scan\"; echo \"*/15 * * * * cd /path/to/project && uv run openharness scan\") | crontab -"}
+                    {`(crontab -l 2>/dev/null | grep -v 'oh autopilot scan all'; echo "${lastApplied?.scan_cron || "*/15 * * * *"} oh autopilot scan all --cwd ${lastApplied?.project_path || "/path/to/project"}") | crontab -`}
                   </code>
                   <button
                     type="button"
                     onClick={() =>
                       copyToClipboard(
-                        `(crontab -l 2>/dev/null | grep -v "openharness-scan"; echo "*/15 * * * * cd /path/to/project && uv run openharness scan") | crontab -`,
+                        `(crontab -l 2>/dev/null | grep -v 'oh autopilot scan all'; echo "${lastApplied?.scan_cron || "*/15 * * * *"} oh autopilot scan all --cwd ${lastApplied?.project_path || "/path/to/project"}") | crontab -`,
                         "manual-scan"
                       )
                     }
@@ -546,13 +641,13 @@ export default function CronSettingsPage() {
                 <div className="mb-1 text-xs font-medium text-amber-200/60">Tick Job</div>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 overflow-x-auto rounded border border-amber-400/20 bg-[var(--panel-2)] px-3 py-2 font-mono text-xs text-amber-100">
-                    {"(crontab -l 2>/dev/null | grep -v \"openharness-tick\"; echo \"0 * * * * cd /path/to/project && uv run openharness tick\") | crontab -"}
+                    {`(crontab -l 2>/dev/null | grep -v 'oh autopilot tick'; echo "${lastApplied?.tick_cron || "0 * * * *"} oh autopilot tick --cwd ${lastApplied?.project_path || "/path/to/project"}") | crontab -`}
                   </code>
                   <button
                     type="button"
                     onClick={() =>
                       copyToClipboard(
-                        `(crontab -l 2>/dev/null | grep -v "openharness-tick"; echo "0 * * * * cd /path/to/project && uv run openharness tick") | crontab -`,
+                        `(crontab -l 2>/dev/null | grep -v 'oh autopilot tick'; echo "${lastApplied?.tick_cron || "0 * * * *"} oh autopilot tick --cwd ${lastApplied?.project_path || "/path/to/project"}") | crontab -`,
                         "manual-tick"
                       )
                     }
@@ -563,8 +658,7 @@ export default function CronSettingsPage() {
                 </div>
               </div>
               <p className="mt-2 text-xs text-amber-200/60">
-                Replace <code className="font-mono text-amber-200/80">/path/to/project</code> with your actual project path
-                and adjust cron expressions as needed. Current values: Scan=<span className="font-mono text-amber-200">{lastApplied?.scan_cron}</span>, Tick=<span className="font-mono text-amber-200">{lastApplied?.tick_cron}</span>.
+                Copy-paste these commands into your terminal. Adjust the path if needed.
               </p>
             </div>
           </div>
