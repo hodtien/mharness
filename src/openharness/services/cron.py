@@ -45,9 +45,61 @@ def validate_cron_expression(expression: str) -> bool:
 
 
 def next_run_time(expression: str, base: datetime | None = None) -> datetime:
-    """Return the next run time for a cron expression."""
+    """Return the next run time for a cron expression.
+
+    The returned datetime is naive (no tzinfo) since that is what croniter
+    returns.  Callers who need an aware UTC value should attach ``timezone.utc``
+    after the call.
+    """
     base = base or datetime.now(timezone.utc)
     return croniter(expression, base).get_next(datetime)
+
+
+def preview_cron_next_runs(
+    expression: str,
+    count: int = 3,
+    base: datetime | None = None,
+    tz_name: str | None = None,
+) -> list[datetime]:
+    """Return the next ``count`` run timestamps for a cron expression.
+
+    Args:
+        expression: A valid croniter-style cron expression.
+        count: How many future runs to return (default 3).
+        base: Reference datetime (defaults to now in UTC).
+        tz_name: Timezone name to attach to the output datetimes, e.g. ``"UTC"``
+                 or ``"America/New_York"``.  The label is passed through unchanged
+                 for display purposes; if zoneinfo is available the datetimes
+                 are converted to that zone.
+
+    Returns:
+        List of aware datetimes. Returns an empty list if the expression is
+        invalid or ``count`` is 0.
+    """
+    if count <= 0 or not validate_cron_expression(expression):
+        return []
+
+    count = min(count, 100)  # cap to prevent unbounded iteration
+
+    base = base or datetime.now(timezone.utc)
+    iter_ = croniter(expression, base)
+    runs: list[datetime] = []
+    for _ in range(count):
+        naive = iter_.get_next(datetime)
+        # Attach UTC so isoformat() produces an unambiguous timezone marker
+        runs.append(naive.replace(tzinfo=timezone.utc))
+
+    if tz_name:
+        try:
+            import zoneinfo
+
+            tz = zoneinfo.ZoneInfo(tz_name)
+            runs = [run.astimezone(tz) for run in runs]
+        except Exception:
+            # If timezone name is invalid or zoneinfo unavailable, keep UTC
+            pass
+
+    return runs
 
 
 def upsert_cron_job(job: dict[str, Any]) -> None:

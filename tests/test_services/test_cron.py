@@ -14,6 +14,7 @@ from openharness.services.cron import (
     load_cron_jobs,
     mark_job_run,
     next_run_time,
+    preview_cron_next_runs,
     set_job_enabled,
     upsert_cron_job,
     validate_cron_expression,
@@ -132,7 +133,63 @@ class TestMarkRun:
         mark_job_run("nope", success=True)
 
 
-class TestCorruptData:
+class TestPreviewCronNextRuns:
+    """Tests for preview_cron_next_runs with frozen time."""
+
+    def test_preview_returns_count_runs(self) -> None:
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        runs = preview_cron_next_runs("0 * * * *", count=3, base=base)
+        assert len(runs) == 3
+        # hourly: next runs are 01:00, 02:00, 03:00 UTC
+        assert runs[0] == datetime(2026, 1, 1, 1, 0, 0, tzinfo=timezone.utc)
+        assert runs[1] == datetime(2026, 1, 1, 2, 0, 0, tzinfo=timezone.utc)
+        assert runs[2] == datetime(2026, 1, 1, 3, 0, 0, tzinfo=timezone.utc)
+
+    def test_preview_every_5_minutes(self) -> None:
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        runs = preview_cron_next_runs("*/5 * * * *", count=3, base=base)
+        assert len(runs) == 3
+        assert runs[0] == datetime(2026, 1, 1, 0, 5, 0, tzinfo=timezone.utc)
+        assert runs[1] == datetime(2026, 1, 1, 0, 10, 0, tzinfo=timezone.utc)
+        assert runs[2] == datetime(2026, 1, 1, 0, 15, 0, tzinfo=timezone.utc)
+
+    def test_preview_respects_timezone_label(self) -> None:
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        runs = preview_cron_next_runs("0 * * * *", count=1, base=base, tz_name="UTC")
+        assert len(runs) == 1
+        # UTC should have +00:00 offset
+        assert runs[0].tzinfo is not None
+        assert runs[0].utcoffset() == datetime(2026, 1, 1, tzinfo=timezone.utc).utcoffset()
+
+    def test_preview_invalid_expression_returns_empty(self) -> None:
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        runs = preview_cron_next_runs("not a cron", count=3, base=base)
+        assert runs == []
+
+    def test_preview_count_zero_returns_empty(self) -> None:
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        runs = preview_cron_next_runs("0 * * * *", count=0, base=base)
+        assert runs == []
+
+    def test_preview_negative_count_returns_empty(self) -> None:
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        runs = preview_cron_next_runs("0 * * * *", count=-1, base=base)
+        assert runs == []
+
+    def test_preview_default_count_is_three(self) -> None:
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        runs = preview_cron_next_runs("0 * * * *", base=base)
+        assert len(runs) == 3
+
+    def test_preview_converted_to_timezone(self) -> None:
+        """Results are converted via astimezone, not just stamped."""
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        runs = preview_cron_next_runs("0 * * * *", count=1, base=base, tz_name="America/New_York")
+        assert len(runs) == 1
+        # 01:00 UTC -> 20:00 EST previous day
+        assert runs[0].tzinfo is not None
+        offset = runs[0].utcoffset()
+        assert offset is not None and offset.total_seconds() == -5 * 3600
     def test_corrupt_json(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         bad_file = tmp_path / "data" / "cron_jobs.json"
         bad_file.parent.mkdir(parents=True, exist_ok=True)
