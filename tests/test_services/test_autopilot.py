@@ -2405,6 +2405,30 @@ def test_remote_code_review_blocks_merge_and_sets_human_gate(tmp_path: Path, mon
     )
     store.update_status(card.id, status="queued", metadata_updates={"attempt_count": 3})
 
+    # Mock preflight checks to pass (all non-fatal)
+    from openharness.autopilot import PreflightCheck
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_cwd_exists",
+        lambda self: PreflightCheck(name="cwd_exists", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_git_repo",
+        lambda self: PreflightCheck(name="git_repo", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_model_available",
+        lambda self, m: PreflightCheck(name="model_available", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_auth_status",
+        lambda self: PreflightCheck(name="auth_ok", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_github_available",
+        lambda self: PreflightCheck(name="github_available", status="ok", reason="ok"),
+    )
+
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
 
@@ -2471,6 +2495,30 @@ def test_remote_code_review_error_routes_to_human_gate(tmp_path: Path, monkeypat
         source_ref="pr:89",
     )
     store.update_status(card.id, status="queued", metadata_updates={"attempt_count": 3})
+
+    # Mock preflight checks to pass (all non-fatal)
+    from openharness.autopilot import PreflightCheck
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_cwd_exists",
+        lambda self: PreflightCheck(name="cwd_exists", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_git_repo",
+        lambda self: PreflightCheck(name="git_repo", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_model_available",
+        lambda self, m: PreflightCheck(name="model_available", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_auth_status",
+        lambda self: PreflightCheck(name="auth_ok", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_github_available",
+        lambda self: PreflightCheck(name="github_available", status="ok", reason="ok"),
+    )
 
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
@@ -2602,6 +2650,30 @@ def test_pull_base_branch_called_after_merge(tmp_path: Path, monkeypatch) -> Non
         title="GitHub PR #90: Existing autopilot PR",
         body="open",
         source_ref="pr:90",
+    )
+
+    # Mock preflight checks to pass (all non-fatal)
+    from openharness.autopilot import PreflightCheck
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_cwd_exists",
+        lambda self: PreflightCheck(name="cwd_exists", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_git_repo",
+        lambda self: PreflightCheck(name="git_repo", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_model_available",
+        lambda self, m: PreflightCheck(name="model_available", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_auth_status",
+        lambda self: PreflightCheck(name="auth_ok", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_github_available",
+        lambda self: PreflightCheck(name="github_available", status="ok", reason="ok"),
     )
 
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
@@ -3111,6 +3183,30 @@ def test_base_advance_journals_notification(tmp_path: Path, monkeypatch) -> None
     active, _ = store.enqueue_card(source_kind="manual_idea", title="Active follow-up", body="body")
     store.update_status(active.id, status="running")
 
+    # Mock preflight checks to pass (all non-fatal)
+    from openharness.autopilot import PreflightCheck
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_cwd_exists",
+        lambda self: PreflightCheck(name="cwd_exists", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_git_repo",
+        lambda self: PreflightCheck(name="git_repo", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_model_available",
+        lambda self, m: PreflightCheck(name="model_available", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_auth_status",
+        lambda self: PreflightCheck(name="auth_ok", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_github_available",
+        lambda self: PreflightCheck(name="github_available", status="ok", reason="ok"),
+    )
+
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         return _green_pr_snapshot(pr_number)
 
@@ -3196,6 +3292,30 @@ def _run_card_with_locked_pull(
     contains the main-checkout lock-protected _pull_base_branch and
     _install_editable call sites.
     """
+    from openharness.autopilot import PreflightCheck
+
+    # Mock preflight checks to pass (all non-fatal)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_cwd_exists",
+        lambda self: PreflightCheck(name="cwd_exists", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_git_repo",
+        lambda self: PreflightCheck(name="git_repo", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_model_available",
+        lambda self, m: PreflightCheck(name="model_available", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_auth_status",
+        lambda self: PreflightCheck(name="auth_ok", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_github_available",
+        lambda self: PreflightCheck(name="github_available", status="ok", reason="ok"),
+    )
+
     card, _ = store.enqueue_card(
         source_kind="github_pr",
         title="GitHub PR #500: Existing autopilot PR",
@@ -4313,6 +4433,12 @@ def test_existing_pr_card_conflicting_branch_passes_through_ci(tmp_path: Path, m
         lambda self, pr_number, comment: None,
     )
 
+    # Mock _check_github_available to return ok status
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_github_available",
+        lambda self: PreflightCheck(name="github_available", status="ok", reason="GitHub CLI authenticated"),
+    )
+
     result = asyncio.run(store.run_card(card.id))
     assert result.status == "completed"
     assert result.pr_number == 42
@@ -4333,12 +4459,14 @@ def test_repair_exhausted_managed_pr_card_passes_through_ci(
     sync_cwd = tmp_path / "worktrees" / "card-42"
     sync_cwd.mkdir(parents=True)
     card, _ = store.enqueue_card(
-        source_kind="manual_idea",
+        source_kind="github_pr",
         title="Managed PR repair exhausted",
         body="",
+        source_ref="pr:42",
         metadata={
             "autopilot_managed": True,
             "last_failure_stage": "repair_exhausted",
+            "attempt_count": 3,
             "linked_pr_number": 42,
             "head_branch": "autopilot/card-42",
             "worktree_path": str(sync_cwd),
@@ -4374,6 +4502,31 @@ def test_repair_exhausted_managed_pr_card_passes_through_ci(
         "openharness.autopilot.service.RepoAutopilotStore._is_same_git_common_dir",
         lambda self, cwd: True,
     )
+
+    # Mock preflight checks to pass (all non-fatal)
+    from openharness.autopilot import PreflightCheck
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_cwd_exists",
+        lambda self: PreflightCheck(name="cwd_exists", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_git_repo",
+        lambda self: PreflightCheck(name="git_repo", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_model_available",
+        lambda self, m: PreflightCheck(name="model_available", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_auth_status",
+        lambda self: PreflightCheck(name="auth_ok", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_github_available",
+        lambda self: PreflightCheck(name="github_available", status="ok", reason="ok"),
+    )
+
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
         fake_push_pr_branch_with_sync,
@@ -4392,6 +4545,29 @@ def test_repair_exhausted_managed_pr_card_passes_through_ci(
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
         lambda self, pr_number, comment: None,
+    )
+
+    # Mock _current_repo_full_name to avoid real git/gh calls
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._current_repo_full_name",
+        lambda self: "test-owner/test-repo",
+    )
+
+    # Mock _pr_status_snapshot to return a green PR
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
+        lambda self, pr_number: {
+            "state": "open",
+            "url": "https://example/pr/42",
+            "labels": [],
+            "isDraft": False,
+        },
+    )
+
+    # Mock _run_verification_steps to avoid git worktree add in baseline check
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        lambda self, *args, **kwargs: [],
     )
 
     result = asyncio.run(store.run_card(card.id))
@@ -4621,6 +4797,31 @@ def test_existing_pr_card_branch_sync_failure_marks_failed(
         "openharness.autopilot.service.RepoAutopilotStore._is_same_git_common_dir",
         lambda self, cwd: True,
     )
+
+    # Mock preflight checks to pass (all non-fatal)
+    from openharness.autopilot import PreflightCheck
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_cwd_exists",
+        lambda self: PreflightCheck(name="cwd_exists", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_git_repo",
+        lambda self: PreflightCheck(name="git_repo", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_model_available",
+        lambda self, m: PreflightCheck(name="model_available", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_auth_status",
+        lambda self: PreflightCheck(name="auth_ok", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_github_available",
+        lambda self: PreflightCheck(name="github_available", status="ok", reason="ok"),
+    )
+
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
         fake_push_pr_branch_with_sync,
