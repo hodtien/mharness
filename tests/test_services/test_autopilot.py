@@ -4270,6 +4270,10 @@ def test_autopilot_managed_card_merged_when_ci_pass(tmp_path: Path, monkeypatch)
         )
 
     monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
+        lambda self, pr_number: {"state": "OPEN", "url": "https://example/pr/77"},
+    )
+    monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
     )
     monkeypatch.setattr(
@@ -4316,6 +4320,11 @@ def test_autopilot_managed_card_stays_waiting_when_ci_pending(tmp_path: Path, mo
     async def fake_wait_for_pr_ci(self, pr_number: int, policies):
         assert pr_number == 88
         return ("pending", "Remote CI is still running.", {}, [])
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
+        lambda self, pr_number: {"state": "OPEN", "url": "https://example/pr/88"},
+    )
 
     async def fake_run_agent_prompt(
         self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
@@ -4410,6 +4419,10 @@ def test_autopilot_managed_card_repairs_when_ci_fail(tmp_path: Path, monkeypatch
         assert pr_number == 99
         return ("failed", "test/check=failure", {"url": "https://example/pr/99"}, [])
 
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
+        lambda self, pr_number: {"state": "OPEN", "url": "https://example/pr/99"},
+    )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
     )
@@ -4589,7 +4602,55 @@ def test_check_and_merge_managed_prs_syncs_externally_merged(tmp_path: Path, mon
     merged = asyncio.run(store._check_and_merge_managed_prs(policies))
 
     assert card.id in merged
-    assert 44 not in merge_calls  # No need to merge — already merged
+    assert 44 not in merge_calls
     updated = store.get_card(card.id)
     assert updated is not None
     assert updated.status == "merged"
+
+
+def test_run_card_with_already_merged_pr_short_circuits(tmp_path: Path, monkeypatch) -> None:
+    import asyncio
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    sync_cwd = tmp_path / "worktrees" / "card-42"
+    sync_cwd.mkdir(parents=True)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Managed PR already merged",
+        body="",
+        metadata={
+            "autopilot_managed": True,
+            "last_failure_stage": "no_changes",
+            "linked_pr_number": 42,
+            "head_branch": "autopilot/card-42",
+            "worktree_path": str(sync_cwd),
+        },
+    )
+    store.update_status(card.id, status="repairing", note="retrying")
+    claimed_by = "pid-test-1234"
+    store.update_status(
+        card.id,
+        status="repairing",
+        metadata_updates={"worker_id": claimed_by},
+    )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
+        lambda self, pr_number: {
+            "state": "MERGED",
+            "url": "https://example/pr/42",
+        },
+    )
+
+    result = asyncio.run(store.run_card(card.id, _claimed_by=claimed_by))
+
+    assert result.status == "merged"
+    assert result.pr_number == 42
+    assert result.pr_url == "https://example/pr/42"
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.status == "merged"
+    assert updated.metadata.get("human_gate_pending") is False
+    assert updated.metadata.get("linked_pr_url") == "https://example/pr/42"

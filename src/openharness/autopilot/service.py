@@ -1013,6 +1013,91 @@ class RepoAutopilotStore:
             or card.metadata.get("last_failure_stage") == "repair_exhausted"
         ):
             return await self._process_existing_pr_card(card, linked_pr_number, policies)
+        if linked_pr_number is not None:
+            pr_snapshot = self._pr_status_snapshot(linked_pr_number)
+            if _safe_text(pr_snapshot.get("state")).upper() == "MERGED":
+                pr_url = _safe_text(pr_snapshot.get("url", ""))
+                self.update_status(
+                    card.id,
+                    status="merged",
+                    note=f"linked PR #{linked_pr_number} already merged",
+                    metadata_updates={
+                        "linked_pr_number": linked_pr_number,
+                        "linked_pr_url": pr_url,
+                        "human_gate_pending": False,
+                    },
+                )
+                return RepoRunResult(
+                    card_id=card.id,
+                    status="merged",
+                    run_report_path=str(self._runs_dir / f"{card.id}-run.md"),
+                    verification_report_path=str(self._runs_dir / f"{card.id}-verification.md"),
+                    pr_number=linked_pr_number,
+                    pr_url=pr_url,
+                )
+
+        if linked_pr_number is not None and bool(card.metadata.get("autopilot_managed")):
+            ci_state, ci_summary, pr_snapshot, _checks = await self._wait_for_pr_ci(
+                linked_pr_number, policies
+            )
+            pr_url = _safe_text(pr_snapshot.get("url"))
+            if ci_state == "success" and self._automerge_eligible(pr_snapshot, policies):
+                self._merge_pull_request(linked_pr_number)
+                self.update_status(
+                    card.id,
+                    status="merged",
+                    note=f"autopilot managed PR #{linked_pr_number} CI passed, merged automatically",
+                    metadata_updates={
+                        "linked_pr_number": linked_pr_number,
+                        "linked_pr_url": pr_url,
+                    },
+                )
+                return RepoRunResult(
+                    card_id=card.id,
+                    status="merged",
+                    run_report_path="",
+                    verification_report_path="",
+                    pr_number=linked_pr_number,
+                    pr_url=pr_url,
+                )
+            if ci_state != "success":
+                if ci_state == "pending":
+                    self.update_status(
+                        card.id,
+                        status="waiting_ci",
+                        note=f"autopilot managed PR #{linked_pr_number} CI still running, waiting",
+                        metadata_updates={
+                            "linked_pr_number": linked_pr_number,
+                            "linked_pr_url": pr_url,
+                        },
+                    )
+                    return RepoRunResult(
+                        card_id=card.id,
+                        status="waiting_ci",
+                        run_report_path="",
+                        verification_report_path="",
+                        pr_number=linked_pr_number,
+                        pr_url=pr_url,
+                    )
+                self.update_status(
+                    card.id,
+                    status="failed",
+                    note=f"autopilot managed PR #{linked_pr_number} CI failed: {ci_summary}",
+                    metadata_updates={
+                        "linked_pr_number": linked_pr_number,
+                        "linked_pr_url": pr_url,
+                        "last_failure_stage": "remote_ci_failed",
+                        "last_failure_summary": ci_summary,
+                    },
+                )
+                return RepoRunResult(
+                    card_id=card.id,
+                    status="failed",
+                    run_report_path="",
+                    verification_report_path="",
+                    pr_number=linked_pr_number,
+                    pr_url=pr_url,
+                )
 
         # autopilot_managed cards with linked PR + CI pass: merge directly, skip repair loop
         if linked_pr_number is not None and bool(card.metadata.get("autopilot_managed")):

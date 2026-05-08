@@ -342,14 +342,20 @@ Web UI expose đầy đủ pipeline qua `/api/pipeline/*`:
 
 ## WebUI upgrade status
 
-Các phase P0–P9 trong `TASKS.md` đã chạy qua autopilot:
+Các phase P0–P11 đã xong trong codebase hiện tại:
 
 - **P0–P3**: WebUI foundation, history/resume, modes toggle, provider settings, backend REST routes
 - **P4–P8**: Pipeline WebUI, agent config, models API, review routes, cron routes, tasks routes
 - **P9.10**: Rebase strategy cho in-flight worktrees sau merge
 - **P9.11**: Safe PR branch sync trước khi push (rebase + conflict gate)
+- **P11.1**: Direct card control từ board (`run`, `pause`, `resume`, `retry-now`)
+- **P11.6**: Project API types và client methods cho WebUI
+- **P11.9**: Switch project không reload; Web UI reconnect session/WebSocket đúng cách
+- **P11.10**: Card có linked PR đã merge được short-circuit sang `merged`, không rơi vào `failed/no_changes`
+- **P11.11**: Integration tests cho multi-project flow
+- **P11.12**: Multi-project documentation và snapshot docs cập nhật
 
-P4+ tiếp tục là backlog cho UI polish, QA, dashboard export, và packaging.
+Backlog tiếp theo là UI polish, QA, dashboard export, và packaging.
 
 Xem `GUIDE.md` section 12b để biết danh sách REST API/WebSocket routes đầy đủ.
 

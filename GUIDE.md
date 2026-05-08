@@ -605,6 +605,16 @@ Mở URL trên trong browser. Token được capture từ `?token=…` rồi lư
 |----------|-------------------|---------------------|
 | `GET`    | `/api/cron/jobs`  | Danh sách cron jobs |
 
+**Projects**
+
+| Method   | Path                               | Mô tả                                                   |
+|----------|------------------------------------|---------------------------------------------------------|
+| `GET`    | `/api/projects`                    | Danh sách projects + active project                     |
+| `POST`   | `/api/projects`                    | Tạo project mới (201)                                   |
+| `PATCH`  | `/api/projects/{project_id}`       | Đổi tên / cập nhật metadata project                     |
+| `DELETE` | `/api/projects/{project_id}`       | Xóa project                                             |
+| `POST`   | `/api/projects/{project_id}/activate` | Chuyển active project, Web UI tự reconnect session/WebSocket |
+
 **Pipeline (Autopilot)**
 
 | Method   | Path                                        | Mô tả                                           |
@@ -612,7 +622,7 @@ Mở URL trên trong browser. Token được capture từ `?token=…` rồi lư
 | `GET`    | `/api/pipeline/cards`                       | Danh sách tất cả cards                          |
 | `POST`   | `/api/pipeline/cards`                       | Enqueue card mới (201)                          |
 | `GET`    | `/api/pipeline/cards/{card_id}`             | Chi tiết card                                   |
-| `POST`   | `/api/pipeline/cards/{card_id}/action`      | accept / reject / retry / reset                 |
+| `POST`   | `/api/pipeline/cards/{card_id}/action`      | accept / reject / retry / reset / run / pause / resume / retry-now |
 | `PATCH`  | `/api/pipeline/cards/{card_id}/model`       | Set/clear execution model cho card              |
 | `GET`    | `/api/pipeline/cards/{card_id}/stream`      | SSE event stream của card (stream token auth)   |
 | `GET`    | `/api/pipeline/cards/{card_id}/checkpoint`  | Checkpoint info                                 |
@@ -622,6 +632,10 @@ Mở URL trên trong browser. Token được capture từ `?token=…` rồi lư
 | `GET`    | `/api/pipeline/policy`                      | Policy YAML + parsed JSON                       |
 | `PATCH`  | `/api/pipeline/policy`                      | Validate & persist policy YAML                  |
 | `POST`   | `/api/pipeline/run-next`                    | Spawn `oh autopilot run-next` background (202)  |
+| `POST`   | `/api/pipeline/cards/{card_id}/review`      | Trigger / rerun reviewer cho card               |
+| `GET`    | `/api/pipeline/cards/{card_id}/review`      | Lấy review summary hiện tại của card            |
+| `GET`    | `/api/pipeline/cards/{card_id}/run-report`  | Lấy run report markdown                         |
+| `GET`    | `/api/pipeline/cards/{card_id}/verification-report` | Lấy verification report markdown        |
 
 **Review**
 
