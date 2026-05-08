@@ -14,7 +14,6 @@ from openharness.services.projects import (
     activate_project,
     create_project,
     delete_project,
-    get_active_project,
     list_projects,
     update_project,
 )
@@ -70,10 +69,10 @@ def update_project_endpoint(project_id: str, body: ProjectUpdateRequest) -> dict
 
 @router.delete("/{project_id}")
 def delete_project_endpoint(project_id: str) -> dict[str, bool]:
-    active = get_active_project()
-    if active is not None and active.id == project_id:
+    result = delete_project(project_id)
+    if result is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Active project cannot be deleted")
-    if not delete_project(project_id):
+    if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     return {"ok": True}
 
