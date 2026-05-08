@@ -1,4 +1,26 @@
-"""Project model and registry helpers."""
+"""Project registry model and helpers.
+
+This module defines the core data model for multi-project support:
+- :class:`Project` — a Pydantic model representing one registered project.
+- :class:`ProjectRegistry` — a class for loading/saving the JSON registry at
+  ``~/.openharness/projects.json``.
+
+The registry file is thread-safe via advisory file locking (see
+:meth:`ProjectRegistry.add_project`, :meth:`ProjectRegistry.remove_project`,
+etc.).
+
+Example
+-------
+::
+
+    registry = ProjectRegistry()
+    registry.add_project("my-app", "/code/my-app", description="Main app")
+    project = registry.activate_project("my-app")
+
+    # New sessions open in /code/my-app
+    assert registry.get_active_project() == project
+
+"""
 
 from __future__ import annotations
 
@@ -34,6 +56,29 @@ def _projects_lock_path() -> Path:
 
 
 class Project(BaseModel):
+    """A registered project.
+
+    Attributes
+    ----------
+    id:
+        URL-safe slug derived from the project name. Stable across sessions.
+    name:
+        Human-readable label shown in the UI.
+    path:
+        Absolute path to the project root on disk.
+    description:
+        Optional free-text description.
+    created_at:
+        UTC timestamp when the project was first registered.
+    updated_at:
+        UTC timestamp of the last modification.
+    is_active:
+        True when this project is the currently active project.
+
+    The ``path`` field is resolved to an absolute path at construction time.
+    All timestamps are normalized to UTC.
+    """
+
     id: str
     name: str
     path: Path
@@ -46,6 +91,7 @@ class Project(BaseModel):
 
     @staticmethod
     def _to_aware(dt: datetime) -> datetime:
+        """Ensure a datetime has a timezone (assumes UTC if none)."""
         return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
     def model_post_init(self, __context: Any) -> None:
@@ -54,6 +100,7 @@ class Project(BaseModel):
         self.updated_at = self._to_aware(self.updated_at)
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize to a plain dict suitable for JSON serialization."""
         data = self.model_dump()
         data["path"] = str(self.path)
         data["created_at"] = self.created_at.isoformat()
@@ -62,6 +109,7 @@ class Project(BaseModel):
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Project:
+        """Reconstruct a Project from a plain dict (e.g. loaded from JSON)."""
         return cls(
             id=data["id"],
             name=data["name"],
@@ -74,10 +122,40 @@ class Project(BaseModel):
 
 
 class ProjectRegistry:
+    """Manage the persisted list of registered projects.
+
+    Parameters
+    ----------
+    registry_path:
+        Path to the JSON file. Defaults to ``~/.openharness/projects.json``.
+
+    Thread-safety
+    -------------
+    All public mutation methods (``add_project``, ``remove_project``,
+    ``update_project``, ``activate_project``) acquire an exclusive file lock
+    before reading or writing, preventing concurrent corruption.
+
+    File format
+    -----------
+    See :class:`Project` serialization (``to_dict`` / ``from_dict``).
+    The top-level structure is::
+
+        {
+          "projects": [Project, ...],
+          "active_project_id": "<id>" | null
+        }
+
+    """
+
     def __init__(self, registry_path: Path | None = None) -> None:
         self.REGISTRY_PATH = registry_path or get_projects_registry_path()
 
     def load(self) -> dict[str, Any]:
+        """Load the registry from disk.
+
+        Returns ``{"projects": [], "active_project_id": None}`` when the
+        file is absent or corrupted (JSON decode error).
+        """
         if not self.REGISTRY_PATH.exists():
             return {"projects": [], "active_project_id": None}
         try:
@@ -88,6 +166,7 @@ class ProjectRegistry:
         return {"projects": projects, "active_project_id": data.get("active_project_id")}
 
     def save(self, registry: dict[str, Any]) -> None:
+        """Write the registry atomically to disk."""
         payload = {
             "projects": [project.to_dict() for project in registry["projects"]],
             "active_project_id": registry.get("active_project_id"),
@@ -95,6 +174,27 @@ class ProjectRegistry:
         atomic_write_text(self.REGISTRY_PATH, json.dumps(payload, indent=2) + "\n")
 
     def add_project(self, name: str, path: str | Path, description: str = "") -> Project:
+        """Register a new project.
+
+        Args
+        ----
+        name:
+            Human-readable label.
+        path:
+            Absolute path to an existing directory.
+        description:
+            Optional free-text description.
+
+        Returns
+        -------
+        The newly created :class:`Project`.
+
+        Raises
+        ------
+        ValueError
+            If ``path`` is not an existing directory, or if the name or
+            path is already registered.
+        """
         resolved_path = Path(path).resolve()
         if not resolved_path.is_dir():
             raise ValueError(f"Path is not an existing directory: {path}")
@@ -111,6 +211,16 @@ class ProjectRegistry:
             return project
 
     def remove_project(self, id: str) -> bool:
+        """Remove a project by ID.
+
+        Returns
+        -------
+        True if the project was found and deleted; False if no project with
+        that ID exists.
+
+        Note: the currently active project cannot be removed — see
+        :meth:`activate_project`.
+        """
         with exclusive_file_lock(_projects_lock_path()):
             registry = self.load()
             projects = [project for project in registry["projects"] if project.id != id]
@@ -123,6 +233,26 @@ class ProjectRegistry:
             return True
 
     def update_project(self, id: str, name: str | None = None, description: str | None = None) -> Project:
+        """Update the name and/or description of an existing project.
+
+        Args
+        ----
+        id:
+            The project ID (slug).
+        name:
+            New human-readable label. Unchanged if ``None``.
+        description:
+            New free-text description. Unchanged if ``None``.
+
+        Returns
+        -------
+        The updated :class:`Project`.
+
+        Raises
+        ------
+        KeyError
+            If no project with the given ID exists.
+        """
         with exclusive_file_lock(_projects_lock_path()):
             registry = self.load()
             for project in registry["projects"]:
@@ -137,6 +267,24 @@ class ProjectRegistry:
             raise KeyError(id)
 
     def activate_project(self, id: str) -> Project:
+        """Set a project as the active project.
+
+        The active project determines the working directory for new sessions.
+
+        Args
+        ----
+        id:
+            The project ID (slug) to activate.
+
+        Returns
+        -------
+        The newly activated :class:`Project`.
+
+        Raises
+        ------
+        KeyError
+            If no project with the given ID exists.
+        """
         with exclusive_file_lock(_projects_lock_path()):
             registry = self.load()
             found: Project | None = None
@@ -152,6 +300,7 @@ class ProjectRegistry:
             return found
 
     def get_active_project(self) -> Project | None:
+        """Return the currently active project, or ``None`` if none is active."""
         registry = self.load()
         active_id = registry.get("active_project_id")
         if not active_id:
@@ -162,6 +311,26 @@ class ProjectRegistry:
         return None
 
     def ensure_default(self, cwd: Path) -> Project:
+        """Return the active project, creating a default one if the registry is empty.
+
+        If no projects are registered, a new project is created from ``cwd``
+        and automatically marked as active. This provides a seamless
+        first-run experience without requiring explicit ``oh project add``.
+
+        Args
+        ----
+        cwd:
+            Directory to use as the default project root if the registry is empty.
+
+        Returns
+        -------
+        The active :class:`Project`.
+
+        Raises
+        ------
+        ValueError
+            If ``cwd`` is not an existing directory.
+        """
         with exclusive_file_lock(_projects_lock_path()):
             registry = self.load()
             if registry["projects"]:
