@@ -349,9 +349,14 @@ def test_run_next_returns_409_when_no_queued_cards(tmp_path) -> None:
     assert response.json()["detail"]["error"] == "no_queued_cards"
 
 
-def test_run_next_returns_409_when_at_capacity(tmp_path) -> None:
+async def test_run_next_returns_409_when_at_capacity(tmp_path, monkeypatch) -> None:
     """When max_parallel_runs=1 and one card is running, capacity is reached."""
     import json
+    from unittest.mock import AsyncMock, MagicMock
+
+    import httpx
+    from openharness.webui.server.app import create_app
+    import openharness.webui.server.routes.pipeline as pipeline_routes
 
     reg_dir = tmp_path / ".openharness" / "autopilot"
     reg_dir.mkdir(parents=True)
@@ -394,8 +399,15 @@ def test_run_next_returns_409_when_at_capacity(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    client = _client(tmp_path)
-    response = client.post("/api/pipeline/run-next", headers=AUTH)
+    fake_task = MagicMock()
+    fake_task.id = "task-stub-001"
+    mock_manager = MagicMock()
+    mock_manager.create_shell_task = AsyncMock(return_value=fake_task)
+    monkeypatch.setattr(pipeline_routes, "get_task_manager", lambda: mock_manager)
+
+    app = create_app(token="test-token", cwd=tmp_path, spa_dir="")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/pipeline/run-next", headers=AUTH)
 
     assert response.status_code == 409
     body = response.json()["detail"]
