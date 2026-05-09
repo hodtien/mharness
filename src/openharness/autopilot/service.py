@@ -1052,7 +1052,13 @@ class RepoAutopilotStore:
                     pr_url=pr_url,
                 )
 
-        if linked_pr_number is not None and bool(card.metadata.get("autopilot_managed")):
+        if (
+            linked_pr_number is not None
+            and bool(card.metadata.get("autopilot_managed"))
+            # Skip CI-monitor path when card is requeued for repair — let the main
+            # repair loop run the agent to actually fix the failing tests.
+            and card.metadata.get("last_failure_stage") != "remote_ci_failed"
+        ):
             ci_state, ci_summary, pr_snapshot, _checks = await self._wait_for_pr_ci(
                 linked_pr_number, policies
             )
@@ -1140,7 +1146,11 @@ class RepoAutopilotStore:
                 )
 
         # autopilot_managed cards with linked PR + CI pass: merge directly, skip repair loop
-        if linked_pr_number is not None and bool(card.metadata.get("autopilot_managed")):
+        if (
+            linked_pr_number is not None
+            and bool(card.metadata.get("autopilot_managed"))
+            and card.metadata.get("last_failure_stage") != "remote_ci_failed"
+        ):
             ci_state, ci_summary, pr_snapshot, _checks = await self._wait_for_pr_ci(
                 linked_pr_number, policies
             )
@@ -1670,16 +1680,17 @@ class RepoAutopilotStore:
                     if not push_ok:
                         _repair_stages = {"branch_sync_conflict", "branch_push_rejected"}
                         is_repairable = push_stage in _repair_stages
+                        metadata_updates = {
+                            "last_failure_stage": push_stage,
+                            "last_failure_summary": push_summary,
+                            "manual_intervention_required": False,
+                            "human_gate_pending": False,
+                        }
                         self.update_status(
                             card.id,
                             status="repairing" if is_repairable else "failed",
                             note=push_summary,
-                            metadata_updates={
-                                "last_failure_stage": push_stage,
-                                "last_failure_summary": push_summary,
-                                "manual_intervention_required": is_repairable,
-                                "human_gate_pending": is_repairable,
-                            },
+                            metadata_updates=metadata_updates,
                         )
                         self.append_journal(
                             kind="branch_sync_failed",
@@ -1692,6 +1703,10 @@ class RepoAutopilotStore:
                                 "attempt_count": attempt_count,
                             },
                         )
+                        if is_repairable and attempt_count < max_attempts:
+                            prior_failure_stage = push_stage
+                            prior_failure_summary = push_summary
+                            continue
                         if issue_number is not None:
                             self._comment_on_issue(
                                 issue_number, self._comment_terminal_failure(push_summary)

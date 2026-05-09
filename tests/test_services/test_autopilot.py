@@ -3608,8 +3608,7 @@ def test_branch_sync_non_fast_forward_retry_succeeds_without_rebase_when_branch_
     assert remote_rebases == []
 
 
-def test_branch_sync_conflict_puts_card_in_repairing(tmp_path: Path, monkeypatch) -> None:
-    """When rebase fails on PR branch sync, card becomes repairing with human_gate_pending."""
+def test_branch_sync_conflict_continues_repair_loop(tmp_path: Path, monkeypatch) -> None:
     import asyncio
 
     repo = tmp_path / "repo"
@@ -3619,22 +3618,65 @@ def test_branch_sync_conflict_puts_card_in_repairing(tmp_path: Path, monkeypatch
     store = RepoAutopilotStore(repo)
     card, _ = store.enqueue_card(source_kind="manual_idea", title="Conflict repair", body="")
 
+    agent_runs = 0
+    push_attempts = 0
+
+    async def fake_run_agent_prompt(
+        self, prompt, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
+        nonlocal agent_runs
+        agent_runs += 1
+        return "Implemented changes."
+
+    def fake_push(self, cwd, *, base_branch, head_branch, policies, card_id=None):
+        nonlocal push_attempts
+        push_attempts += 1
+        if push_attempts == 1:
+            return False, "branch_sync_conflict", (
+                f"Could not rebase {head_branch} onto origin/{base_branch}."
+            )
+        return True, "branch_push_done", f"Pushed {head_branch}."
+
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
-        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
-            False,
-            "branch_sync_conflict",
-            f"Could not rebase {head_branch} onto origin/{base_branch}.",
-        ),
+        fake_push,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt",
+        fake_run_agent_prompt,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
+        lambda self, card, *, head_branch, base_branch, run_report_path, verification_report_path: {
+            "number": 1,
+            "url": "https://example/pr/1",
+        },
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number, policies):
+        return (
+            "success",
+            "ok",
+            {"url": "https://example/pr/1", "labels": [], "isDraft": False},
+            [],
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
     )
     _fake_run_card_common_patches(monkeypatch, worktree=worktree)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt",
+        fake_run_agent_prompt,
+    )
 
     result = asyncio.run(store.run_card(card.id))
-    assert result.status == "repairing"
+    assert result.status == "completed"
+    assert agent_runs == 2
+    assert push_attempts == 2
     updated = store.get_card(card.id)
     assert updated is not None
-    assert updated.metadata.get("human_gate_pending") is True
-    assert updated.metadata.get("manual_intervention_required") is True
+    assert updated.metadata.get("manual_intervention_required") is False
     assert updated.metadata.get("last_failure_stage") == "branch_sync_conflict"
 
 
