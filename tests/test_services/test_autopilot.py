@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import MethodType, SimpleNamespace
 
-from openharness.autopilot import PreflightCheck, RepoAutopilotStore, RepoVerificationStep
+from openharness.autopilot import PreflightCheck, RepoAutopilotStore, RepoTaskCard, RepoVerificationStep
 from openharness.swarm.worktree import WorktreeInfo
 from openharness.autopilot.service import _DEFAULT_AUTOPILOT_POLICY, _DEFAULT_VERIFICATION_POLICY
 from openharness.autopilot.session_store import save_checkpoint
@@ -4870,7 +4870,6 @@ def test_repair_exhausted_managed_pr_card_passes_through_ci(
             "linked_pr_number": 42,
             "head_branch": "autopilot/card-42",
             "worktree_path": str(sync_cwd),
-            "attempt_count": 3,
         },
     )
     store.update_status(card.id, status="failed", note="repair rounds exhausted")
