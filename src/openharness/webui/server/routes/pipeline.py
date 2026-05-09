@@ -259,7 +259,7 @@ def action_pipeline_card(
 
 
 _ACTIVE_STATUSES: frozenset[str] = frozenset(
-    {"preparing", "running", "verifying", "waiting_ci", "repairing"}
+    {"preparing", "running", "verifying", "waiting_ci", "repairing", "pr_open"}
 )
 
 
