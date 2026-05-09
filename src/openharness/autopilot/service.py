@@ -404,6 +404,8 @@ class RepoAutopilotStore:
         ``_load_registry``/``_save_registry`` use internally) so the outer and
         inner critical sections share one open-file-description and don't
         deadlock against each other via two independent ``flock`` holders.
+
+        Pending cards with a future ``next_retry_at`` timestamp are skipped.
         """
         with RepoFileLock(self._registry_lock_path):
             if not self._registry_path.exists():
@@ -413,7 +415,16 @@ class RepoAutopilotStore:
             except json.JSONDecodeError:
                 return None
             registry = RepoAutopilotRegistry.model_validate(payload)
-            queued = [card for card in registry.cards if card.status in {"queued", "accepted"}]
+            now = time.time()
+            queued = [
+                card
+                for card in registry.cards
+                if card.status in {"queued", "accepted"}
+                or (
+                    card.status == "pending"
+                    and card.metadata.get("next_retry_at", 0) <= now
+                )
+            ]
             if not queued:
                 return None
             chosen = sorted(
@@ -653,6 +664,7 @@ class RepoAutopilotStore:
         """Claim a specific card by ID for a worker (used for direct card control).
 
         Returns None if the card does not exist or is not in a claimable state.
+        Pending cards can be claimed regardless of next_retry_at when explicitly requested.
         """
         with RepoFileLock(self._registry_lock_path):
             if not self._registry_path.exists():
@@ -665,7 +677,7 @@ class RepoAutopilotStore:
             chosen = next((c for c in registry.cards if c.id == card_id), None)
             if chosen is None:
                 return None
-            if chosen.status not in {"queued", "accepted"}:
+            if chosen.status not in {"queued", "accepted", "pending"}:
                 return None
             chosen.status = "preparing"
             chosen.updated_at = time.time()
