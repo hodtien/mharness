@@ -3680,6 +3680,339 @@ def test_branch_sync_conflict_continues_repair_loop(tmp_path: Path, monkeypatch)
     assert updated.metadata.get("last_failure_stage") == "branch_sync_conflict"
 
 
+# ---------------------------------------------------------------------------
+# Cherry-pick reset tests
+# ---------------------------------------------------------------------------
+
+
+def test_cherry_pick_reset_triggers_after_threshold(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """_sync_pr_branch_before_push calls _cherry_pick_reset_pr_branch once repeated_failure_count >= 2."""
+    import subprocess as sp
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    cwd = tmp_path / "wt"
+    cwd.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Cherry reset", body="")
+    head_branch = f"autopilot/{card.id}"
+    expected_summary = f"Could not rebase {head_branch} onto origin/main."
+    store.update_status(
+        card.id,
+        status="queued",
+        note="prior conflict",
+        metadata_updates={
+            "autopilot_managed": True,
+            "linked_pr_number": 99,
+            "repeated_failure_key": f"branch_sync_conflict:{expected_summary}",
+            "repeated_failure_count": 2,
+        },
+    )
+
+    cherry_pick_called: list[bool] = []
+
+    def fake_cherry_pick_reset(self, cwd, *, base_branch, head_branch, card_id=None):
+        cherry_pick_called.append(True)
+        return True, "branch_sync_done", f"cherry-pick reset done for {head_branch}"
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._cherry_pick_reset_pr_branch",
+        fake_cherry_pick_reset,
+    )
+
+    def fake_run_git(self, args, *, cwd=None, check=False):
+        if args and args[0] == "rebase":
+            result = sp.CompletedProcess(args, 1, stdout="", stderr="conflict")
+            if check:
+                raise RuntimeError("conflict")
+            return result
+        if args and args[0] == "rev-list" and "--count" in args:
+            # Make base branch appear advanced so rebase is triggered
+            return sp.CompletedProcess(args, 0, stdout="1", stderr="")
+        return sp.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_git", fake_run_git
+    )
+
+    policies: dict = {}
+    ok, stage, _ = store._sync_pr_branch_before_push(
+        cwd,
+        base_branch="main",
+        head_branch=head_branch,
+        policies=policies,
+        card_id=card.id,
+    )
+
+    assert ok is True
+    assert stage == "branch_sync_done"
+    assert cherry_pick_called
+
+
+def _make_cherry_pick_reset_store(
+    tmp_path: Path,
+) -> "tuple[RepoAutopilotStore, RepoTaskCard]":
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="CPR card", body="")
+    store.update_status(
+        card.id,
+        status="queued",
+        note="",
+        metadata_updates={
+            "autopilot_managed": True,
+            "linked_pr_number": 7,
+            "repeated_failure_key": "branch_sync_conflict:Could not rebase autopilot/CPR card onto origin/main.",
+            "repeated_failure_count": 2,
+        },
+    )
+    return store, store.get_card(card.id)  # type: ignore[return-value]
+
+
+def _fake_run_git_cherry_pick(
+    commits: list[str],
+    *,
+    fail_sha: str | None = None,
+    log_rc: int = 0,
+    pushes: list[str] | None = None,
+):
+    import subprocess as sp
+
+    if pushes is None:
+        pushes = []
+
+    def _fake(self, args, *, cwd=None, check=False):
+        if args[0] == "log":
+            stdout = "\n".join(commits) if commits else ""
+            return sp.CompletedProcess(args, log_rc, stdout=stdout, stderr="")
+        if args[0] == "reset":
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
+        if args[0] == "cherry-pick" and args[1] != "--abort":
+            sha = args[1]
+            if sha == fail_sha:
+                return sp.CompletedProcess(args, 1, stdout="", stderr="conflict")
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
+        if args[0] == "cherry-pick" and args[1] == "--abort":
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
+        if args[:2] == ["push", "-u"]:
+            pushes.append(str(args))
+            if check:
+                return None
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
+        return sp.CompletedProcess(args, 0, stdout="", stderr="")
+
+    return _fake
+
+
+def test_cherry_pick_reset_success_journals_done(tmp_path: Path, monkeypatch) -> None:
+    """_cherry_pick_reset_pr_branch returns branch_sync_done and journals cherry_pick_reset_done."""
+    store, card = _make_cherry_pick_reset_store(tmp_path)
+    pushes: list[str] = []
+    commits = ["aaa111", "bbb222"]
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_git",
+        _fake_run_git_cherry_pick(commits, pushes=pushes),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch",
+        lambda self, cwd, branch, *, force_with_lease=False: pushes.append(f"push:{force_with_lease}"),
+    )
+
+    cwd = tmp_path / "wt"
+    cwd.mkdir()
+    ok, stage, summary = store._cherry_pick_reset_pr_branch(
+        cwd, base_branch="main", head_branch="autopilot/cpr", card_id=card.id
+    )
+
+    assert ok is True
+    assert stage == "branch_sync_done"
+    assert "cherry-pick reset" in summary
+    assert pushes == ["push:True"]
+
+    journals = [
+        e for e in store.load_journal(limit=50)
+        if e.kind == "cherry_pick_reset_done" and e.task_id == card.id
+    ]
+    assert journals, "expected cherry_pick_reset_done journal entry"
+
+
+def test_cherry_pick_reset_conflict_returns_branch_sync_failed(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """When cherry-pick conflicts, returns (False, 'branch_sync_failed', ...) — no further loop."""
+    store, card = _make_cherry_pick_reset_store(tmp_path)
+    commits = ["aaa111", "bbb222"]
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_git",
+        _fake_run_git_cherry_pick(commits, fail_sha="aaa111"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch",
+        lambda self, cwd, branch, *, force_with_lease=False: None,
+    )
+
+    cwd = tmp_path / "wt"
+    cwd.mkdir()
+    ok, stage, summary = store._cherry_pick_reset_pr_branch(
+        cwd, base_branch="main", head_branch="autopilot/cpr", card_id=card.id
+    )
+
+    assert ok is False
+    assert stage == "branch_sync_failed"
+    assert "manual repair" in summary
+
+    journals = [
+        e for e in store.load_journal(limit=50)
+        if e.kind == "cherry_pick_reset_failed" and e.task_id == card.id
+    ]
+    assert journals
+
+
+def test_cherry_pick_reset_not_triggered_below_threshold(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """With repeated_failure_count=1, threshold=2 — cherry-pick NOT triggered."""
+    import subprocess as sp
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    cwd = tmp_path / "wt"
+    cwd.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Below threshold", body="")
+    head_branch = f"autopilot/{card.id}"
+    expected_summary = f"Could not rebase {head_branch} onto origin/main."
+    store.update_status(
+        card.id,
+        status="queued",
+        note="",
+        metadata_updates={
+            "autopilot_managed": True,
+            "linked_pr_number": 5,
+            "repeated_failure_key": f"branch_sync_conflict:{expected_summary}",
+            "repeated_failure_count": 0,  # first failure → computed count=1, below threshold=2
+        },
+    )
+
+    cherry_called: list[bool] = []
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._cherry_pick_reset_pr_branch",
+        lambda self, *a, **kw: cherry_called.append(True) or (True, "branch_sync_done", ""),
+    )
+
+    def fake_run_git(self, args, *, cwd=None, check=False):
+        if args and args[0] == "rebase":
+            result = sp.CompletedProcess(args, 1, stdout="", stderr="conflict")
+            if check:
+                raise RuntimeError("conflict")
+            return result
+        if args and args[0] == "rev-list" and "--count" in args:
+            return sp.CompletedProcess(args, 0, stdout="1", stderr="")
+        return sp.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_git", fake_run_git
+    )
+
+    ok, stage, _ = store._sync_pr_branch_before_push(
+        cwd,
+        base_branch="main",
+        head_branch=head_branch,
+        policies={},
+        card_id=card.id,
+    )
+
+    assert ok is False
+    assert stage == "branch_sync_conflict"
+    assert not cherry_called
+
+
+def test_cherry_pick_reset_not_triggered_for_non_managed_card(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Non-autopilot-managed card: cherry-pick reset never triggered."""
+    import subprocess as sp
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    cwd = tmp_path / "wt"
+    cwd.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Unmanaged", body="")
+    store.update_status(
+        card.id,
+        status="queued",
+        note="",
+        metadata_updates={"repeated_failure_count": 5},
+    )
+
+    cherry_called: list[bool] = []
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._cherry_pick_reset_pr_branch",
+        lambda self, *a, **kw: cherry_called.append(True) or (True, "branch_sync_done", ""),
+    )
+
+    def fake_run_git(self, args, *, cwd=None, check=False):
+        if args and args[0] == "rebase":
+            result = sp.CompletedProcess(args, 1, stdout="", stderr="conflict")
+            if check:
+                raise RuntimeError("conflict")
+            return result
+        if args and args[0] == "rev-list" and "--count" in args:
+            return sp.CompletedProcess(args, 0, stdout="1", stderr="")
+        return sp.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_git", fake_run_git
+    )
+
+    ok, stage, _ = store._sync_pr_branch_before_push(
+        cwd,
+        base_branch="main",
+        head_branch=f"autopilot/{card.id}",
+        policies={},
+        card_id=card.id,
+    )
+
+    assert ok is False
+    assert stage == "branch_sync_conflict"
+    assert not cherry_called
+
+
+def test_cherry_pick_reset_empty_commits_resets_and_force_pushes(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """With no unique commits, _cherry_pick_reset_pr_branch resets to base and force-pushes."""
+    store, card = _make_cherry_pick_reset_store(tmp_path)
+    pushes: list[str] = []
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_git",
+        _fake_run_git_cherry_pick([], pushes=pushes),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch",
+        lambda self, cwd, branch, *, force_with_lease=False: pushes.append(f"push:{force_with_lease}"),
+    )
+
+    cwd = tmp_path / "wt"
+    cwd.mkdir()
+    ok, stage, summary = store._cherry_pick_reset_pr_branch(
+        cwd, base_branch="main", head_branch="autopilot/cpr", card_id=card.id
+    )
+
+    assert ok is True
+    assert stage == "branch_sync_done"
+    assert pushes == ["push:True"]
+
+
 def test_branch_sync_skips_rebase_when_remote_branch_and_base_are_current(
     tmp_path: Path, monkeypatch
 ) -> None:

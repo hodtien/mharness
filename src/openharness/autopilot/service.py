@@ -2518,6 +2518,10 @@ class RepoAutopilotStore:
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
         return max(int(execution.get("max_branch_sync_attempts", 2) or 2), 1)
 
+    def _max_cherry_pick_reset_attempts(self, policies: dict[str, Any]) -> int:
+        execution = dict(policies.get("autopilot", {}).get("execution", {}))
+        return max(int(execution.get("max_cherry_pick_reset_attempts", 2) or 2), 1)
+
     def _allow_force_push_pr_branch(self, policies: dict[str, Any]) -> bool:
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
         return bool(execution.get("allow_force_push_pr_branch", False))
@@ -2768,6 +2772,96 @@ class RepoAutopilotStore:
         )
         return False
 
+    def _cherry_pick_reset_pr_branch(
+        self,
+        cwd: Path,
+        *,
+        base_branch: str,
+        head_branch: str,
+        card_id: str | None = None,
+    ) -> tuple[bool, str, str]:
+        log_result = self._run_git(
+            [
+                "log",
+                "--reverse",
+                "--pretty=format:%H",
+                f"origin/{base_branch}..origin/{head_branch}",
+            ],
+            cwd=cwd,
+        )
+        if log_result.returncode != 0:
+            summary = (
+                f"cherry-pick reset: could not list commits on origin/{head_branch}: "
+                f"{(log_result.stderr or log_result.stdout or '').strip()}"
+            )
+            self.append_journal(
+                kind="cherry_pick_reset_failed",
+                summary=summary,
+                task_id=card_id,
+                metadata={"base_branch": base_branch, "head_branch": head_branch},
+            )
+            return False, "branch_sync_failed", summary
+
+        commits = [c.strip() for c in log_result.stdout.strip().splitlines() if c.strip()]
+
+        self._run_git(["reset", "--hard", f"origin/{base_branch}"], cwd=cwd, check=True)
+
+        if not commits:
+            self._git_push_branch(cwd, head_branch, force_with_lease=True)
+            summary = (
+                f"cherry-pick reset: no unique commits; reset {head_branch} to origin/{base_branch}."
+            )
+            self.append_journal(
+                kind="cherry_pick_reset_done",
+                summary=summary,
+                task_id=card_id,
+                metadata={
+                    "base_branch": base_branch,
+                    "head_branch": head_branch,
+                    "commits_cherry_picked": 0,
+                },
+            )
+            return True, "branch_sync_done", summary
+
+        for sha in commits:
+            cp = self._run_git(["cherry-pick", sha], cwd=cwd)
+            if cp.returncode != 0:
+                self._run_git(["cherry-pick", "--abort"], cwd=cwd)
+                msg = (cp.stderr or cp.stdout or "cherry-pick failed").strip()
+                summary = (
+                    f"cherry-pick reset: conflict on {sha[:12]} onto "
+                    f"origin/{base_branch} — manual repair needed. {msg}"
+                )
+                self.append_journal(
+                    kind="cherry_pick_reset_failed",
+                    summary=summary,
+                    task_id=card_id,
+                    metadata={
+                        "base_branch": base_branch,
+                        "head_branch": head_branch,
+                        "failed_sha": sha,
+                    },
+                )
+                return False, "branch_sync_failed", summary
+
+        self._git_push_branch(cwd, head_branch, force_with_lease=True)
+        summary = (
+            f"cherry-pick reset: replayed {len(commits)} commit(s) onto "
+            f"origin/{base_branch} and force-pushed {head_branch}."
+        )
+        self.append_journal(
+            kind="cherry_pick_reset_done",
+            summary=summary,
+            task_id=card_id,
+            metadata={
+                "base_branch": base_branch,
+                "head_branch": head_branch,
+                "commits_cherry_picked": len(commits),
+                "commits": commits,
+            },
+        )
+        return True, "branch_sync_done", summary
+
     def _sync_worktree_to_base(
         self,
         cwd: Path,
@@ -2850,6 +2944,22 @@ class RepoAutopilotStore:
                 "attempt_count": self._max_branch_sync_attempts(policies),
             },
         )
+        if self._should_force_push_pr_branch(
+            card_id=card_id, head_branch=head_branch, policies=policies
+        ):
+            if card_id is not None:
+                _card = self.get_card(card_id)
+                if _card is not None:
+                    repeat_meta = self._failure_repeat_metadata(
+                        _card, stage="branch_sync_conflict", summary=summary
+                    )
+                    if repeat_meta["repeated_failure_count"] >= self._max_cherry_pick_reset_attempts(policies):
+                        return self._cherry_pick_reset_pr_branch(
+                            cwd,
+                            base_branch=base_branch,
+                            head_branch=head_branch,
+                            card_id=card_id,
+                        )
         return False, "branch_sync_conflict", summary
 
     def _push_pr_branch_with_sync(
