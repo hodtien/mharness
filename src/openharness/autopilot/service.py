@@ -2953,6 +2953,12 @@ class RepoAutopilotStore:
                     repeat_meta = self._failure_repeat_metadata(
                         _card, stage="branch_sync_conflict", summary=summary
                     )
+                    self.update_status(
+                        card_id,
+                        status=_card.status,
+                        note=summary,
+                        metadata_updates=repeat_meta,
+                    )
                     if repeat_meta["repeated_failure_count"] >= self._max_cherry_pick_reset_attempts(policies):
                         return self._cherry_pick_reset_pr_branch(
                             cwd,
