@@ -577,3 +577,54 @@ def test_resume_card_rejects_active_card_without_checkpoint(tmp_path) -> None:
 
     assert response.status_code == 409
     assert response.json()["detail"]["error"] == "no_resumable_checkpoint"
+
+
+# ---------------------------------------------------------------------------
+# GET /api/pipeline/cards/{card_id}/preflight
+# ---------------------------------------------------------------------------
+
+
+def test_preflight_endpoint_returns_checks(tmp_path) -> None:
+    """GET /api/pipeline/cards/{id}/preflight returns check results."""
+    client = _client(tmp_path)
+
+    # Enqueue a card
+    created = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Preflight test"})
+    assert created.status_code == 201
+    card_id = created.json()["id"]
+
+    response = client.get(f"/api/pipeline/cards/{card_id}/preflight", headers=AUTH)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "ok" in body
+    assert "checks" in body
+    assert isinstance(body["checks"], list)
+    # Should have at least the cwd_exists, git_repo, model_available, auth_ok checks
+    check_names = {c["name"] for c in body["checks"]}
+    assert "cwd_exists" in check_names
+    assert "git_repo" in check_names
+    assert "model_available" in check_names
+    assert "auth_ok" in check_names
+
+
+def test_preflight_endpoint_404_for_unknown_card(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.get("/api/pipeline/cards/nonexistent-id/preflight", headers=AUTH)
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["error"] == "card_not_found"
+
+
+def test_preflight_endpoint_validates_card_id(tmp_path) -> None:
+    """Invalid card IDs are rejected at the HTTP boundary."""
+    client = _client(tmp_path)
+
+    # Path traversal attempt - should return 400 (invalid_card_id) or 404 (not found)
+    response = client.get("/api/pipeline/cards/../../../etc/passwd/preflight", headers=AUTH)
+    assert response.status_code in (400, 404)
+
+    # Too long - should return 400 (invalid_card_id)
+    response = client.get("/api/pipeline/cards/" + "a" * 100 + "/preflight", headers=AUTH)
+    assert response.status_code == 400

@@ -1029,10 +1029,18 @@ class RepoAutopilotStore:
         return PreflightResult(passed=passed, checks=checks, fatal=fatal, transient=transient)
 
     def _resolve_model_for_card(self, card: RepoTaskCard, execution: dict[str, Any]) -> str | None:
-        """Resolve the effective model for a card."""
+        """Resolve the effective model for a card.
+
+        Resolves model in order of precedence:
+        1. card.model (explicit model override)
+        2. card.metadata["execution_model"]
+        3. policies.autopilot.execution.implement_agent → agent_models
+        4. policies.autopilot.execution.default_model
+        """
         implement_agent = _safe_text(execution.get("implement_agent"))
         model = (
             card.model
+            or (card.metadata or {}).get("execution_model")
             or (implement_agent and _resolve_agent_model(implement_agent))
             or _safe_text(execution.get("default_model"))
             or None
@@ -1078,7 +1086,12 @@ class RepoAutopilotStore:
         )
 
     def _check_model_available(self, model: str | None) -> PreflightCheck:
-        """Check that the configured model is available."""
+        """Check that the configured model is available.
+
+        Verifies model against settings.agent_models and allowed_models.
+        If model not in agent_models → permanent fail (never will work).
+        If model not in allowed_models of active profile → transient error (can retry after profile change).
+        """
         if model is None:
             return PreflightCheck(
                 name="model_available",
@@ -1087,6 +1100,52 @@ class RepoAutopilotStore:
                 transient=True,
                 detail="default_model/implement_agent model not set",
             )
+
+        # Collect all available models from settings
+        all_agent_models: set[str] = set()
+        try:
+            from openharness.config.settings import load_settings
+            settings = load_settings()
+            # Get all models from all profile's allowed_models
+            for profile in settings.profiles.values():
+                for m in profile.allowed_models or []:
+                    if m:
+                        all_agent_models.add(m)
+        except (FileNotFoundError, ImportError):
+            pass  # Expected when config not present
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to load settings for preflight: {e}")
+
+        # Get agent_models from Claude bridge config
+        try:
+            from openharness.config.claude_bridge import read_claude_settings
+            claude = read_claude_settings()
+            if claude and claude.agent_models:
+                for chain in claude.agent_models.values():
+                    if isinstance(chain, list):
+                        for m in chain:
+                            if m:
+                                all_agent_models.add(m)
+                    elif isinstance(chain, str) and chain:
+                        all_agent_models.add(chain)
+        except (FileNotFoundError, ImportError):
+            pass  # Expected when config not present
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to load Claude bridge config for preflight: {e}")
+
+        # Permanent failure: model not in any configured models
+        if all_agent_models and model not in all_agent_models:
+            return PreflightCheck(
+                name="model_available",
+                status="fail",
+                reason=f"model {model!r} not registered in settings.agent_models or allowed_models",
+                transient=False,
+                detail=f"configured models: {sorted(all_agent_models)}",
+            )
+
+        # Transient check: is model allowed by active profile?
         try:
             from openharness.auth.manager import AuthManager
             auth = AuthManager()
@@ -1101,10 +1160,11 @@ class RepoAutopilotStore:
                         reason=f"model {model} is in allowed_models",
                         detail=f"provider={provider}",
                     )
+                # Model not in allowed_models → transient (can change profile)
                 return PreflightCheck(
                     name="model_available",
                     status="error",
-                    reason=f"model {model} not in allowed_models",
+                    reason=f"model {model} not in allowed_models of active profile",
                     transient=True,
                     detail=f"allowed: {profile.allowed_models}",
                 )

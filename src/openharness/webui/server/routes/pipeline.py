@@ -287,6 +287,31 @@ def get_pipeline_card(
     )
 
 
+@router.get("/cards/{card_id}/preflight", dependencies=_AUTH_DEPENDENCY)
+def get_card_preflight(
+    card_id: str,
+    state: WebUIState = Depends(get_state),
+) -> dict:
+    """Run preflight checks for a card and return results.
+
+    Returns {"ok": bool, "checks": [{name, status, reason, transient, detail}...]}.
+    Returns HTTP 404 if the card does not exist.
+    """
+    _ensure_safe_card_id(card_id)
+    store = RepoAutopilotStore(state.cwd)
+    card = store.get_card(card_id)
+    if card is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "card_not_found", "card_id": card_id},
+        )
+    result = store.run_preflight(card)
+    return {
+        "ok": result.passed,
+        "checks": [c.model_dump() for c in result.checks],
+    }
+
+
 @router.patch("/cards/{card_id}/model", dependencies=_AUTH_DEPENDENCY)
 def patch_pipeline_card_model(
     card_id: str,

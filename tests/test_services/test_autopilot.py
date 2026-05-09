@@ -6178,3 +6178,166 @@ def test_preflight_checks_recorded_in_metadata(tmp_path: Path) -> None:
         assert hasattr(check, "status")
         assert hasattr(check, "reason")
 
+
+def test_preflight_model_resolve_chain(tmp_path: Path, monkeypatch) -> None:
+    """Model is resolved in priority order: card.model > metadata.execution_model > agent_models > default_model."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    # Set default model via policy
+    policy_dir = repo / ".openharness" / "autopilot"
+    policy_dir.mkdir(parents=True, exist_ok=True)
+    (policy_dir / "autopilot_policy.yaml").write_text(
+        "execution:\n  default_model: fallback-model\n  implement_agent: test-agent\n",
+        encoding="utf-8",
+    )
+
+    execution = {"default_model": "fallback", "implement_agent": "test"}
+
+    # Test 1: card.model takes precedence
+    card1, _ = store.enqueue_card(source_kind="manual_idea", title="Test 1")
+    # Directly set the model on the card object (simulating what update_card_model does)
+    card1.model = "priority-model"
+    resolved1 = store._resolve_model_for_card(card1, execution)
+    assert resolved1 == "priority-model", f"Expected priority-model, got {resolved1}"
+
+    # Test 2: metadata.execution_model is used when card.model is None
+    card2, _ = store.enqueue_card(source_kind="manual_idea", title="Test 2")
+    card2.metadata["execution_model"] = "meta-model"
+    card2.model = None  # Explicitly clear card.model
+    resolved2 = store._resolve_model_for_card(card2, execution)
+    assert resolved2 == "meta-model", f"Expected meta-model, got {resolved2}"
+
+    # Test 3: default_model is used when no card.model or metadata
+    card3, _ = store.enqueue_card(source_kind="manual_idea", title="Test 3")
+    # card3.model is already None (no override set)
+    resolved3 = store._resolve_model_for_card(card3, execution)
+    assert resolved3 == "fallback", f"Expected fallback, got {resolved3}"
+
+
+def test_preflight_permanent_vs_transient_classification(tmp_path: Path, monkeypatch) -> None:
+    """Permanent failures (model not in agent_models) → fatal.
+    Transient failures (model not in allowed_models) → pending."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    original_card, _ = store.enqueue_card(source_kind="manual_idea", title="Classification test")
+    store.update_card_model(original_card.id, "unknown-model")
+    # Re-fetch card after model update
+    card = store.get_card(original_card.id)
+    assert card is not None
+    assert card.model == "unknown-model"
+
+    # Mock _is_git_repo to pass
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo",
+        lambda self, cwd: True,
+    )
+    # Mock GitHub check to pass
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_github_available",
+        lambda self: PreflightCheck(name="github_available", status="ok", reason="ok"),
+    )
+    # Mock auth check to pass
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.get_active_provider",
+        lambda self: "anthropic",
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.get_auth_status",
+        lambda self: {"anthropic": {"configured": True, "source": "env"}},
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.list_profiles",
+        lambda self: {"claude-api": type("P", (), {"allowed_models": ["test-model"]})()},
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.get_active_profile",
+        lambda self: "claude-api",
+    )
+    # Mock load_settings to return empty allowed_models
+    from openharness.config.settings import ProviderProfile
+    monkeypatch.setattr(
+        "openharness.config.settings.load_settings",
+        lambda: type("Settings", (), {"profiles": {"empty": ProviderProfile(
+            label="Empty", provider="test", api_format="openai",
+            auth_source="test", default_model="test-model", allowed_models=[]
+        )}})(),
+    )
+    # Mock claude_bridge to return no agent_models
+    monkeypatch.setattr(
+        "openharness.config.claude_bridge.read_claude_settings",
+        lambda: None,
+    )
+
+    result = store.run_preflight(card)
+
+    # When all_agent_models is empty, the permanent fail check is skipped
+    # and we fall through to the transient check (model not in allowed_models of profile)
+    model_check = next((c for c in result.checks if c.name == "model_available"), None)
+    assert model_check is not None, "model_available check not found"
+    # With empty all_agent_models, the permanent fail is not triggered
+    # Instead it falls through to the transient check (error because unknown-model not in profile's allowed_models)
+    assert model_check.status == "error", f"Expected error (transient), got {model_check.status}: {model_check.reason}"
+    assert model_check.transient is True
+
+
+def test_preflight_permanent_model_not_in_settings(tmp_path: Path, monkeypatch) -> None:
+    """When models ARE configured in settings but card model is not in the list → permanent fail."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    original_card, _ = store.enqueue_card(source_kind="manual_idea", title="Permanent fail test")
+    store.update_card_model(original_card.id, "unknown-model")
+    card = store.get_card(original_card.id)
+    assert card is not None
+
+    # Mock _is_git_repo to pass
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo",
+        lambda self, cwd: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_github_available",
+        lambda self: PreflightCheck(name="github_available", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.get_active_provider",
+        lambda self: "anthropic",
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.get_auth_status",
+        lambda self: {"anthropic": {"configured": True, "source": "env"}},
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.list_profiles",
+        lambda self: {"claude-api": type("P", (), {"allowed_models": ["test-model"]})()},
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.get_active_profile",
+        lambda self: "claude-api",
+    )
+    # Mock load_settings to have some models configured
+    from openharness.config.settings import ProviderProfile
+    monkeypatch.setattr(
+        "openharness.config.settings.load_settings",
+        lambda: type("Settings", (), {"profiles": {"test": ProviderProfile(
+            label="Test", provider="test", api_format="openai",
+            auth_source="test", default_model="test-model", allowed_models=["test-model", "other-model"]
+        )}})(),
+    )
+    # Mock claude_bridge to return no agent_models
+    monkeypatch.setattr(
+        "openharness.config.claude_bridge.read_claude_settings",
+        lambda: None,
+    )
+
+    result = store.run_preflight(card)
+
+    model_check = next((c for c in result.checks if c.name == "model_available"), None)
+    assert model_check is not None
+    # "unknown-model" is not in settings.allowed_models → permanent fail
+    assert model_check.status == "fail", f"Expected fail, got {model_check.status}: {model_check.reason}"
+    assert model_check.transient is False
+
