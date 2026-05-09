@@ -1926,8 +1926,8 @@ def test_current_repo_full_name_falls_back_to_gh_when_origin_unavailable(
     assert store._current_repo_full_name() == "fallback/repo"
 
 
-def _remote_review_policy(*, enabled: bool = True) -> dict:
-    return {
+def _remote_review_policy(*, enabled: bool = True, repair: dict[str, int] | None = None) -> dict:
+    policy = {
         "autopilot": {
             "github": {
                 "remote_code_review": {
@@ -1939,6 +1939,9 @@ def _remote_review_policy(*, enabled: bool = True) -> dict:
             }
         }
     }
+    if repair is not None:
+        policy["autopilot"]["repair"] = repair
+    return policy
 
 
 def _green_pr_snapshot(pr_number: int) -> tuple[str, str, dict, list]:
@@ -4041,6 +4044,7 @@ def test_repair_exhausted_managed_pr_card_passes_through_ci(
             "linked_pr_number": 42,
             "head_branch": "autopilot/card-42",
             "worktree_path": str(sync_cwd),
+            "attempt_count": 3,
         },
     )
     store.update_status(card.id, status="failed", note="repair rounds exhausted")
@@ -4080,6 +4084,10 @@ def test_repair_exhausted_managed_pr_card_passes_through_ci(
         "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
     )
     monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
+        lambda self, pr_number: {"state": "OPEN", "url": "https://example/pr/42"},
+    )
+    monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
         lambda self, pr_snapshot, policies: False,
     )
@@ -4096,6 +4104,182 @@ def test_repair_exhausted_managed_pr_card_passes_through_ci(
     assert updated.status == "completed"
     assert updated.metadata.get("human_gate_pending") is True
     assert call_order == ["sync", "ci"]
+
+
+def test_repeated_failure_metadata_increments_for_same_failure(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Repeat", body="")
+
+    first = store._failure_repeat_metadata(
+        card, stage="no_changes", summary="Agent produced no code changes to commit."
+    )
+    store.update_status(card.id, status="repairing", metadata_updates=first)
+    updated = store.get_card(card.id)
+    assert updated is not None
+
+    second = store._failure_repeat_metadata(
+        updated, stage="no_changes", summary="Agent produced no code changes to commit."
+    )
+
+    assert first["repeated_failure_count"] == 1
+    assert second["repeated_failure_count"] == 2
+
+
+def test_repeated_failure_metadata_resets_for_different_failure(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Repeat",
+        body="",
+        metadata={
+            "repeated_failure_key": "remote_ci_failed:test/check=failure",
+            "repeated_failure_count": 2,
+        },
+    )
+
+    repeat_meta = store._failure_repeat_metadata(
+        card, stage="no_changes", summary="Agent produced no code changes to commit."
+    )
+
+    assert repeat_meta["repeated_failure_count"] == 1
+
+
+def test_existing_pr_card_ci_fail_retries_when_repair_rounds_unlimited(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import asyncio
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    sync_cwd = tmp_path / "worktrees" / "card-42"
+    sync_cwd.mkdir(parents=True)
+    card, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #42: existing PR",
+        body="",
+        source_ref="pr:42",
+        metadata={
+            "attempt_count": 99,
+            "linked_pr_number": 42,
+            "head_branch": "autopilot/pr-42",
+            "worktree_path": str(sync_cwd),
+        },
+    )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo",
+        lambda self, cwd: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_same_git_common_dir",
+        lambda self, cwd: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
+            True,
+            "branch_push_done",
+            "Pushed.",
+        ),
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number, policies):
+        return "failed", "same check failed", {"url": "https://example/pr/42"}, []
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+
+    result = asyncio.run(
+        store._process_existing_pr_card(
+            card,
+            42,
+            _remote_review_policy(
+                repair={"max_rounds": 0, "max_repeated_failure_attempts": 3}
+            ),
+        )
+    )
+
+    assert result.status == "queued"
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.status == "queued"
+    assert updated.metadata.get("repeated_failure_count") == 1
+
+
+def test_existing_pr_card_ci_fail_stops_after_repeated_same_failure(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import asyncio
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    sync_cwd = tmp_path / "worktrees" / "card-42"
+    sync_cwd.mkdir(parents=True)
+    card, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #42: existing PR",
+        body="",
+        source_ref="pr:42",
+        metadata={
+            "attempt_count": 99,
+            "linked_pr_number": 42,
+            "head_branch": "autopilot/pr-42",
+            "worktree_path": str(sync_cwd),
+            "repeated_failure_key": "remote_ci_failed:same check failed",
+            "repeated_failure_count": 2,
+        },
+    )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo",
+        lambda self, cwd: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_same_git_common_dir",
+        lambda self, cwd: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
+            True,
+            "branch_push_done",
+            "Pushed.",
+        ),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number, policies):
+        return "failed", "same check failed", {"url": "https://example/pr/42"}, []
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+
+    result = asyncio.run(
+        store._process_existing_pr_card(
+            card,
+            42,
+            _remote_review_policy(
+                repair={"max_rounds": 0, "max_repeated_failure_attempts": 3}
+            ),
+        )
+    )
+
+    assert result.status == "failed"
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.status == "failed"
+    assert updated.metadata.get("repeated_failure_count") == 3
 
 
 def test_existing_pr_card_branch_sync_failure_marks_failed(
@@ -4437,7 +4621,7 @@ def test_autopilot_managed_card_stays_waiting_when_ci_pending(tmp_path: Path, mo
 
 
 def test_autopilot_managed_card_repairs_when_ci_fail(tmp_path: Path, monkeypatch) -> None:
-    """run_card() with autopilot_managed=True, linked PR, CI fail → marks failed."""
+    """run_card() with autopilot_managed=True, linked PR, CI fail → queues repair."""
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
@@ -4471,12 +4655,13 @@ def test_autopilot_managed_card_repairs_when_ci_fail(tmp_path: Path, monkeypatch
     import asyncio
 
     result = asyncio.run(store.run_card(card.id))
-    assert result.status == "failed"
+    assert result.status == "queued"
     assert result.pr_number == 99
     updated = store.get_card(card.id)
     assert updated is not None
-    assert updated.status == "failed"
+    assert updated.status == "queued"
     assert updated.metadata.get("last_failure_stage") == "remote_ci_failed"
+    assert updated.metadata.get("repeated_failure_count") == 1
 
 
 def test_check_and_merge_managed_prs_merges_when_ci_pass_in_tick(

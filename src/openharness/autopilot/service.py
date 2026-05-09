@@ -469,7 +469,19 @@ class RepoAutopilotStore:
             except ProcessLookupError:
                 pass
             else:
-                continue  # process alive — leave it alone
+                # PID exists — but for `preparing` cards that haven't created a
+                # worktree yet, the PID may belong to a different process that
+                # reused the slot after the original worker was killed.  If the
+                # worktree_path is absent AND status is still `preparing`, treat
+                # this as a stale claim regardless of PID liveness.
+                if card.status == "preparing":
+                    worktree_path = _safe_text(card.metadata.get("worktree_path"))
+                    if not worktree_path or not Path(worktree_path).exists():
+                        pass  # fall through to requeue
+                    else:
+                        continue  # worktree exists — real active worker
+                else:
+                    continue  # process alive — leave it alone
             # PID is gone: reset to queued so the next run_next picks it up
             card.status = "queued"
             card.updated_at = time.time()
@@ -1083,16 +1095,40 @@ class RepoAutopilotStore:
                         pr_number=linked_pr_number,
                         pr_url=pr_url,
                     )
+                repeat_meta = self._failure_repeat_metadata(
+                    card, stage="remote_ci_failed", summary=ci_summary
+                )
+                ci_meta = {
+                    "linked_pr_number": linked_pr_number,
+                    "linked_pr_url": pr_url,
+                    "last_failure_stage": "remote_ci_failed",
+                    "last_failure_summary": ci_summary,
+                    **repeat_meta,
+                }
+                if (
+                    int(card.metadata.get("attempt_count", 0) or 0) < max_attempts
+                    and repeat_meta["repeated_failure_count"]
+                    < self._max_repeated_failure_attempts(policies)
+                ):
+                    self.update_status(
+                        card.id,
+                        status="queued",
+                        note=f"autopilot managed PR #{linked_pr_number} CI failed; queued repair retry",
+                        metadata_updates=ci_meta,
+                    )
+                    return RepoRunResult(
+                        card_id=card.id,
+                        status="queued",
+                        run_report_path="",
+                        verification_report_path="",
+                        pr_number=linked_pr_number,
+                        pr_url=pr_url,
+                    )
                 self.update_status(
                     card.id,
                     status="failed",
                     note=f"autopilot managed PR #{linked_pr_number} CI failed: {ci_summary}",
-                    metadata_updates={
-                        "linked_pr_number": linked_pr_number,
-                        "linked_pr_url": pr_url,
-                        "last_failure_stage": "remote_ci_failed",
-                        "last_failure_summary": ci_summary,
-                    },
+                    metadata_updates=ci_meta,
                 )
                 return RepoRunResult(
                     card_id=card.id,
@@ -1150,16 +1186,40 @@ class RepoAutopilotStore:
                         pr_url=pr_url,
                     )
                 # Failed CI
+                repeat_meta = self._failure_repeat_metadata(
+                    card, stage="remote_ci_failed", summary=ci_summary
+                )
+                ci_meta = {
+                    "linked_pr_number": linked_pr_number,
+                    "linked_pr_url": pr_url,
+                    "last_failure_stage": "remote_ci_failed",
+                    "last_failure_summary": ci_summary,
+                    **repeat_meta,
+                }
+                if (
+                    int(card.metadata.get("attempt_count", 0) or 0) < max_attempts
+                    and repeat_meta["repeated_failure_count"]
+                    < self._max_repeated_failure_attempts(policies)
+                ):
+                    self.update_status(
+                        card.id,
+                        status="queued",
+                        note=f"autopilot managed PR #{linked_pr_number} CI failed; queued repair retry",
+                        metadata_updates=ci_meta,
+                    )
+                    return RepoRunResult(
+                        card_id=card.id,
+                        status="queued",
+                        run_report_path="",
+                        verification_report_path="",
+                        pr_number=linked_pr_number,
+                        pr_url=pr_url,
+                    )
                 self.update_status(
                     card.id,
                     status="failed",
                     note=f"autopilot managed PR #{linked_pr_number} CI failed: {ci_summary}",
-                    metadata_updates={
-                        "linked_pr_number": linked_pr_number,
-                        "linked_pr_url": pr_url,
-                        "last_failure_stage": "remote_ci_failed",
-                        "last_failure_summary": ci_summary,
-                    },
+                    metadata_updates=ci_meta,
                 )
                 return RepoRunResult(
                     card_id=card.id,
@@ -1551,7 +1611,14 @@ class RepoAutopilotStore:
                     )
                     if not branch_has_progress:
                         no_changes_summary = "Agent produced no code changes to commit."
-                        if attempt_count < max_attempts:
+                        repeat_meta = self._failure_repeat_metadata(
+                            card, stage="no_changes", summary=no_changes_summary
+                        )
+                        if (
+                            attempt_count < max_attempts
+                            and repeat_meta["repeated_failure_count"]
+                            < self._max_repeated_failure_attempts(policies)
+                        ):
                             self.update_status(
                                 card.id,
                                 status="repairing",
@@ -1559,6 +1626,7 @@ class RepoAutopilotStore:
                                 metadata_updates={
                                     "last_failure_stage": "no_changes",
                                     "last_failure_summary": no_changes_summary,
+                                    **repeat_meta,
                                 },
                             )
                             prior_failure_stage = "no_changes"
@@ -1571,6 +1639,7 @@ class RepoAutopilotStore:
                             metadata_updates={
                                 "last_failure_stage": "no_changes",
                                 "last_failure_summary": no_changes_summary,
+                                **repeat_meta,
                             },
                         )
                         return RepoRunResult(
@@ -1710,7 +1779,14 @@ class RepoAutopilotStore:
                         },
                     )
                     if ci_state == "failed":
-                        if attempt_count < max_attempts:
+                        repeat_meta = self._failure_repeat_metadata(
+                            card, stage="remote_ci_failed", summary=ci_summary
+                        )
+                        if (
+                            attempt_count < max_attempts
+                            and repeat_meta["repeated_failure_count"]
+                            < self._max_repeated_failure_attempts(policies)
+                        ):
                             self.update_status(
                                 card.id,
                                 status="repairing",
@@ -1718,6 +1794,7 @@ class RepoAutopilotStore:
                                 metadata_updates={
                                     "last_failure_stage": "remote_ci_failed",
                                     "last_failure_summary": ci_summary,
+                                    **repeat_meta,
                                 },
                             )
                             self.append_journal(
@@ -1743,6 +1820,7 @@ class RepoAutopilotStore:
                             metadata_updates={
                                 "last_failure_stage": "remote_ci_failed",
                                 "last_failure_summary": ci_summary,
+                                **repeat_meta,
                             },
                         )
                         self._comment_on_pr(
@@ -2373,14 +2451,35 @@ class RepoAutopilotStore:
 
     def _max_attempts(self, policies: dict[str, Any]) -> int:
         import sys
-        
+
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
         repair = dict(policies.get("autopilot", {}).get("repair", {}))
+        if repair.get("max_rounds") == 0:
+            return sys.maxsize
         raw_execution = int(execution.get("max_attempts", 3) or 3)
-        # 0 means unlimited — use sys.maxsize so range() and comparisons work unchanged
         execution_attempts = sys.maxsize if raw_execution == 0 else raw_execution
         repair_rounds = int(repair.get("max_rounds", 2) or 2)
         return max(execution_attempts, repair_rounds + 1, 1)
+
+    def _max_repeated_failure_attempts(self, policies: dict[str, Any]) -> int:
+        repair = dict(policies.get("autopilot", {}).get("repair", {}))
+        return max(int(repair.get("max_repeated_failure_attempts", 3) or 3), 1)
+
+    def _failure_repeat_metadata(
+        self,
+        card: RepoTaskCard,
+        *,
+        stage: str,
+        summary: str,
+    ) -> dict[str, Any]:
+        failure_key = f"{stage}:{summary}"
+        previous_key = _safe_text(card.metadata.get("repeated_failure_key"))
+        previous_count = int(card.metadata.get("repeated_failure_count", 0) or 0)
+        count = previous_count + 1 if previous_key == failure_key else 1
+        return {
+            "repeated_failure_key": failure_key,
+            "repeated_failure_count": count,
+        }
 
     def _base_branch(self, policies: dict[str, Any]) -> str:
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
@@ -3470,6 +3569,9 @@ class RepoAutopilotStore:
         ci_state, ci_summary, pr_snapshot, _checks = await self._wait_for_pr_ci(pr_number, policies)
         pr_url = _safe_text(pr_snapshot.get("url"))
         if ci_state == "failed":
+            repeat_meta = self._failure_repeat_metadata(
+                card, stage="remote_ci_failed", summary=ci_summary
+            )
             ci_meta = {
                 "linked_pr_number": pr_number,
                 "linked_pr_url": pr_url,
@@ -3477,9 +3579,14 @@ class RepoAutopilotStore:
                 "last_failure_summary": ci_summary,
                 "last_ci_conclusion": "failed",
                 "last_ci_summary": ci_summary,
+                **repeat_meta,
             }
             max_attempts = self._max_attempts(policies)
-            if attempt_count < max_attempts:
+            if (
+                attempt_count < max_attempts
+                and repeat_meta["repeated_failure_count"]
+                < self._max_repeated_failure_attempts(policies)
+            ):
                 self.update_status(
                     card.id,
                     status="queued",

@@ -897,6 +897,15 @@ async def retry_card_now(
         )
     current_attempt = int(card.metadata.get("attempt_count", 0) or 0)
     worker_id = f"pid-{os.getpid()}-{uuid4().hex[:8]}"
+    store.update_status(
+        card_id,
+        status="queued",
+        metadata_updates={
+            "retry_requested": True,
+            "retry_by": "user",
+            "attempt_count": current_attempt + 1,
+        },
+    )
     claimed = store.pick_specific_card(card_id, worker_id)
     if claimed is None:
         raise HTTPException(
@@ -907,18 +916,6 @@ async def retry_card_now(
                 "message": "Could not claim the card for retry.",
             },
         )
-    # Update attempt count after claiming
-    store.update_status(
-        card_id,
-        status="queued",
-        metadata_updates={
-            "retry_requested": True,
-            "retry_by": "user",
-            "attempt_count": current_attempt + 1,
-        },
-    )
-    # Re-claim with fresh worker_id
-    store.pick_specific_card(card_id, worker_id)
     oh_executable = str(Path(sys.executable).with_name("oh"))
     command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
     manager = get_task_manager()

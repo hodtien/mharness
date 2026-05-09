@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -9,6 +10,7 @@ from openharness.api.usage import UsageSnapshot
 from openharness.auth.storage import load_credential
 from openharness.config.settings import load_settings, save_settings
 from openharness.engine.messages import ConversationMessage, ToolResultBlock, ToolUseBlock
+from openharness.tasks.manager import get_task_manager
 from openharness.webui.server.app import create_app
 
 
@@ -1015,6 +1017,53 @@ def test_pipeline_cards_action_retry_resets_status_to_queued(tmp_path) -> None:
     assert response.status_code == 200
     card = response.json()
     assert card["status"] == "queued"
+
+
+def test_pipeline_retry_now_accepts_failed_card_and_spawns_task(tmp_path, monkeypatch) -> None:
+    registry = {
+        "version": 1,
+        "updated_at": 1000.0,
+        "cards": [
+            {
+                "id": "ap-retry-now",
+                "title": "Retry now",
+                "body": "",
+                "status": "failed",
+                "source_kind": "manual_idea",
+                "source_ref": "",
+                "fingerprint": "manual_idea:retry-now",
+                "score": 5,
+                "score_reasons": [],
+                "labels": [],
+                "metadata": {},
+                "created_at": 600.0,
+                "updated_at": 700.0,
+            },
+        ],
+    }
+    reg_dir = tmp_path / ".openharness" / "autopilot"
+    reg_dir.mkdir(parents=True)
+    (reg_dir / "registry.json").write_text(json.dumps(registry))
+
+    async def fake_create_shell_task(*, command, description, cwd, task_type):
+        return SimpleNamespace(id="task-retry-now")
+
+    monkeypatch.setattr(get_task_manager(), "create_shell_task", fake_create_shell_task)
+
+    client = _client(tmp_path)
+    response = client.post(
+        "/api/pipeline/cards/ap-retry-now/retry-now",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["task_id"] == "task-retry-now"
+    saved = json.loads((reg_dir / "registry.json").read_text())
+    card = next(card for card in saved["cards"] if card["id"] == "ap-retry-now")
+    assert card["status"] == "preparing"
+    assert card["metadata"]["attempt_count"] == 1
+    assert card["metadata"]["retry_requested"] is True
+    assert card["metadata"]["retry_by"] == "user"
 
 
 def test_pipeline_cards_action_rejects_invalid_action(tmp_path) -> None:

@@ -319,6 +319,49 @@ describe("PipelinePage", () => {
     expect(screen.getByRole("link", { name: /^Merge manually$/i }).getAttribute("href")).toBe("https://example.test/pr/123");
   });
 
+  it("posts to retry-now when Retry Now is clicked for a failed card", async () => {
+    const blockedCards = [
+      {
+        ...sampleCards[0],
+        id: "card-failed-1",
+        title: "Fix flaky CI",
+        status: "failed",
+        metadata: {
+          last_note: "Tests failed after retry",
+        },
+      },
+    ];
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/pipeline/cards" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve(jsonResponse({ cards: blockedCards, updated_at: 0 }));
+      }
+      if (url.startsWith("/api/pipeline/journal")) {
+        return Promise.resolve(jsonResponse({ entries: [] }));
+      }
+      if (url === "/api/pipeline/cards/card-failed-1/retry-now" && init?.method === "POST") {
+        return Promise.resolve({ ...jsonResponse({ task_id: "task-1", card_id: "card-failed-1", status: "accepted", attempt: 1 }), status: 202 });
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("Fix flaky CI"));
+    fireEvent.click(await screen.findByRole("button", { name: /retry now/i }));
+
+    await waitFor(() => {
+      const retryNowCalls = fetchMock.mock.calls.filter(
+        (c) => String(c[0]) === "/api/pipeline/cards/card-failed-1/retry-now" && (c[1] as RequestInit | undefined)?.method === "POST",
+      );
+      expect(retryNowCalls.length).toBe(1);
+    });
+  });
+
   it("Review tab: shows 'Run Review' when GET /api/review/{id} returns 404", async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === "/api/pipeline/cards" && (!init?.method || init.method === "GET")) {
