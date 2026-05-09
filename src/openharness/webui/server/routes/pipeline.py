@@ -377,7 +377,10 @@ async def run_next_card(state: WebUIState = Depends(get_state)) -> dict:
     store = RepoAutopilotStore(state.cwd)
     policies = store.load_policies()
     active_count = store.count_active_cards()
-    max_parallel = int(policies.get("autopilot", {}).get("execution", {}).get("max_parallel_runs", 0))
+    execution = policies.get("execution")
+    if not isinstance(execution, dict):
+        execution = dict(policies.get("autopilot", {}).get("execution", {}))
+    max_parallel = int(execution.get("max_parallel_runs", 0))
     if not store.has_capacity(policies):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

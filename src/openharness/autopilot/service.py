@@ -535,10 +535,11 @@ class RepoAutopilotStore:
 
     def has_capacity(self, policies: dict[str, Any]) -> bool:
         """Return True when fewer active cards are running than max_parallel_runs allows."""
+        execution = policies.get("execution")
+        if not isinstance(execution, dict):
+            execution = dict(policies.get("autopilot", {}).get("execution", {}))
         max_parallel = int(
-            policies.get("autopilot", {})
-            .get("execution", {})
-            .get("max_parallel_runs", _DEFAULT_AUTOPILOT_POLICY["execution"]["max_parallel_runs"])
+            execution.get("max_parallel_runs", _DEFAULT_AUTOPILOT_POLICY["execution"]["max_parallel_runs"])
         )
         return self.count_active_cards() < max_parallel
 
