@@ -188,6 +188,24 @@ def _shorten(text: str, *, limit: int = 120) -> str:
     return normalized[: limit - 3] + "..."
 
 
+def _calc_next_retry_at(retry_count: int) -> float:
+    """Calculate next retry timestamp using exponential backoff.
+
+    Delays: 5 min, 15 min, 30 min, 1 h, 2 h, 4 h, 8 h (capped).
+    """
+    _DELAY_SECONDS = [
+        5 * 60,    # retry 1: 5 min
+        15 * 60,   # retry 2: 15 min
+        30 * 60,   # retry 3: 30 min
+        60 * 60,   # retry 4: 1 h
+        2 * 3600,  # retry 5: 2 h
+        4 * 3600,  # retry 6: 4 h
+        8 * 3600,  # retry 7+: 8 h
+    ]
+    delay = _DELAY_SECONDS[min(retry_count - 1, len(_DELAY_SECONDS) - 1)]
+    return time.time() + delay
+
+
 def _resolve_agent_model(agent_key: str) -> str | None:
     try:
         from openharness.config.claude_bridge import read_claude_settings
@@ -386,6 +404,8 @@ class RepoAutopilotStore:
         ``_load_registry``/``_save_registry`` use internally) so the outer and
         inner critical sections share one open-file-description and don't
         deadlock against each other via two independent ``flock`` holders.
+
+        Pending cards with a future ``next_retry_at`` timestamp are skipped.
         """
         with RepoFileLock(self._registry_lock_path):
             if not self._registry_path.exists():
@@ -395,7 +415,16 @@ class RepoAutopilotStore:
             except json.JSONDecodeError:
                 return None
             registry = RepoAutopilotRegistry.model_validate(payload)
-            queued = [card for card in registry.cards if card.status in {"queued", "accepted"}]
+            now = time.time()
+            queued = [
+                card
+                for card in registry.cards
+                if card.status in {"queued", "accepted"}
+                or (
+                    card.status == "pending"
+                    and card.metadata.get("next_retry_at", 0) <= now
+                )
+            ]
             if not queued:
                 return None
             chosen = sorted(
@@ -611,8 +640,19 @@ class RepoAutopilotStore:
         return card, True
 
     def pick_next_card(self) -> RepoTaskCard | None:
+        """Return the highest-priority card that is ready to run.
+
+        Pending cards with a future ``next_retry_at`` timestamp are skipped.
+        """
+        now = time.time()
         queued = [
-            card for card in self._load_registry().cards if card.status in {"queued", "accepted"}
+            card
+            for card in self._load_registry().cards
+            if card.status in {"queued", "accepted"}
+            or (
+                card.status == "pending"
+                and card.metadata.get("next_retry_at", 0) <= now
+            )
         ]
         if not queued:
             return None
@@ -624,6 +664,7 @@ class RepoAutopilotStore:
         """Claim a specific card by ID for a worker (used for direct card control).
 
         Returns None if the card does not exist or is not in a claimable state.
+        Pending cards can be claimed regardless of next_retry_at when explicitly requested.
         """
         with RepoFileLock(self._registry_lock_path):
             if not self._registry_path.exists():
@@ -636,7 +677,7 @@ class RepoAutopilotStore:
             chosen = next((c for c in registry.cards if c.id == card_id), None)
             if chosen is None:
                 return None
-            if chosen.status not in {"queued", "accepted"}:
+            if chosen.status not in {"queued", "accepted", "pending"}:
                 return None
             chosen.status = "preparing"
             chosen.updated_at = time.time()
@@ -1281,17 +1322,22 @@ class RepoAutopilotStore:
                 verification_report_path=str(self._runs_dir / f"{card.id}-verification.md"),
             )
         if preflight.transient:
-            # Transient failures: move to pending
+            # Transient failures: move to pending with retry metadata
             transient_reasons = "; ".join(c.reason for c in preflight.transient)
+            retry_count = int(card.metadata.get("retry_count", 0)) + 1
+            next_retry_at = _calc_next_retry_at(retry_count)
+            metadata_updates = {
+                "preflight_result": preflight.model_dump(),
+                "pending_reason": "preflight_transient",
+                "preflight_transient_reasons": [c.reason for c in preflight.transient],
+                "retry_count": retry_count,
+                "next_retry_at": next_retry_at,
+            }
             self.update_status(
                 card.id,
                 status="pending",
                 note=f"preflight transient failure: {transient_reasons}",
-                metadata_updates={
-                    "preflight_result": preflight.model_dump(),
-                    "pending_reason": "preflight_transient",
-                    "preflight_transient_reasons": [c.reason for c in preflight.transient],
-                },
+                metadata_updates=metadata_updates,
             )
             self.append_journal(
                 kind="preflight_pending",

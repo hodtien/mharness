@@ -1192,6 +1192,7 @@ def autopilot_status_cmd(
     counts = store.stats()
     print("Autopilot queue status:")
     for status_name in (
+        "pending",
         "queued",
         "accepted",
         "preparing",

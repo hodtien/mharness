@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import MethodType, SimpleNamespace
 
-from openharness.autopilot import PreflightCheck, RepoAutopilotStore, RepoVerificationStep
+from openharness.autopilot import PreflightCheck, RepoAutopilotStore, RepoTaskCard, RepoVerificationStep
 from openharness.swarm.worktree import WorktreeInfo
 from openharness.autopilot.service import _DEFAULT_AUTOPILOT_POLICY, _DEFAULT_VERIFICATION_POLICY
 from openharness.autopilot.session_store import save_checkpoint
@@ -253,6 +253,73 @@ def test_paused_not_active(tmp_path: Path) -> None:
     store.update_status(card.id, status="paused")
 
     assert store.count_active_cards() == 0
+
+
+def test_pending_skipped_until_retry_time(tmp_path: Path) -> None:
+    """Pending card with future next_retry_at should be skipped by pick_next_card."""
+    import time
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Pending test", body="body")
+
+    # Set pending with future next_retry_at
+    future_time = time.time() + 3600
+    store.update_status(
+        card.id,
+        status="pending",
+        metadata_updates={"pending_reason": "test", "next_retry_at": future_time, "retry_count": 1},
+    )
+
+    assert store.pick_next_card() is None, "Pending card with future retry time should be skipped"
+
+
+def test_pending_becomes_pickable_after_retry_time(tmp_path: Path) -> None:
+    """Pending card with past next_retry_at should be picked by pick_next_card."""
+    import time
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Pending test", body="body")
+
+    # Set pending with past next_retry_at
+    past_time = time.time() - 60
+    store.update_status(
+        card.id,
+        status="pending",
+        metadata_updates={"pending_reason": "test", "next_retry_at": past_time, "retry_count": 1},
+    )
+
+    chosen = store.pick_next_card()
+    assert chosen is not None
+    assert chosen.id == card.id, "Pending card with past retry time should be picked"
+
+
+def test_calc_next_retry_at_exponential_backoff() -> None:
+    """Test that _calc_next_retry_at uses exponential backoff."""
+    import time
+
+    from openharness.autopilot.service import _calc_next_retry_at
+
+    now = time.time()
+
+    # Retry 1: ~5 min delay
+    t1 = _calc_next_retry_at(1)
+    assert 5 * 60 - 5 <= t1 - now <= 5 * 60 + 5, f"Retry 1 delay: {t1 - now}s"
+
+    # Retry 2: ~15 min delay
+    t2 = _calc_next_retry_at(2)
+    assert 15 * 60 - 5 <= t2 - now <= 15 * 60 + 5, f"Retry 2 delay: {t2 - now}s"
+
+    # Retry 4: ~1h delay
+    t4 = _calc_next_retry_at(4)
+    assert 60 * 60 - 5 <= t4 - now <= 60 * 60 + 5, f"Retry 4 delay: {t4 - now}s"
+
+    # Retry 10+: capped at ~8h
+    t10 = _calc_next_retry_at(10)
+    assert 8 * 3600 - 5 <= t10 - now <= 8 * 3600 + 5, f"Retry 10 delay: {t10 - now}s"
 
 
 def test_autopilot_scan_claude_code_candidates(tmp_path: Path) -> None:
@@ -4803,7 +4870,6 @@ def test_repair_exhausted_managed_pr_card_passes_through_ci(
             "linked_pr_number": 42,
             "head_branch": "autopilot/card-42",
             "worktree_path": str(sync_cwd),
-            "attempt_count": 3,
         },
     )
     store.update_status(card.id, status="failed", note="repair rounds exhausted")
