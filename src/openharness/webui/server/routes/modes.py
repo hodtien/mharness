@@ -36,6 +36,8 @@ class ModesPatch(BaseModel):
     passes: int | None = Field(default=None, ge=1, le=5)
     fast_mode: bool | None = None
     vim_enabled: bool | None = None
+    notifications_enabled: bool | None = None
+    auto_compact_threshold_tokens: int | None = Field(default=None, ge=1)
     output_style: str | None = None
     theme: str | None = None
 
@@ -45,6 +47,8 @@ def _modes_payload(state: AppState) -> dict[str, object]:
         "permission_mode": state.permission_mode,
         "fast_mode": state.fast_mode,
         "vim_enabled": state.vim_enabled,
+        "notifications_enabled": state.notifications_enabled,
+        "auto_compact_threshold_tokens": state.auto_compact_threshold_tokens,
         "effort": state.effort,
         "passes": state.passes,
         "output_style": state.output_style,
@@ -68,6 +72,8 @@ def _settings_payload(state: WebUIState) -> dict[str, object]:
         "permission_mode": state.permission_mode or settings.permission.mode.value,
         "fast_mode": settings.fast_mode,
         "vim_enabled": settings.vim_mode,
+        "notifications_enabled": settings.notifications_enabled,
+        "auto_compact_threshold_tokens": settings.auto_compact_threshold_tokens,
         "effort": settings.effort,
         "passes": settings.passes,
         "output_style": settings.output_style,
@@ -106,7 +112,7 @@ def _apply_to_settings(updates: dict[str, object]) -> AppState:
         settings_updates["permission"] = settings.permission.model_copy(
             update={"mode": PermissionMode(updates["permission_mode"])}
         )
-    for key in ("effort", "passes", "fast_mode", "output_style", "theme"):
+    for key in ("effort", "passes", "fast_mode", "output_style", "theme", "notifications_enabled", "auto_compact_threshold_tokens"):
         if key in updates:
             settings_updates[key] = updates[key]
     if "vim_enabled" in updates:
@@ -125,6 +131,8 @@ def _apply_to_settings(updates: dict[str, object]) -> AppState:
         passes=settings.passes,
         output_style=settings.output_style,
         vim_enabled=settings.vim_mode,
+        notifications_enabled=settings.notifications_enabled,
+        auto_compact_threshold_tokens=settings.auto_compact_threshold_tokens,
     )
 
 
@@ -152,7 +160,7 @@ async def patch_modes(
     manager: SessionManager = Depends(get_session_manager),
 ) -> dict[str, object]:
     """Update runtime modes, persist to settings, and broadcast a state_snapshot."""
-    updates = payload.model_dump(exclude_none=True)
+    updates = payload.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

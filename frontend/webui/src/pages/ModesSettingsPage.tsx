@@ -13,6 +13,13 @@ const permissionOptions: Array<{ value: PermissionMode; label: string; descripti
   { value: "full_auto", label: "Full Auto", description: "Run safe tasks with minimal interruption." },
 ];
 
+const compactOptions = [
+  { value: 80_000, label: "80k tokens" },
+  { value: 120_000, label: "120k tokens" },
+  { value: 160_000, label: "160k tokens" },
+  { value: 200_000, label: "200k tokens" },
+];
+
 const outputStyles = ["default", "concise", "detailed", "json"];
 const themes = ["default", "dark", "light", "system"];
 
@@ -202,51 +209,72 @@ export default function ModesSettingsPage() {
           </div>
         </Section>
 
-        <Section title="Fast Mode">
-          <label className="inline-flex cursor-pointer items-center gap-3">
-            <input
-              aria-label="Fast Mode"
-              type="checkbox"
-              className="h-5 w-5 accent-cyan-400"
-              checked={modes.fast_mode}
-              onChange={(event) => updateMode({ fast_mode: event.target.checked })}
-            />
-            <span className="text-sm text-[var(--text-dim)]">Use faster responses when available.</span>
-          </label>
-        </Section>
-
-        <Section
-          title="Vim keybindings"
-          description="Enable vim key navigation in the chat input"
-        >
-          <label className="inline-flex cursor-pointer items-center gap-3">
-            <input
-              aria-label="Vim keybindings"
-              type="checkbox"
-              className="h-5 w-5 accent-cyan-400"
-              checked={modes.vim_enabled}
-              onChange={(event) => updateMode({ vim_enabled: event.target.checked })}
-            />
-            <span className="text-sm text-[var(--text-dim)]">
-              {modes.vim_enabled ? "Enabled" : "Disabled"}
-            </span>
-          </label>
-        </Section>
-
         <div className="grid gap-6 sm:grid-cols-2">
-          <Section title="Output Style">
-            <Select
-              value={modes.output_style}
-              options={uniqueOption(outputStyles, modes.output_style)}
-              onChange={(output_style) => updateMode({ output_style })}
-            />
+          <Section
+            title="Runtime controls"
+            description="Settings that affect session behavior while OpenHarness is running."
+          >
+            <div className="space-y-4">
+              <ToggleRow
+                label="Fast Mode"
+                helperText="Use faster responses when available."
+                checked={modes.fast_mode}
+                onChange={(checked) => updateMode({ fast_mode: checked })}
+              />
+              <ToggleRow
+                label="Vim keybindings"
+                helperText="Enable vim key navigation in the chat input."
+                checked={modes.vim_enabled}
+                onChange={(checked) => updateMode({ vim_enabled: checked })}
+              />
+              <ToggleRow
+                label="Notifications"
+                helperText="Receive WebUI/autopilot event notifications."
+                checked={Boolean(modes.notifications_enabled)}
+                onChange={(checked) => updateMode({ notifications_enabled: checked })}
+              />
+            </div>
           </Section>
-          <Section title="Theme">
-            <Select
-              value={modes.theme}
-              options={uniqueOption(themes, modes.theme)}
-              onChange={(theme) => updateMode({ theme })}
-            />
+
+          <Section
+            title="UX preferences"
+            description="Visual and workflow preferences saved with your profile."
+          >
+            <div className="space-y-4">
+              <div>
+                <div className="text-sm font-medium text-[var(--text)]">Output Style</div>
+                <div className="mt-1 text-xs text-[var(--text-dim)]">Choose how responses are formatted.</div>
+                <div className="mt-2">
+                  <Select
+                    value={modes.output_style}
+                    options={uniqueOption(outputStyles, modes.output_style)}
+                    onChange={(output_style) => updateMode({ output_style })}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="text-sm font-medium text-[var(--text)]">Theme</div>
+                <div className="mt-1 text-xs text-[var(--text-dim)]">Pick the app color theme.</div>
+                <div className="mt-2">
+                  <Select
+                    value={modes.theme}
+                    options={uniqueOption(themes, modes.theme)}
+                    onChange={(theme) => updateMode({ theme })}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="text-sm font-medium text-[var(--text)]">Auto-compact</div>
+                <div className="mt-1 text-xs text-[var(--text-dim)]">Compact transcripts sooner to keep long sessions responsive.</div>
+                <div className="mt-2">
+                  <Select
+                    value={modes.auto_compact_threshold_tokens ? String(modes.auto_compact_threshold_tokens) : "160000"}
+                    options={["off", ...compactOptions.map((option) => String(option.value))]}
+                    onChange={(value) => updateMode({ auto_compact_threshold_tokens: value === "off" ? null : Number(value) })}
+                  />
+                </div>
+              </div>
+            </div>
           </Section>
         </div>
 
@@ -281,6 +309,36 @@ function Select({ value, options, onChange }: { value: string; options: string[]
         </option>
       ))}
     </select>
+  );
+}
+
+function ToggleRow({
+  label,
+  helperText,
+  checked,
+  onChange,
+}: {
+  label: string;
+  helperText?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex-1">
+        <div className="text-sm font-medium text-[var(--text)]">{label}</div>
+        {helperText && <div className="mt-0.5 text-xs text-[var(--text-dim)]">{helperText}</div>}
+      </div>
+      <div className="mt-0.5 flex-shrink-0">
+        <input
+          aria-label={label}
+          type="checkbox"
+          className="h-5 w-5 accent-cyan-400"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+      </div>
+    </div>
   );
 }
 

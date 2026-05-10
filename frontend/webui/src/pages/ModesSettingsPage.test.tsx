@@ -34,11 +34,11 @@ function mockGetModes(data: object) {
 describe("ModesSettingsPage", () => {
   it("renders loading state then content", async () => {
     mockLocalStorage();
-    mockGetModes({ permission_mode: "default", fast_mode: false, vim_enabled: false, effort: "low", passes: 2, output_style: "default", theme: "default" });
+    mockGetModes({ permission_mode: "default", fast_mode: false, vim_enabled: false, notifications_enabled: true, auto_compact_threshold_tokens: 160000, effort: "low", passes: 2, output_style: "default", theme: "default" });
 
     render(<BrowserRouter><ModesSettingsPage /></BrowserRouter>);
 
-    expect(screen.getByText(/loading/i)).toBeTruthy();
+    expect(screen.getByLabelText("Loading content")).toBeTruthy();
     await waitFor(() => {
       expect(screen.getByText("Permission Mode")).toBeTruthy();
     });
@@ -49,7 +49,7 @@ describe("ModesSettingsPage", () => {
 
   it("renders all setting sections", async () => {
     mockLocalStorage();
-    mockGetModes({ permission_mode: "plan", fast_mode: true, vim_enabled: false, effort: "high", passes: 3, output_style: "concise", theme: "dark" });
+    mockGetModes({ permission_mode: "plan", fast_mode: true, vim_enabled: false, notifications_enabled: false, auto_compact_threshold_tokens: null, effort: "high", passes: 3, output_style: "concise", theme: "dark" });
 
     render(<BrowserRouter><ModesSettingsPage /></BrowserRouter>);
 
@@ -62,13 +62,14 @@ describe("ModesSettingsPage", () => {
     expect(screen.getByText("Vim keybindings")).toBeTruthy();
     expect(screen.getByText("Output Style")).toBeTruthy();
     expect(screen.getByText("Theme")).toBeTruthy();
+    expect(screen.getByText("Auto-compact")).toBeTruthy();
   });
 
   it("calls PATCH when fast mode toggle changes", async () => {
     mockLocalStorage();
     const patchMock = vi.fn((_url: string, init?: RequestInit) => {
       if (init?.method === "PATCH") return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: false, effort: "low", passes: 1, output_style: "default", theme: "default" }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: false, notifications_enabled: true, auto_compact_threshold_tokens: 160000, effort: "low", passes: 1, output_style: "default", theme: "default" }) });
     });
     vi.stubGlobal("fetch", patchMock);
 
@@ -86,7 +87,7 @@ describe("ModesSettingsPage", () => {
 
   it("renders vim keybindings toggle with correct initial state", async () => {
     mockLocalStorage();
-    mockGetModes({ permission_mode: "default", fast_mode: false, vim_enabled: true, effort: "medium", passes: 1, output_style: "default", theme: "default" });
+    mockGetModes({ permission_mode: "default", fast_mode: false, vim_enabled: true, notifications_enabled: false, auto_compact_threshold_tokens: null, effort: "medium", passes: 1, output_style: "default", theme: "default" });
 
     render(<BrowserRouter><ModesSettingsPage /></BrowserRouter>);
 
@@ -100,9 +101,9 @@ describe("ModesSettingsPage", () => {
     mockLocalStorage();
     const patchMock = vi.fn((_url: string, init?: RequestInit) => {
       if (init?.method === "PATCH") {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: true, effort: "low", passes: 1, output_style: "default", theme: "default" }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: true, notifications_enabled: true, auto_compact_threshold_tokens: 160000, effort: "low", passes: 1, output_style: "default", theme: "default" }) });
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: false, effort: "low", passes: 1, output_style: "default", theme: "default" }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: false, notifications_enabled: true, auto_compact_threshold_tokens: 160000, effort: "low", passes: 1, output_style: "default", theme: "default" }) });
     });
     vi.stubGlobal("fetch", patchMock);
 
@@ -119,6 +120,61 @@ describe("ModesSettingsPage", () => {
         expect.objectContaining({
           method: "PATCH",
           body: expect.stringContaining("vim_enabled"),
+        }),
+      );
+    });
+  });
+
+  it("calls PATCH with notifications_enabled when notification toggle changes", async () => {
+    mockLocalStorage();
+    const patchMock = vi.fn((_url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: false, notifications_enabled: false, auto_compact_threshold_tokens: 160000, effort: "low", passes: 1, output_style: "default", theme: "default" }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: false, notifications_enabled: true, auto_compact_threshold_tokens: 160000, effort: "low", passes: 1, output_style: "default", theme: "default" }) });
+    });
+    vi.stubGlobal("fetch", patchMock);
+
+    render(<BrowserRouter><ModesSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("Notifications")).toBeTruthy());
+
+    const notificationToggle = screen.getByRole("checkbox", { name: /notifications/i });
+    fireEvent.click(notificationToggle);
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith(
+        "/api/modes",
+        expect.objectContaining({
+          method: "PATCH",
+          body: expect.stringContaining("notifications_enabled"),
+        }),
+      );
+    });
+  });
+
+  it("calls PATCH with null auto compact value when compact is turned off", async () => {
+    mockLocalStorage();
+    const patchMock = vi.fn((_url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: false, notifications_enabled: true, auto_compact_threshold_tokens: null, effort: "low", passes: 1, output_style: "default", theme: "default" }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ permission_mode: "default", fast_mode: false, vim_enabled: false, notifications_enabled: true, auto_compact_threshold_tokens: 160000, effort: "low", passes: 1, output_style: "default", theme: "default" }) });
+    });
+    vi.stubGlobal("fetch", patchMock);
+
+    render(<BrowserRouter><ModesSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("Auto-compact")).toBeTruthy());
+
+    fireEvent.change(screen.getByDisplayValue("160000"), { target: { value: "off" } });
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith(
+        "/api/modes",
+        expect.objectContaining({
+          method: "PATCH",
+          body: expect.stringContaining('"auto_compact_threshold_tokens":null'),
         }),
       );
     });
