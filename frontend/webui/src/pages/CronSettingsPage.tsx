@@ -3,6 +3,7 @@ import { api, type CronConfigResponse, type CronConfigPatch } from "../api/clien
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import ErrorBanner from "../components/ErrorBanner";
 import { toast } from "../store/toast";
+import { useUnsavedWarning, FeedbackBadge, useFormFeedback } from "../hooks/useSettingsForm";
 
 // Interval thresholds for "too frequent" warnings (in minutes)
 const SCAN_THRESHOLD_MIN = 5;
@@ -122,6 +123,7 @@ export default function CronSettingsPage() {
 
   const applyDraft = (patch: CronConfigPatch) => {
     setSaving(true);
+    showSaving();
     setError(null);
     api
       .patchCronConfig(patch)
@@ -139,16 +141,13 @@ export default function CronSettingsPage() {
           install_mode: (updated as CronConfigResponse).install_mode || "auto",
           install_result: updated.install_result,
         });
+        showSaved();
         toast.success("Cron schedule updated.");
       })
       .catch((err) => {
-        // Try to extract structured error from backend
         const msg = String(err);
-        if (msg.includes("Validation failed")) {
-          setError(msg);
-        } else {
-          setError(msg);
-        }
+        setError(msg);
+        showSaveError();
         toast.error(String(err));
       })
       .finally(() => {
@@ -201,6 +200,11 @@ export default function CronSettingsPage() {
 
   const hasChanges = scanDirty || tickDirty;
   const previewEnabled = draftEnabled;
+
+  const { feedback: saveFeedback, showSaving, showSaved, showError: showSaveError } = useFormFeedback();
+
+  // Warn before navigating away when there are unsaved cron expression changes
+  useUnsavedWarning({ isDirty: hasChanges });
 
   if (loading) {
     return (
@@ -406,13 +410,16 @@ export default function CronSettingsPage() {
         </div>
 
         {/* Apply button */}
-        <div className="flex items-center justify-end gap-3">
-          {hasChanges && (
-            <span className="text-xs text-[var(--text-dim)]">
-              {scanDirty && "Scan schedule changed. "}
-              {tickDirty && "Tick schedule changed. "}
-            </span>
-          )}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <FeedbackBadge feedback={saveFeedback} />
+            {hasChanges && saveFeedback === "idle" && (
+              <span className="text-xs text-[var(--text-dim)]">
+                {scanDirty && "Scan schedule changed. "}
+                {tickDirty && "Tick schedule changed. "}
+              </span>
+            )}
+          </div>
           <button
             type="button"
             onClick={handleApply}

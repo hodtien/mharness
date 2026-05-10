@@ -3,6 +3,7 @@ import { api, type ModesPayload, type ModesPatch } from "../api/client";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import ErrorBanner from "../components/ErrorBanner";
 import { toast } from "../store/toast";
+import { FeedbackBadge, useFormFeedback } from "../hooks/useSettingsForm";
 
 type PermissionMode = "default" | "plan" | "full_auto";
 type Effort = "low" | "medium" | "high";
@@ -30,6 +31,7 @@ export default function ModesSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const passesTimer = useRef<number | null>(null);
+  const { feedback, showSaving, showSaved, showError: showSaveError } = useFormFeedback();
 
   useEffect(() => {
     let cancelled = false;
@@ -54,13 +56,16 @@ export default function ModesSettingsPage() {
 
   const patchModes = async (patch: ModesPatch) => {
     setSaving(true);
+    showSaving();
     setError(null);
     try {
       const updated = await api.patchModes(patch);
       setModes(updated);
       if (patch.passes !== undefined) setPassesInput(String(updated.passes));
+      showSaved();
       toast.success("Modes updated.");
     } catch (err) {
+      showSaveError();
       setError(String(err));
       toast.error(String(err));
     } finally {
@@ -278,7 +283,10 @@ export default function ModesSettingsPage() {
           </Section>
         </div>
 
-        <div className="text-xs text-[var(--text-dim)]">{saving ? "Saving…" : "Changes save automatically."}</div>
+        <div className="flex items-center gap-3 text-xs text-[var(--text-dim)]">
+          <FeedbackBadge feedback={feedback} />
+          <span>{saving ? "Saving…" : "Changes save automatically."}</span>
+        </div>
       </div>
     </div>
   );

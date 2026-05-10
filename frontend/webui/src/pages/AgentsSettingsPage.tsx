@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type AgentProfile, type AgentDetail, type AgentPatch, type ModelsResponse } from "../api/client";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import { toast } from "../store/toast";
+import { useUnsavedWarning, FeedbackBadge, useFormFeedback } from "../hooks/useSettingsForm";
 
 const EFFORT_OPTIONS = ["low", "medium", "high"] as const;
 const PERMISSION_OPTIONS = ["default", "acceptEdits", "bypassPermissions", "plan", "dontAsk"] as const;
@@ -38,6 +39,8 @@ export default function AgentsSettingsPage() {
   const [cloneSource, setCloneSource] = useState<string | null>(null);
   const [cloneName, setCloneName] = useState("");
   const [cloneBusy, setCloneBusy] = useState(false);
+
+  const { feedback: saveFeedback, showSaving, showSaved, showError: showSaveError } = useFormFeedback();
 
   useEffect(() => {
     let cancelled = false;
@@ -90,9 +93,13 @@ export default function AgentsSettingsPage() {
     draft.effort !== initialDraft.effort ||
     draft.permission_mode !== initialDraft.permission_mode;
 
+  // Warn before navigating away if an edit is in progress with changes
+  useUnsavedWarning({ isDirty: draftChanged });
+
   const saveEdit = async () => {
     if (!editing) return;
     setSaveBusy(true);
+    showSaving();
     try {
       const updated = await api.patchAgent(editing, draft);
       setAgents((prev) =>
@@ -101,8 +108,10 @@ export default function AgentsSettingsPage() {
       setEditing(null);
       setInitialDraft({});
       setValidateErrors([]);
+      showSaved();
       toast.success(`Agent ${editing} saved.`);
     } catch (err) {
+      showSaveError();
       toast.error(String(err));
     } finally {
       setSaveBusy(false);
@@ -341,31 +350,34 @@ export default function AgentsSettingsPage() {
                         </div>
                       )}
 
-                      <div className="flex justify-end gap-2 pt-2">
-                        <button
-                          type="button"
-                          onClick={cancelEdit}
-                          disabled={saveBusy}
-                          className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text-dim)] hover:border-[var(--border)] hover:text-[var(--text)] disabled:opacity-60"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={validateEdit}
-                          disabled={saveBusy || validateBusy}
-                          className="rounded-lg border border-cyan-400/40 bg-[var(--panel-2)] px-4 py-2 text-sm text-cyan-400 hover:bg-cyan-500/10 disabled:opacity-60"
-                        >
-                          {validateBusy ? "Checking…" : "Validate"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={saveEdit}
-                          disabled={saveBusy}
-                          className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-60"
-                        >
-                          {saveBusy ? "Saving…" : "Save"}
-                        </button>
+                      <div className="flex items-center justify-between gap-2 pt-2">
+                        <FeedbackBadge feedback={saveFeedback} />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            disabled={saveBusy}
+                            className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text-dim)] hover:border-[var(--border)] hover:text-[var(--text)] disabled:opacity-60"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={validateEdit}
+                            disabled={saveBusy || validateBusy}
+                            className="rounded-lg border border-cyan-400/40 bg-[var(--panel-2)] px-4 py-2 text-sm text-cyan-400 hover:bg-cyan-500/10 disabled:opacity-60"
+                          >
+                            {validateBusy ? "Checking…" : "Validate"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={saveEdit}
+                            disabled={saveBusy}
+                            className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-60"
+                          >
+                            {saveBusy ? "Saving…" : "Save"}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
