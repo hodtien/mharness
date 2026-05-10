@@ -120,6 +120,7 @@ _DEFAULT_AUTOPILOT_POLICY = {
         "use_worktree": True,
         "base_branch": "main",
         "max_attempts": 3,
+        "max_pending_retry_attempts": 7,
     },
     "github": {
         "issue_comment_style": "bilingual",
@@ -429,7 +430,51 @@ class RepoAutopilotStore:
             chosen = sorted(
                 queued, key=lambda card: (-card.score, card.created_at, card.title.lower())
             )[0]
+
+            # Check if this is a pending card due for retry
+            was_pending = chosen.status == "pending"
+            if was_pending:
+                retry_count = int(chosen.metadata.get("retry_count", 0) or 0)
+                policies = self.load_policies()
+                max_retry = self._max_pending_retry_attempts(policies)
+                if retry_count >= max_retry:
+                    # Exhausted retries: move to failed
+                    pending_reason = chosen.metadata.get("pending_reason", "unknown")
+                    summary = f"exhausted {max_retry} pending retries ({pending_reason})"
+                    chosen.status = "failed"
+                    chosen.updated_at = time.time()
+                    chosen.metadata["last_failure_stage"] = "retry_exhausted"
+                    chosen.metadata["last_failure_summary"] = summary
+                    chosen.metadata.pop("next_retry_at", None)
+                    chosen.metadata.pop("pending_reason", None)
+                    registry.updated_at = time.time()
+                    atomic_write_text(
+                        self._registry_path,
+                        json.dumps(
+                            registry.model_dump(mode="json"),
+                            ensure_ascii=False,
+                            indent=2,
+                            default=_json_default,
+                        )
+                        + "\n",
+                    )
+                    self.append_journal(
+                        kind="retry_exhausted",
+                        summary=f"{chosen.title}: {summary}",
+                        task_id=chosen.id,
+                        metadata={"retry_count": retry_count, "max_retry": max_retry},
+                    )
+                    return None
+
+            # Reset pending -> preparing before retry
             chosen.status = "preparing"
+            if was_pending:
+                chosen.metadata["resumed_from_pending"] = True
+                self.append_journal(
+                    kind="resumed_from_pending",
+                    summary=f"{chosen.title}: pending retry #{chosen.metadata.get('retry_count', 1)}",
+                    task_id=chosen.id,
+                )
             chosen.updated_at = time.time()
             chosen.metadata["worker_id"] = worker_id
             registry.updated_at = time.time()
@@ -665,6 +710,7 @@ class RepoAutopilotStore:
 
         Returns None if the card does not exist or is not in a claimable state.
         Pending cards can be claimed regardless of next_retry_at when explicitly requested.
+        Manual retry of pending cards clears the pending state immediately.
         """
         with RepoFileLock(self._registry_lock_path):
             if not self._registry_path.exists():
@@ -679,9 +725,24 @@ class RepoAutopilotStore:
                 return None
             if chosen.status not in {"queued", "accepted", "pending"}:
                 return None
+
+            # Check if this is a pending card being manually retried
+            was_pending = chosen.status == "pending"
+            if was_pending:
+                # Clear pending metadata for manual retry
+                chosen.metadata.pop("next_retry_at", None)
+                chosen.metadata.pop("pending_reason", None)
+                chosen.metadata.pop("retry_count", None)
+                self.append_journal(
+                    kind="manual_retry",
+                    summary=f"{chosen.title}: manual retry cleared pending",
+                    task_id=chosen.id,
+                )
+
             chosen.status = "preparing"
             chosen.updated_at = time.time()
             chosen.metadata["worker_id"] = worker_id
+            chosen.metadata["manual_retry"] = True
             registry.updated_at = time.time()
             atomic_write_text(
                 self._registry_path,
@@ -2848,6 +2909,10 @@ class RepoAutopilotStore:
     def _max_repeated_failure_attempts(self, policies: dict[str, Any]) -> int:
         repair = dict(policies.get("autopilot", {}).get("repair", {}))
         return max(int(repair.get("max_repeated_failure_attempts", 3) or 3), 1)
+
+    def _max_pending_retry_attempts(self, policies: dict[str, Any]) -> int:
+        execution = dict(policies.get("autopilot", {}).get("execution", {}))
+        return max(int(execution.get("max_pending_retry_attempts", 7) or 7), 1)
 
     def _failure_repeat_metadata(
         self,
