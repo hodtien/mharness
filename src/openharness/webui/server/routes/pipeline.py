@@ -365,26 +365,7 @@ def get_pipeline_preflight(state: WebUIState = Depends(get_state)) -> dict:
     - diagnostics: human-readable + machine-readable summaries
     - failure_help: short help text for each failure type
     """
-    from openharness.autopilot.types import PreflightCheck
-
     store = RepoAutopilotStore(state.cwd)
-    checks: list[PreflightCheck] = []
-
-    # 1. Check cwd exists
-    checks.append(store._check_cwd_exists())
-
-    # 2. Check git repo validity
-    checks.append(store._check_git_repo())
-
-    # 3. Check auth/API key status
-    checks.append(store._check_auth_status())
-
-    # 4. Check GitHub availability (for PR flows)
-    checks.append(store._check_github_available())
-
-    # 5. Check model availability using the same policy resolution as card execution
-    policies = store.load_policies()
-    execution = dict(policies.get("autopilot", {}).get("execution", {}))
     probe_card = RepoTaskCard(
         id="preflight-probe",
         fingerprint="preflight-probe",
@@ -394,27 +375,22 @@ def get_pipeline_preflight(state: WebUIState = Depends(get_state)) -> dict:
         created_at=0.0,
         updated_at=0.0,
     )
-    checks.append(store._check_model_available(store._resolve_model_for_card(probe_card, execution)))
-
-    # Aggregate status
-    has_fatal = any(c.status in {"fail", "error"} and not c.transient for c in checks)
-    has_transient = any(c.status == "error" and c.transient for c in checks)
-    ok = not has_fatal and not has_transient
-
-    # Format checks for frontend
-    formatted_checks = []
-    for check in checks:
-        formatted_checks.append({
+    result = store.run_preflight(probe_card)
+    checks = result.checks
+    formatted_checks = [
+        {
             "name": check.name,
             "status": check.status,
             "reason": check.reason,
             "messages": [check.reason] + ([check.detail] if check.detail else []),
             "transient": check.transient,
             "detail": check.detail,
-        })
+        }
+        for check in checks
+    ]
 
     return {
-        "ok": ok,
+        "ok": result.passed,
         "provider_ok": any(c.name == "model_available" and c.status == "ok" for c in checks),
         "auth_ok": any(c.name == "auth_ok" and c.status == "ok" for c in checks),
         "github_ok": any(c.name == "github_available" and c.status == "ok" for c in checks),

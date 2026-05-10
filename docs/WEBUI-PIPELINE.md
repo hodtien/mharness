@@ -35,6 +35,12 @@ Use the pipeline board like a kanban:
 
 The page also lets you submit a new manual idea directly into the queue.
 
+## Preflight, pending, and repair behavior
+
+Before running a card, autopilot now performs the same preflight checks used by the real execution path. The global WebUI preflight endpoint delegates to the store preflight service, so it respects policy such as `use_worktree`, model resolution, authentication, GitHub availability, and repo requirements.
+
+Temporary infrastructure failures can move a card to **pending** instead of failed. Pending cards include retry metadata such as `pending_reason`, `next_retry_at`, and `retry_count`, and they can be retried automatically when due or manually with Retry now.
+
 ## Auto review
 
 Auto review is part of the pipeline workflow for validating changes before a task is considered done.
@@ -43,7 +49,9 @@ In practice, this means:
 
 - the pipeline records review-related progress in the card metadata and journal entries,
 - verification and repair phases remain visible in the dashboard,
-- you can follow the task as it moves from implementation to review to completion.
+- CRITICAL/HIGH reviewer feedback is injected into repair prompts after review-gate failures,
+- repeated identical local verification failures stop at the configured threshold instead of looping forever,
+- autopilot-managed PRs with passing CI can be merged automatically.
 
 When a task is resumed, the UI can also surface resume-related metadata so you can continue from the right point.
 

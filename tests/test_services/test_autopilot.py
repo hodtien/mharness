@@ -6341,6 +6341,35 @@ def test_preflight_success_all_checks_pass(tmp_path: Path) -> None:
     assert len(result.checks) >= 5
 
 
+def test_preflight_skips_git_repo_when_worktree_disabled(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="No worktree card", body="body")
+    (repo / ".openharness" / "autopilot" / "autopilot_policy.yaml").write_text(
+        "execution:\n  use_worktree: false\n",
+        encoding="utf-8",
+    )
+    git_checked = {"value": False}
+
+    def check_git_repo(self):
+        git_checked["value"] = True
+        return PreflightCheck(name="git_repo", status="fail", reason="not a git repo")
+
+    monkeypatch.setattr(RepoAutopilotStore, "_check_cwd_exists", lambda self: PreflightCheck(name="cwd_exists", status="ok", reason="ok"))
+    monkeypatch.setattr(RepoAutopilotStore, "_check_git_repo", check_git_repo)
+    monkeypatch.setattr(RepoAutopilotStore, "_check_model_available", lambda self, model: PreflightCheck(name="model_available", status="ok", reason="ok"))
+    monkeypatch.setattr(RepoAutopilotStore, "_check_auth_status", lambda self: PreflightCheck(name="auth_ok", status="ok", reason="ok"))
+
+    result = store.run_preflight(card)
+
+    git_check = next(check for check in result.checks if check.name == "git_repo")
+    assert result.passed is True
+    assert git_checked["value"] is False
+    assert git_check.status == "ok"
+    assert git_check.reason == "worktree not required"
+
+
 def test_preflight_auth_failure_moves_to_pending(tmp_path: Path, monkeypatch) -> None:
     """Auth failure during preflight causes card to move to pending (transient)."""
     repo = tmp_path / "repo"

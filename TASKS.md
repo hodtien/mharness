@@ -954,6 +954,14 @@ Depends on: P12.2, P12.4, P12.5." --labels "testing,cron"
 
 ## P13 — Autopilot Task Resilience (Pre-flight + Pending/Resume)
 
+> **Status: DONE.** Phase 13 đã hoàn tất và các PR liên quan đã pass CI/merge. Autopilot hiện có pre-flight checks trước khi chạy task, trạng thái `pending` cho lỗi tạm thời, retry/resume metadata, scheduler retry cho pending cards, API/UI hiển thị pending, integration tests, auto-merge cho autopilot-managed PR khi CI pass, và public preflight contract cho WebUI/CLI.
+>
+> **Bug fixes sau Phase 13:**
+> - Fix stale repair loop: `local_verification_failed` giờ có repeated-failure guard, inject CRITICAL/HIGH feedback từ `agent:code-reviewer` vào repair prompt, và clamp max attempts để tránh loop vô hạn.
+> - Fix autopilot-managed PR bị kẹt: card có PR autopilot-managed + CI pass được merge tự động thay vì tiếp tục repair/rerun.
+> - Fix global preflight endpoint: `/api/pipeline/preflight` delegate qua `RepoAutopilotStore.run_preflight(...)`, nên honor `use_worktree`, model resolution và behavior thật của run path thay vì tự dựng checks thủ công.
+> - Fix stale state P13.8: reset/rerun card `ap-e573e3ef`, PR #127 đã merge, registry clear `verification_failed` và `last_failure_stage`.
+
 ### P13.A — Status & Pre-flight
 
 ```bash

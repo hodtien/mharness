@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from openharness.autopilot.session_store import save_checkpoint
-from openharness.autopilot.types import PreflightCheck
+from openharness.autopilot.types import PreflightCheck, PreflightResult
 from openharness.webui.server.app import create_app
 
 AUTH = {"Authorization": "Bearer test-token"}
@@ -671,88 +671,59 @@ def test_preflight_global_endpoint_failure_mapping(tmp_path) -> None:
         assert len(check["messages"]) > 0
 
 
-def test_preflight_global_repo_ok_requires_git_repo(tmp_path, monkeypatch) -> None:
+def test_preflight_global_delegates_to_store_run_preflight(tmp_path, monkeypatch) -> None:
     from openharness.autopilot.service import RepoAutopilotStore
 
-    monkeypatch.setattr(
-        RepoAutopilotStore,
-        "_check_cwd_exists",
-        lambda self: PreflightCheck(name="cwd_exists", status="ok", reason="cwd exists"),
-    )
-    monkeypatch.setattr(
-        RepoAutopilotStore,
-        "_check_git_repo",
-        lambda self: PreflightCheck(name="git_repo", status="fail", reason="not a git repo"),
-    )
-    monkeypatch.setattr(
-        RepoAutopilotStore,
-        "_check_auth_status",
-        lambda self: PreflightCheck(name="auth_ok", status="ok", reason="auth ok"),
-    )
-    monkeypatch.setattr(
-        RepoAutopilotStore,
-        "_check_github_available",
-        lambda self: PreflightCheck(name="github_available", status="ok", reason="gh ok"),
-    )
-    monkeypatch.setattr(
-        RepoAutopilotStore,
-        "_check_model_available",
-        lambda self, model: PreflightCheck(name="model_available", status="ok", reason="model ok"),
-    )
+    seen_cards = []
+
+    def run_preflight(self, card):
+        seen_cards.append(card)
+        checks = [
+            PreflightCheck(name="git_repo", status="ok", reason="worktree not required"),
+            PreflightCheck(name="model_available", status="ok", reason="model ok"),
+            PreflightCheck(name="auth_ok", status="ok", reason="auth ok"),
+            PreflightCheck(name="github_available", status="ok", reason="not a GitHub flow"),
+        ]
+        return PreflightResult(passed=True, checks=checks, fatal=[], transient=[])
+
+    monkeypatch.setattr(RepoAutopilotStore, "run_preflight", run_preflight)
     client = _client(tmp_path)
 
     response = client.get("/api/pipeline/preflight", headers=AUTH)
 
     assert response.status_code == 200
-    assert response.json()["repo_ok"] is False
+    body = response.json()
+    assert body["ok"] is True
+    assert body["repo_ok"] is True
+    assert body["provider_ok"] is True
+    assert body["auth_ok"] is True
+    assert body["github_ok"] is True
+    assert len(seen_cards) == 1
+    assert seen_cards[0].id == "preflight-probe"
 
 
-def test_preflight_global_uses_execution_model_resolution(tmp_path, monkeypatch) -> None:
+def test_preflight_global_uses_service_result_for_repo_status(tmp_path, monkeypatch) -> None:
     from openharness.autopilot.service import RepoAutopilotStore
 
-    seen_models: list[str | None] = []
-    monkeypatch.setattr(
-        RepoAutopilotStore,
-        "load_policies",
-        lambda self: {"autopilot": {"execution": {"implement_agent": "gan-generator"}}},
-    )
-    monkeypatch.setattr(
-        RepoAutopilotStore,
-        "_resolve_model_for_card",
-        lambda self, card, execution: "resolved-model" if execution.get("implement_agent") == "gan-generator" else None,
-    )
-    monkeypatch.setattr(
-        RepoAutopilotStore,
-        "_check_cwd_exists",
-        lambda self: PreflightCheck(name="cwd_exists", status="ok", reason="cwd exists"),
-    )
-    monkeypatch.setattr(
-        RepoAutopilotStore,
-        "_check_git_repo",
-        lambda self: PreflightCheck(name="git_repo", status="ok", reason="git repo"),
-    )
-    monkeypatch.setattr(
-        RepoAutopilotStore,
-        "_check_auth_status",
-        lambda self: PreflightCheck(name="auth_ok", status="ok", reason="auth ok"),
-    )
-    monkeypatch.setattr(
-        RepoAutopilotStore,
-        "_check_github_available",
-        lambda self: PreflightCheck(name="github_available", status="ok", reason="gh ok"),
-    )
+    def run_preflight(self, card):
+        checks = [
+            PreflightCheck(name="git_repo", status="fail", reason="not a git repo"),
+            PreflightCheck(name="model_available", status="ok", reason="model ok"),
+            PreflightCheck(name="auth_ok", status="ok", reason="auth ok"),
+            PreflightCheck(name="github_available", status="ok", reason="not a GitHub flow"),
+        ]
+        return PreflightResult(passed=False, checks=checks, fatal=[checks[0]], transient=[])
 
-    def check_model(self, model: str | None) -> PreflightCheck:
-        seen_models.append(model)
-        return PreflightCheck(name="model_available", status="ok", reason="model ok")
-
-    monkeypatch.setattr(RepoAutopilotStore, "_check_model_available", check_model)
+    monkeypatch.setattr(RepoAutopilotStore, "run_preflight", run_preflight)
     client = _client(tmp_path)
 
     response = client.get("/api/pipeline/preflight", headers=AUTH)
 
     assert response.status_code == 200
-    assert seen_models == ["resolved-model"]
+    body = response.json()
+    assert body["ok"] is False
+    assert body["repo_ok"] is False
+    assert body["checks"][0]["messages"] == ["not a git repo"]
 
 
 # ---------------------------------------------------------------------------
