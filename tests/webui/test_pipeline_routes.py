@@ -653,18 +653,14 @@ def test_preflight_global_endpoint_failure_mapping(tmp_path) -> None:
     assert response.status_code == 200
     body = response.json()
     
-    # Verify the boolean flags are consistent with check statuses
-    checks = body["checks"]
-    check_map = {c["name"]: c["status"] for c in checks}
-    
-    # If cwd_exists or git_repo is ok, repo_ok should be True
-    # Note: repo_ok is true if ANY of the repo checks passes
+    # Verify the boolean flags are boolean
     assert isinstance(body["repo_ok"], bool)
     assert isinstance(body["auth_ok"], bool)
     assert isinstance(body["github_ok"], bool)
     assert isinstance(body["provider_ok"], bool)
     
     # Verify messages are arrays
+    checks = body["checks"]
     for check in checks:
         assert isinstance(check["messages"], list)
         assert len(check["messages"]) > 0  # At minimum should have the reason
