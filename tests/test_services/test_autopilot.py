@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import MethodType, SimpleNamespace
 
-from openharness.autopilot import PreflightCheck, RepoAutopilotStore, RepoTaskCard, RepoVerificationStep
+from openharness.autopilot import PreflightCheck, PreflightResult, RepoAutopilotStore, RepoTaskCard, RepoVerificationStep
 from openharness.swarm.worktree import WorktreeInfo
 from openharness.autopilot.service import _DEFAULT_AUTOPILOT_POLICY, _DEFAULT_VERIFICATION_POLICY
 from openharness.autopilot.session_store import save_checkpoint
@@ -5407,6 +5407,10 @@ def test_autopilot_managed_card_merged_when_ci_pass(tmp_path: Path, monkeypatch)
         )
 
     monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
         lambda self, pr_number: {"state": "OPEN", "url": "https://example/pr/77"},
     )
@@ -5458,6 +5462,10 @@ def test_autopilot_managed_card_stays_waiting_when_ci_pending(tmp_path: Path, mo
         assert pr_number == 88
         return ("pending", "Remote CI is still running.", {}, [])
 
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
         lambda self, pr_number: {"state": "OPEN", "url": "https://example/pr/88"},
@@ -5556,6 +5564,10 @@ def test_autopilot_managed_card_repairs_when_ci_fail(tmp_path: Path, monkeypatch
         assert pr_number == 99
         return ("failed", "test/check=failure", {"url": "https://example/pr/99"}, [])
 
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
         lambda self, pr_number: {"state": "OPEN", "url": "https://example/pr/99"},
