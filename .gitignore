@@ -30,6 +30,7 @@ frontend/terminal/node_modules/
 # Web UI frontend build artifacts
 frontend/webui/node_modules/
 frontend/webui/.vite/
+node_modules/.vite/
 
 # User data (never commit API keys or session data)
 .openharness/
