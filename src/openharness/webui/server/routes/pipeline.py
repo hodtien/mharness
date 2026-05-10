@@ -24,7 +24,7 @@ from openharness.autopilot.run_stream import (
     stream_file_line_count,
     stream_file_mtime,
 )
-from openharness.autopilot.service import RepoAutopilotStore
+from openharness.autopilot.service import _DEFAULT_AUTOPILOT_POLICY, RepoAutopilotStore
 from openharness.autopilot.session_store import (
     clear_checkpoints,
     load_latest_checkpoint,
@@ -263,6 +263,17 @@ _ACTIVE_STATUSES: frozenset[str] = frozenset(
 )
 
 
+def _load_autopilot_policy(cwd: Path) -> dict[str, Any]:
+    policy_path = get_project_autopilot_policy_path(cwd)
+    if not policy_path.is_file():
+        return dict(_DEFAULT_AUTOPILOT_POLICY)
+    try:
+        payload = yaml.safe_load(policy_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return dict(_DEFAULT_AUTOPILOT_POLICY)
+    return payload if isinstance(payload, dict) else dict(_DEFAULT_AUTOPILOT_POLICY)
+
+
 @router.get("/cards/{card_id}", dependencies=_AUTH_DEPENDENCY)
 def get_pipeline_card(
     card_id: str,
@@ -374,8 +385,7 @@ async def run_next_card(state: WebUIState = Depends(get_state)) -> dict:
             status_code=status.HTTP_409_CONFLICT,
             detail={"error": "no_queued_cards", "message": "No queued autopilot cards."},
         )
-    store = RepoAutopilotStore(state.cwd)
-    policies = store.load_policies()
+    policies = _load_autopilot_policy(state.cwd)
     active_count = sum(1 for c in cards if c.status in _ACTIVE_STATUSES)
     execution = policies.get("execution")
     if not isinstance(execution, dict):

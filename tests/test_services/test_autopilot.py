@@ -1035,13 +1035,7 @@ def test_startup_cleans_stale_worktrees(tmp_path: Path, monkeypatch) -> None:
     )
     seed_store.update_status(card.id, status="failed")
 
-    import asyncio
-
-    async def run() -> None:
-        store = RepoAutopilotStore(repo)
-        await store._startup_cleanup_task
-
-    asyncio.run(run())
+    RepoAutopilotStore(repo)
 
     assert removed == [f"autopilot/{card.id}"]
     assert not worktree_path.exists()
