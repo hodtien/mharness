@@ -6697,3 +6697,120 @@ def test_preflight_permanent_model_not_in_settings(tmp_path: Path, monkeypatch) 
     assert model_check.status == "fail", f"Expected fail, got {model_check.status}: {model_check.reason}"
     assert model_check.transient is False
 
+
+def test_preflight_transient_failure_moves_card_to_pending(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Transient preflight", body="body")
+
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_github_available",
+        lambda self: PreflightCheck(name="github_available", status="ok", reason="ok"),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._check_model_available",
+        lambda self, model: PreflightCheck(
+            name="model_available",
+            status="error",
+            reason="provider temporarily unavailable",
+            transient=True,
+        ),
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.get_active_provider",
+        lambda self: "anthropic",
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.get_auth_status",
+        lambda self: {"anthropic": {"configured": True, "source": "env"}},
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.list_profiles",
+        lambda self: {"claude-api": type("P", (), {"allowed_models": ["test-model"]})()},
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.get_active_profile",
+        lambda self: "claude-api",
+    )
+    monkeypatch.setattr("openharness.config.claude_bridge.read_claude_settings", lambda: None)
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+
+    assert result.status == "pending"
+    refreshed = store.get_card(card.id)
+    assert refreshed is not None
+    assert refreshed.status == "pending"
+    assert refreshed.metadata["pending_reason"] == "preflight_transient"
+    assert refreshed.metadata["retry_count"] == 1
+    assert refreshed.metadata["next_retry_at"] > 0
+
+
+def test_pending_card_is_reclaimed_when_due(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Due retry", body="body")
+    store.update_status(
+        card.id,
+        status="pending",
+        metadata_updates={"pending_reason": "preflight_transient", "next_retry_at": 1.0, "retry_count": 1},
+    )
+
+    claimed = store.pick_and_claim_card("worker-1")
+
+    assert claimed is not None
+    assert claimed.id == card.id
+    assert claimed.status == "preparing"
+    assert claimed.metadata["resumed_from_pending"] is True
+
+
+def test_pending_card_exhausted_retries_fails(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Exhausted retry", body="body")
+    store.update_status(
+        card.id,
+        status="pending",
+        metadata_updates={"pending_reason": "preflight_transient", "next_retry_at": 1.0, "retry_count": 7},
+    )
+
+    assert store.pick_and_claim_card("worker-1") is None
+    refreshed = store.get_card(card.id)
+    assert refreshed is not None
+    assert refreshed.status == "failed"
+    assert refreshed.metadata["last_failure_stage"] == "retry_exhausted"
+
+
+def test_retry_now_reclaims_pending_card_and_clears_pending_metadata(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Manual retry", body="body")
+    store.update_status(
+        card.id,
+        status="pending",
+        metadata_updates={
+            "pending_reason": "preflight_transient",
+            "next_retry_at": 9999999999.0,
+            "retry_count": 3,
+        },
+    )
+
+    claimed = store.pick_specific_card(card.id, "worker-manual")
+
+    assert claimed is not None
+    assert claimed.status == "preparing"
+    assert claimed.metadata["manual_retry"] is True
+    assert claimed.metadata["worker_id"] == "worker-manual"
+    assert "pending_reason" not in claimed.metadata
+    assert "next_retry_at" not in claimed.metadata
+    assert "retry_count" not in claimed.metadata
+
+    journal = store.load_journal(limit=10)
+    assert any(entry.kind == "manual_retry" for entry in journal)
+
