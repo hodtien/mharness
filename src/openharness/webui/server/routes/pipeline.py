@@ -67,11 +67,12 @@ class CreateManualCardRequest(BaseModel):
 class CardActionRequest(BaseModel):
     """Payload for POST /api/pipeline/cards/{id}/action.
 
-    ``action`` must be one of: ``accept``, ``reject``, ``retry``, ``reset``.
+    ``action`` must be one of: ``accept``, ``reject``, ``retry``, ``retry-now``, ``reset``.
     ``reset`` requeues failed/rejected/killed cards back to ``queued``.
+    ``retry-now`` immediately reclaims a pending card.
     """
 
-    action: Literal["accept", "reject", "retry", "reset"]
+    action: Literal["accept", "reject", "retry", "retry-now", "reset"]
 
 
 class CardModelPatchRequest(BaseModel):
@@ -95,6 +96,9 @@ def _serialize_card(card: dict) -> dict:
         "created_at": card["created_at"],
         "updated_at": card["updated_at"],
         "attempt_count": int(metadata.get("attempt_count", 0) or 0),
+        "pending_reason": _safe_text(metadata.get("pending_reason")),
+        "next_retry_at": metadata.get("next_retry_at"),
+        "retry_count": int(metadata.get("retry_count", 0) or 0),
         "metadata": {
             "last_note": _safe_text(metadata.get("last_note")),
             "linked_pr_url": _safe_text(metadata.get("linked_pr_url")),
@@ -118,6 +122,9 @@ def _serialize_card_detail(card: dict, *, available_models: list[str]) -> dict:
         "labels": card["labels"],
         "model": card.get("model"),
         "body": card.get("body", ""),
+        "pending_reason": _safe_text(metadata.get("pending_reason")),
+        "next_retry_at": metadata.get("next_retry_at"),
+        "retry_count": int(metadata.get("retry_count", 0) or 0),
         "metadata": metadata,
         "linked_pr_url": _safe_text(metadata.get("linked_pr_url")),
         "attempt_count": int(metadata.get("attempt_count", 0) or 0),
@@ -230,6 +237,7 @@ _ACTION_TO_STATUS: dict[str, RepoTaskStatus] = {
     "accept": "accepted",
     "reject": "rejected",
     "retry": "queued",
+    "retry-now": "queued",
     "reset": "queued",
 }
 
@@ -253,6 +261,29 @@ def action_pipeline_card(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "card_not_found", "card_id": card_id},
         )
+    if body.action == "retry-now":
+        if store.get_card(card_id).status != "pending":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "invalid_status_for_retry",
+                    "card_id": card_id,
+                    "status": store.get_card(card_id).status,
+                    "message": "Can only retry-now pending cards.",
+                },
+            )
+        worker_id = f"pid-{os.getpid()}-{uuid4().hex[:8]}"
+        claimed = store.pick_specific_card(card_id, worker_id)
+        if claimed is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "claim_failed",
+                    "card_id": card_id,
+                    "message": "Could not claim the card for retry-now.",
+                },
+            )
+        return _serialize_card(claimed.model_dump(mode="json"))
     new_status = _ACTION_TO_STATUS[body.action]
     card = store.update_status(card_id, status=new_status)
     return _serialize_card(card.model_dump(mode="json"))
@@ -439,6 +470,7 @@ async def run_next_card(state: WebUIState = Depends(get_state)) -> dict:
     """Spawn ``oh autopilot run-next`` as a background task.
 
     Returns HTTP 409 when no queued cards exist (checked before spawning).
+    Pending cards due for retry (next_retry_at <= now) are included.
     Returns HTTP 409 when another autopilot run is already in progress.
     Otherwise returns HTTP 202 with the background ``task_id`` so the caller
     can track progress via the Tasks API.
@@ -449,11 +481,20 @@ async def run_next_card(state: WebUIState = Depends(get_state)) -> dict:
         cards = RepoAutopilotRegistry.model_validate(payload).cards if payload else []
     except (json.JSONDecodeError, OSError, ValidationError):
         cards = []
-    queued = [c for c in cards if c.status in {"queued", "accepted"}]
+    now = time.time()
+    queued = [
+        c
+        for c in cards
+        if c.status in {"queued", "accepted"}
+        or (c.status == "pending" and c.metadata.get("next_retry_at", 0) <= now)
+    ]
     if not queued:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"error": "no_queued_cards", "message": "No queued autopilot cards."},
+            detail={
+                "error": "no_queued_cards",
+                "message": "No queued autopilot cards.",
+            },
         )
     policies = _load_autopilot_policy(state.cwd)
     active_count = sum(1 for c in cards if c.status in _ACTIVE_STATUSES)
@@ -981,9 +1022,10 @@ async def retry_card_now(
     card_id: str,
     state: WebUIState = Depends(get_state),
 ) -> dict:
-    """Retry a failed/killed card immediately by re-claiming and re-running it.
+    """Retry a card immediately by re-claiming and re-running it.
 
-    The card must be in ``failed``, ``killed``, or ``rejected`` status.
+    The card must be in ``failed``, ``killed``, ``rejected``, or ``pending`` status.
+    For pending cards, this immediately clears the pending state and retries.
     Increments the attempt counter, uses :meth:`pick_specific_card` to claim
     the card, then spawns the run-next background task.
     """
@@ -995,14 +1037,14 @@ async def retry_card_now(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "card_not_found", "card_id": card_id},
         )
-    if card.status not in {"failed", "killed", "rejected"}:
+    if card.status not in {"failed", "killed", "rejected", "pending"}:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "error": "invalid_status_for_retry",
                 "card_id": card_id,
                 "status": card.status,
-                "message": f"Can only retry failed/killed/rejected cards, got: {card.status}",
+                "message": f"Can only retry failed/killed/rejected/pending cards, got: {card.status}",
             },
         )
     current_attempt = int(card.metadata.get("attempt_count", 0) or 0)
