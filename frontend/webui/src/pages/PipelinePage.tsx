@@ -473,7 +473,7 @@ function formatTimestamp(timestamp: number): string {
 }
 
 function buildActivityGroups(entries: JournalEntry[]): JournalEntry[][] {
-  const sorted = [...entries].sort((a, b) => a.timestamp - b.timestamp);
+  const sorted = [...entries].sort((a, b) => b.timestamp - a.timestamp);
   const groups: JournalEntry[][] = [];
   for (const entry of sorted) {
     const last = groups[groups.length - 1];
@@ -704,6 +704,9 @@ function ActivityTab({ cardId, isActive }: ActivityTabProps) {
     };
   }, [isActive, fetchEntries]);
 
+  const filteredEntries = entries.filter((e) => matchesActivityFilter(e.kind, activeFilter));
+  const groupedEntries = useMemo(() => buildActivityGroups(filteredEntries), [filteredEntries]);
+
   if (loading) {
     return (
       <div className="p-4 text-sm text-[var(--text-dim)]">Loading activity…</div>
@@ -717,9 +720,6 @@ function ActivityTab({ cardId, isActive }: ActivityTabProps) {
       </div>
     );
   }
-
-  const filteredEntries = entries.filter((e) => matchesActivityFilter(e.kind, activeFilter));
-  const groupedEntries = useMemo(() => buildActivityGroups(filteredEntries), [filteredEntries]);
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -1746,11 +1746,11 @@ function Drawer({ card, onClose, onAction, onRun, onPause, onResume, onRetryNow,
               </div>
             </div>
           ) : drawerTab === "activity" ? (
-            <div id="task-panel-activity" role="tabpanel" aria-labelledby="task-tab-activity" className="min-h-0 flex-1">
+            <div id="task-panel-activity" role="tabpanel" aria-labelledby="task-tab-activity" className="min-h-0 flex-1 flex flex-col overflow-hidden">
               <ActivityTab cardId={card.id} isActive={drawerTab === "activity"} />
             </div>
           ) : (
-            <div id="task-panel-logs" role="tabpanel" aria-labelledby="task-tab-logs" className="min-h-0 flex-1">
+            <div id="task-panel-logs" role="tabpanel" aria-labelledby="task-tab-logs" className="min-h-0 flex-1 flex flex-col overflow-hidden">
               <LogsTab cardId={card.id} isActive={drawerTab === "logs"} />
             </div>
           )}
