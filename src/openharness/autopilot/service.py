@@ -1894,6 +1894,10 @@ class RepoAutopilotStore:
                         summary = "; ".join(
                             f"{step.command} rc={step.returncode}" for step in failing[:3]
                         )
+                        latest_card = self.get_card(card.id) or card
+                        repeat_meta = self._failure_repeat_metadata(
+                            latest_card, stage="local_verification_failed", summary=summary
+                        )
                         metadata_updates = {
                             "verification_failed": True,
                             "verification_steps": [
@@ -1901,8 +1905,13 @@ class RepoAutopilotStore:
                             ],
                             "last_failure_stage": "local_verification_failed",
                             "last_failure_summary": summary,
+                            **repeat_meta,
                         }
-                        if attempt_count < max_attempts:
+                        if (
+                            attempt_count < max_attempts
+                            and repeat_meta["repeated_failure_count"]
+                            < self._max_repeated_failure_attempts(policies)
+                        ):
                             self.update_status(
                                 card.id,
                                 status="repairing",
@@ -2827,16 +2836,14 @@ class RepoAutopilotStore:
         return target_dir
 
     def _max_attempts(self, policies: dict[str, Any]) -> int:
-        import sys
-
+        max_safe_attempts = 50
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
         repair = dict(policies.get("autopilot", {}).get("repair", {}))
-        if repair.get("max_rounds") == 0:
-            return sys.maxsize
         raw_execution = int(execution.get("max_attempts", 3) or 3)
-        execution_attempts = sys.maxsize if raw_execution == 0 else raw_execution
-        repair_rounds = int(repair.get("max_rounds", 2) or 2)
-        return max(execution_attempts, repair_rounds + 1, 1)
+        execution_attempts = max_safe_attempts if raw_execution == 0 else raw_execution
+        raw_repair_rounds = repair.get("max_rounds", 2)
+        repair_rounds = max_safe_attempts - 1 if raw_repair_rounds == 0 else int(raw_repair_rounds or 2)
+        return min(max(execution_attempts, repair_rounds + 1, 1), max_safe_attempts)
 
     def _max_repeated_failure_attempts(self, policies: dict[str, Any]) -> int:
         repair = dict(policies.get("autopilot", {}).get("repair", {}))
@@ -3934,8 +3941,8 @@ class RepoAutopilotStore:
         if prior_summary:
             extras.append(f"- Previous agent summary: {_shorten(prior_summary, limit=600)}")
 
-        # Inject code reviewer feedback if previous failure was in code_review or verifying stage
-        if failure_stage in ("code_review", "verifying"):
+        # Inject code reviewer feedback if previous failure came from a review gate.
+        if failure_stage in ("code_review", "verifying", "local_verification_failed"):
             reviewer_feedback = self._extract_reviewer_feedback(card.id)
             if reviewer_feedback:
                 extras.extend(

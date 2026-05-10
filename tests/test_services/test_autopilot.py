@@ -1467,6 +1467,86 @@ def test_autopilot_run_card_repairs_after_local_verification_failure(
     assert verification_calls["count"] == 2
 
 
+def test_autopilot_run_card_stops_repeated_local_verification_failure(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Repeated reviewer failure",
+        body="reviewer failure repeats",
+    )
+    verification_calls = {"count": 0}
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None, agent_id=None):
+        return SimpleNamespace(path=worktree)
+
+    async def fake_remove_worktree(self, slug):
+        return True
+
+    async def fake_run_agent_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
+        return "attempted repair"
+
+    def fake_run_verification_steps(self, policies, *, cwd=None):
+        verification_calls["count"] += 1
+        return [
+            RepoVerificationStep(
+                command="agent:code-reviewer (diff vs main)",
+                returncode=1,
+                status="failed",
+                stdout="Severity: CRITICAL",
+                stderr="severity=critical",
+            )
+        ]
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt", fake_run_agent_prompt
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        fake_run_verification_steps,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._max_repeated_failure_attempts",
+        lambda self, policies: 2,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+
+    assert result.status == "failed"
+    assert verification_calls["count"] == 2
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.status == "failed"
+    assert updated.metadata["last_failure_stage"] == "local_verification_failed"
+    assert updated.metadata["repeated_failure_count"] == 2
+
+
 def test_autopilot_run_card_reuses_existing_branch_progress(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -5015,6 +5095,65 @@ def test_repeated_failure_metadata_resets_for_different_failure(tmp_path: Path) 
     assert repeat_meta["repeated_failure_count"] == 1
 
 
+def test_local_verification_failure_repeat_metadata_increments(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    summary = "agent:code-reviewer (diff vs main) rc=1"
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Repeat", body="")
+
+    first = store._failure_repeat_metadata(
+        card, stage="local_verification_failed", summary=summary
+    )
+    store.update_status(card.id, status="repairing", metadata_updates=first)
+    updated = store.get_card(card.id)
+    assert updated is not None
+
+    second = store._failure_repeat_metadata(
+        updated, stage="local_verification_failed", summary=summary
+    )
+
+    assert first["repeated_failure_count"] == 1
+    assert second["repeated_failure_count"] == 2
+
+
+def test_local_verification_failure_repeat_metadata_resets_for_new_summary(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Repeat",
+        body="",
+        metadata={
+            "repeated_failure_key": "local_verification_failed:agent:code-reviewer rc=1",
+            "repeated_failure_count": 2,
+        },
+    )
+
+    repeat_meta = store._failure_repeat_metadata(
+        card,
+        stage="local_verification_failed",
+        summary="agent:code-reviewer (diff vs main) rc=2",
+    )
+
+    assert repeat_meta["repeated_failure_count"] == 1
+
+
+def test_max_attempts_clamps_unlimited_policy(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    attempts = store._max_attempts(
+        {"autopilot": {"execution": {"max_attempts": 0}, "repair": {"max_rounds": 0}}}
+    )
+
+    assert attempts == 50
+
+
 def test_existing_pr_card_ci_fail_retries_when_repair_rounds_unlimited(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -5031,7 +5170,7 @@ def test_existing_pr_card_ci_fail_retries_when_repair_rounds_unlimited(
         body="",
         source_ref="pr:42",
         metadata={
-            "attempt_count": 99,
+            "attempt_count": 1,
             "linked_pr_number": 42,
             "head_branch": "autopilot/pr-42",
             "worktree_path": str(sync_cwd),
@@ -5883,6 +6022,52 @@ severity=critical
     assert "SQL injection vulnerability" in prompt
     assert "Missing input validation" in prompt
     assert "End of reviewer constraints" in prompt
+
+
+def test_repair_prompt_injects_reviewer_feedback_on_local_verification_failure(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Test card",
+        body="Original task description",
+    )
+    verification_report = runs_dir / f"{card.id}-attempt-01-verification.md"
+    verification_report.write_text(
+        """# Verification Report: test-card
+
+## FAILED :: agent:code-reviewer (diff vs main)
+
+### stdout
+```text
+Severity: CRITICAL
+Findings:
+  - src/pipeline.py:10 correctness Missing implement_agent model lookup
+  - src/pipeline.py:20 correctness repo_ok reports true for non-git cwd
+```
+""",
+        encoding="utf-8",
+    )
+
+    prompt = store._prepare_repair_prompt(
+        card,
+        store.load_policies(),
+        attempt_count=2,
+        prior_summary="Previous attempt summary",
+        failure_stage="local_verification_failed",
+        failure_summary="agent:code-reviewer (diff vs main) rc=1",
+    )
+
+    assert "Previous attempt #1 failed code review" in prompt
+    assert "Severity: CRITICAL" in prompt
+    assert "Missing implement_agent model lookup" in prompt
+    assert "repo_ok reports true" in prompt
 
 
 def test_repair_prompt_no_feedback_injection_on_first_attempt(tmp_path: Path) -> None:
