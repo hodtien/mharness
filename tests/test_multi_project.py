@@ -45,8 +45,12 @@ def token() -> str:
 
 
 @pytest.fixture
-def api_client(token: str, tmp_path: Path) -> TestClient:
+def api_client(token: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """TestClient wired to a temporary projects registry."""
+    import openharness.services.projects as svc
+
+    monkeypatch.setattr(svc, "_projects_path", lambda: tmp_path / "projects.json")
+    monkeypatch.setattr(svc, "_projects_lock_path", lambda: tmp_path / "projects.json.lock")
     app = create_app(token=token, cwd=str(tmp_path), spa_dir="")
     with TestClient(app, raise_server_exceptions=False) as client:
         client.headers["Authorization"] = f"Bearer {token}"
@@ -120,10 +124,10 @@ def test_project_activate_switch(tmp_path: Path) -> None:
 
 def test_api_projects_endpoints(api_client: TestClient, tmp_path: Path) -> None:
     """Exercise GET / POST / PATCH / DELETE via the FastAPI router."""
-    # GET empty registry
+    # GET initial registry — contains the auto-registered cwd project
     r = api_client.get("/api/projects")
     assert r.status_code == 200
-    assert r.json()["projects"] == []
+    baseline = len(r.json()["projects"])  # create_app registers cwd as default project
 
     # POST create
     dir_alpha = tmp_path / "alpha"
@@ -135,7 +139,7 @@ def test_api_projects_endpoints(api_client: TestClient, tmp_path: Path) -> None:
     # GET list
     r = api_client.get("/api/projects")
     assert r.status_code == 200
-    assert len(r.json()["projects"]) == 1
+    assert len(r.json()["projects"]) == baseline + 1
 
     # PATCH update name
     r = api_client.patch(f"/api/projects/{proj_id}", json={"name": "Alpha Renamed"})
@@ -147,9 +151,9 @@ def test_api_projects_endpoints(api_client: TestClient, tmp_path: Path) -> None:
     assert r.status_code == 200
     assert r.json()["ok"] is True
 
-    # GET shows empty
+    # GET shows back to baseline
     r = api_client.get("/api/projects")
-    assert r.json()["projects"] == []
+    assert len(r.json()["projects"]) == baseline
 
 
 # ---------------------------------------------------------------------------
