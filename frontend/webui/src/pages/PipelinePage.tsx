@@ -18,6 +18,7 @@ export type RepoTaskStatus =
   | "running"
   | "verifying"
   | "repairing"
+  | "pending"
   | "pr_open"
   | "waiting_ci"
   | "completed"
@@ -39,6 +40,8 @@ export interface PipelineCardMetadata {
   linked_pr_url?: string | null;
   resume_available?: boolean;
   resume_phase?: string | null;
+  pending_reason?: string | null;
+  next_retry_at?: number | null;
 }
 
 export interface PipelineCard {
@@ -372,6 +375,15 @@ function formatSeconds(seconds: number): string {
   return `${Math.floor(seconds / 3600)}h ago`;
 }
 
+function formatRelativeTime(timestamp: number | null | undefined): string {
+  if (!timestamp) return "—";
+  const seconds = Math.max(0, Math.floor(timestamp - Date.now() / 1000));
+  if (seconds < 60) return `in ${seconds}s`;
+  if (seconds < 3600) return `in ${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `in ${Math.floor(seconds / 3600)}h`;
+  return `in ${Math.floor(seconds / 86400)}d`;
+}
+
 // ─── Kanban columns ────────────────────────────────────────────────────────────
 
 const COLUMNS: {
@@ -386,6 +398,12 @@ const COLUMNS: {
     label: "Queue",
     statuses: ["queued", "accepted"],
     badgeColor: "bg-blue-500/20 text-blue-300 border-blue-500/40",
+  },
+  {
+    id: "pending",
+    label: "Pending",
+    statuses: ["pending"],
+    badgeColor: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
   },
   {
     id: "in_progress",
@@ -473,6 +491,8 @@ function buildActivityGroups(entries: JournalEntry[]): JournalEntry[][] {
 function Card({ card, onClick }: { card: PipelineCard; onClick: () => void }) {
   const sourceLabel = SOURCE_LABELS[card.source_kind] ?? card.source_kind;
   const sourceColor = SOURCE_COLOR[card.source_kind] ?? "bg-gray-500/20 text-gray-300 border-gray-500/40";
+  const pendingReason = card.status === "pending" ? card.metadata?.pending_reason : null;
+  const nextRetryAt = card.status === "pending" ? card.metadata?.next_retry_at : null;
 
   return (
     <button
@@ -480,6 +500,13 @@ function Card({ card, onClick }: { card: PipelineCard; onClick: () => void }) {
       className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3 text-left text-sm shadow-sm transition hover:border-[var(--accent)]/40 hover:bg-[var(--panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
     >
       <div className="mb-1.5 font-medium leading-snug text-[var(--text)]">{card.title}</div>
+      {card.status === "pending" && (
+        <div className="mb-2 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 text-[11px] text-yellow-200">
+          <div className="font-medium">Pending</div>
+          {pendingReason && <div className="mt-0.5 break-words text-yellow-100/90">{pendingReason}</div>}
+          {nextRetryAt && <div className="mt-0.5 text-yellow-100/80">Next retry {formatRelativeTime(nextRetryAt)}</div>}
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2">
         <span
           className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${sourceColor}`}
@@ -1499,7 +1526,7 @@ function ModelSection({ card, policyDefaultModel, onModelChange }: ModelSectionP
 
 // ─── Drawer ───────────────────────────────────────────────────────────────────
 
-const RESETTABLE_STATUSES: RepoTaskStatus[] = ["failed", "rejected", "killed", "paused"];
+const RESETTABLE_STATUSES: RepoTaskStatus[] = ["failed", "rejected", "killed", "paused", "pending"];
 
 interface DrawerProps {
   card: PipelineCard | null;
@@ -1690,6 +1717,22 @@ function Drawer({ card, onClose, onAction, onRun, onPause, onResume, onRetryNow,
                     <dd className="font-mono text-[var(--text)]">{card.attempt_count ?? 0}</dd>
                   </div>
                 </dl>
+                {card.status === "pending" && (
+                  <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-100">
+                    <div className="text-[10px] uppercase tracking-wider text-yellow-200/80">Pending</div>
+                    {card.metadata?.pending_reason && <div className="mt-1 break-words">{card.metadata.pending_reason}</div>}
+                    {card.metadata?.next_retry_at && (
+                      <div className="mt-1 text-yellow-100/80">Next retry {formatRelativeTime(card.metadata.next_retry_at)}</div>
+                    )}
+                    <button
+                      onClick={() => onRetryNow(card.id)}
+                      disabled={loadingAction}
+                      className="mt-3 rounded-lg border border-yellow-500/40 bg-yellow-500/15 px-3 py-1.5 text-xs font-medium text-yellow-200 transition hover:bg-yellow-500/25 disabled:opacity-40"
+                    >
+                      {loadingAction ? "Retrying…" : "Retry now"}
+                    </button>
+                  </div>
+                )}
                 {card.metadata?.linked_pr_url && (
                   <a
                     href={card.metadata.linked_pr_url}

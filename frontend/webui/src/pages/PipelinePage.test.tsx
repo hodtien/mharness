@@ -42,6 +42,20 @@ const sampleCards = [
     updated_at: Date.now() / 1000 - 1800,
   },
   {
+    id: "card-pending-1",
+    title: "Retry me later",
+    status: "pending",
+    source_kind: "manual_idea",
+    score: 65,
+    labels: [],
+    created_at: Date.now() / 1000 - 900,
+    updated_at: Date.now() / 1000 - 60,
+    metadata: {
+      pending_reason: "preflight_transient",
+      next_retry_at: Date.now() / 1000 + 1800,
+    },
+  },
+  {
     id: "card-running-1",
     title: "Fix auth bug",
     status: "running",
@@ -96,7 +110,7 @@ describe("PipelinePage", () => {
     mockLocalStorage();
   });
 
-  it("renders 4 kanban columns and cards by status group", async () => {
+  it("renders pending as its own kanban column", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string) => {
@@ -120,14 +134,51 @@ describe("PipelinePage", () => {
     await screen.findByText("Add login form");
 
     expect(screen.getByText("Queue")).toBeTruthy();
+    expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
     expect(screen.getByText("In Progress")).toBeTruthy();
     expect(screen.getByText("Review")).toBeTruthy();
     expect(screen.getByText("Completed")).toBeTruthy();
 
     expect(screen.getByText("Add login form")).toBeTruthy();
+    expect(screen.getByText("Retry me later")).toBeTruthy();
     expect(screen.getByText("Fix auth bug")).toBeTruthy();
     expect(screen.getByText("Refactor api client")).toBeTruthy();
     expect(screen.getByText("Add docs")).toBeTruthy();
+  });
+
+  it("renders pending card with pending reason and next retry time", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards: sampleCards, updated_at: 0 }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: [] }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    // Find the pending card
+    const pendingCard = await screen.findByText("Retry me later");
+    expect(pendingCard).toBeTruthy();
+
+    // Click to open drawer
+    fireEvent.click(pendingCard);
+
+    // Should show pending reason
+    expect(screen.getAllByText(/preflight_transient/i).length).toBeGreaterThan(0);
+    // Should show next retry time
+    expect(screen.getAllByText(/next retry/i).length).toBeGreaterThan(0);
+    // Should show retry now button (either in info section or action bar)
+    expect(screen.getAllByRole("button", { name: /retry now/i }).length).toBeGreaterThan(0);
   });
 
   it("shows queued cards in the Queue column", async () => {
