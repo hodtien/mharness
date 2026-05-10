@@ -620,6 +620,10 @@ def test_preflight_global_endpoint_returns_health_status(tmp_path) -> None:
     assert "repo_ok" in body
     assert "checks" in body
     assert isinstance(body["checks"], list)
+    assert "diagnostics" in body
+    assert isinstance(body["diagnostics"], list)
+    assert "failure_help" in body
+    assert isinstance(body["failure_help"], dict)
 
     # Verify check structure
     if body["checks"]:
@@ -629,6 +633,8 @@ def test_preflight_global_endpoint_returns_health_status(tmp_path) -> None:
         assert "reason" in first_check
         assert "messages" in first_check
         assert isinstance(first_check["messages"], list)
+        assert "transient" in first_check
+        assert "detail" in first_check
 
 
 def test_preflight_global_endpoint_no_card_required(tmp_path) -> None:
@@ -770,6 +776,8 @@ def test_preflight_endpoint_returns_checks(tmp_path) -> None:
     assert "ok" in body
     assert "checks" in body
     assert isinstance(body["checks"], list)
+    assert "diagnostics" in body
+    assert "failure_help" in body
     # Should have at least the cwd_exists, git_repo, model_available, auth_ok checks
     check_names = {c["name"] for c in body["checks"]}
     assert "cwd_exists" in check_names
