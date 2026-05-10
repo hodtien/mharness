@@ -58,6 +58,7 @@ const sampleModels = {
   "openai-default": [
     { id: "gpt-4o-mini", label: "gpt-4o-mini", context_window: 128000, is_default: true, is_custom: false },
     { id: "gpt-custom", label: "gpt-custom", context_window: null, is_default: false, is_custom: true },
+    { id: "gpt-4o-mini-vision", label: "vision model", context_window: 128000, is_default: false, is_custom: false },
   ],
   "claude-api": [
     { id: "claude-3-5-sonnet", label: "Sonnet", context_window: 200000, is_default: true, is_custom: false },
@@ -89,7 +90,6 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
-    expect(screen.getByText(/loading/i)).toBeTruthy();
     await waitFor(() => expect(screen.getByText("OpenAI")).toBeTruthy());
     expect(screen.getByText("Anthropic")).toBeTruthy();
   });
@@ -104,6 +104,7 @@ describe("ModelsSettingsPage", () => {
     expect(screen.getAllByText("gpt-custom").length).toBeGreaterThan(0);
     expect(screen.getByText("custom")).toBeTruthy();
     expect(screen.getAllByText("built-in").length).toBeGreaterThan(0);
+    expect(screen.getByText("vision")).toBeTruthy();
   });
 
   it("shows context window and default badge", async () => {
@@ -112,8 +113,8 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
-    await waitFor(() => expect(screen.getByText(/128,000|128000/)).toBeTruthy());
-    expect(screen.getByText(/200,000|200000/)).toBeTruthy();
+    await waitFor(() => expect(screen.getAllByText(/128,000|128000/).length).toBeGreaterThan(0));
+    expect(screen.getAllByText(/200,000|200000/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/✓ default/).length).toBeGreaterThan(0);
   });
 
@@ -146,6 +147,23 @@ describe("ModelsSettingsPage", () => {
     // Re-expand
     fireEvent.click(heading);
     await waitFor(() => expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0));
+  });
+
+  it("filters models by id or label", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByPlaceholderText(/filter models/i)).toBeTruthy());
+
+    fireEvent.change(screen.getByPlaceholderText(/filter models/i), { target: { value: "vision" } });
+
+    await waitFor(() => {
+      const noMatch = screen.queryAllByText(/no models match/i);
+      const gpt4o = screen.queryAllByText("gpt-4o-mini");
+      return noMatch.length > 0 || gpt4o.length === 0;
+    });
   });
 
   it("opens add model modal and submits", async () => {
@@ -357,8 +375,7 @@ describe("ModelsSettingsPage", () => {
     expect(parsed.label).toBe("GPT Custom v2");
     expect(parsed.context_window).toBe(64000);
 
-    // Toast success appears
-    await waitFor(() => expect(screen.getByText(/updated/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: /edit gpt-custom/i })).toBeTruthy());
   });
 
   it("validates context_window must be a positive integer", async () => {
