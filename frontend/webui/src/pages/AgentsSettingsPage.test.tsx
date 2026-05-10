@@ -280,7 +280,13 @@ describe("AgentsSettingsPage", () => {
     await waitFor(() => expect(screen.getByTestId("editor-general-purpose")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
-    // Error feedback badge appears (red error state in the form)
-    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    // Error feedback badge appears with the API error details visible in the form
+    await waitFor(() => {
+      const alert = screen.getByRole("alert");
+      expect(alert).toBeTruthy();
+      // Verify the badge contains meaningful error info (status code or message)
+      const text = alert.textContent ?? "";
+      expect(text).toMatch(/400|Invalid effort/i);
+    });
   });
 });

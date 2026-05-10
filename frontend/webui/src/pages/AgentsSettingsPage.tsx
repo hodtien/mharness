@@ -40,7 +40,7 @@ export default function AgentsSettingsPage() {
   const [cloneName, setCloneName] = useState("");
   const [cloneBusy, setCloneBusy] = useState(false);
 
-  const { feedback: saveFeedback, showSaving, showSaved, showError: showSaveError } = useFormFeedback();
+  const { feedback: saveFeedback, errorMessage: saveErrorMessage, showSaving, showSaved, showError: showSaveError } = useFormFeedback();
 
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +111,7 @@ export default function AgentsSettingsPage() {
       showSaved();
       toast.success(`Agent ${editing} saved.`);
     } catch (err) {
-      showSaveError();
+      showSaveError(String(err));
       toast.error(String(err));
     } finally {
       setSaveBusy(false);
@@ -351,7 +351,7 @@ export default function AgentsSettingsPage() {
                       )}
 
                       <div className="flex items-center justify-between gap-2 pt-2">
-                        <FeedbackBadge feedback={saveFeedback} />
+                        <FeedbackBadge feedback={saveFeedback} errorMessage={saveErrorMessage} />
                         <div className="flex gap-2">
                           <button
                             type="button"

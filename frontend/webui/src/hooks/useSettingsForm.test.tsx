@@ -193,6 +193,12 @@ describe("FeedbackBadge", () => {
     const el = screen.getByRole("alert");
     expect(el.textContent).toContain("Error");
   });
+
+  it("renders error badge with custom error message", () => {
+    render(<FeedbackBadge feedback="error" errorMessage="Invalid effort" />);
+    const el = screen.getByRole("alert");
+    expect(el.textContent).toContain("Invalid effort");
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -83,6 +83,7 @@ export function useUnsavedWarning({ isDirty, message }: UseUnsavedWarningOptions
  */
 export function useFormFeedback() {
   const [feedback, setFeedback] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
   const savedTimer = useRef<number | null>(null);
 
   useEffect(
@@ -96,6 +97,7 @@ export function useFormFeedback() {
 
   const showSaved = useCallback(() => {
     setFeedback("saved");
+    setErrorMessage(undefined);
     if (savedTimer.current !== null) window.clearTimeout(savedTimer.current);
     savedTimer.current = window.setTimeout(() => {
       setFeedback("idle");
@@ -106,19 +108,22 @@ export function useFormFeedback() {
   const showSaving = useCallback(() => {
     if (savedTimer.current !== null) window.clearTimeout(savedTimer.current);
     setFeedback("saving");
+    setErrorMessage(undefined);
   }, []);
 
-  const showError = useCallback(() => {
+  const showError = useCallback((message?: string) => {
     if (savedTimer.current !== null) window.clearTimeout(savedTimer.current);
     setFeedback("error");
+    setErrorMessage(message);
   }, []);
 
   const reset = useCallback(() => {
     if (savedTimer.current !== null) window.clearTimeout(savedTimer.current);
     setFeedback("idle");
+    setErrorMessage(undefined);
   }, []);
 
-  return { feedback, setFeedback, showSaved, showSaving, showError, reset };
+  return { feedback, errorMessage, setFeedback, showSaved, showSaving, showError, reset };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,7 +131,13 @@ export function useFormFeedback() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Compact inline badge that reflects the current feedback state. */
-export function FeedbackBadge({ feedback }: { feedback: "idle" | "saving" | "saved" | "error" }) {
+export function FeedbackBadge({
+  feedback,
+  errorMessage,
+}: {
+  feedback: "idle" | "saving" | "saved" | "error";
+  errorMessage?: string;
+}) {
   if (feedback === "idle") return null;
 
   if (feedback === "saving") {
@@ -158,10 +169,11 @@ export function FeedbackBadge({ feedback }: { feedback: "idle" | "saving" | "sav
   return (
     <span
       role="alert"
+      aria-live="assertive"
       className="inline-flex items-center gap-1.5 rounded-full border border-red-400/30 bg-red-500/10 px-2.5 py-0.5 text-xs text-red-300"
     >
       <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-      Error
+      {errorMessage ?? "Error"}
     </span>
   );
 }
