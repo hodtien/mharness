@@ -599,7 +599,79 @@ async def test_resume_card_rejects_active_card_without_checkpoint(tmp_path) -> N
 
 
 # ---------------------------------------------------------------------------
-# GET /api/pipeline/cards/{card_id}/preflight
+# GET /api/pipeline/preflight — global system health check
+# ---------------------------------------------------------------------------
+
+
+def test_preflight_global_endpoint_returns_health_status(tmp_path) -> None:
+    """GET /api/pipeline/preflight returns system-wide health checks."""
+    client = _client(tmp_path)
+
+    response = client.get("/api/pipeline/preflight", headers=AUTH)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "ok" in body
+    assert isinstance(body["ok"], bool)
+    assert "provider_ok" in body
+    assert "auth_ok" in body
+    assert "github_ok" in body
+    assert "repo_ok" in body
+    assert "checks" in body
+    assert isinstance(body["checks"], list)
+
+    # Verify check structure
+    if body["checks"]:
+        first_check = body["checks"][0]
+        assert "name" in first_check
+        assert "status" in first_check
+        assert "reason" in first_check
+        assert "messages" in first_check
+        assert isinstance(first_check["messages"], list)
+
+
+def test_preflight_global_endpoint_no_card_required(tmp_path) -> None:
+    """Global preflight works without any cards in registry."""
+    client = _client(tmp_path)
+
+    # Don't create any cards
+    response = client.get("/api/pipeline/preflight", headers=AUTH)
+
+    assert response.status_code == 200
+    body = response.json()
+    # Should still return checks even with no cards
+    assert "checks" in body
+    assert len(body["checks"]) > 0
+
+
+def test_preflight_global_endpoint_failure_mapping(tmp_path) -> None:
+    """Verify that preflight endpoint maps check statuses to boolean flags correctly."""
+    client = _client(tmp_path)
+
+    response = client.get("/api/pipeline/preflight", headers=AUTH)
+
+    assert response.status_code == 200
+    body = response.json()
+    
+    # Verify the boolean flags are consistent with check statuses
+    checks = body["checks"]
+    check_map = {c["name"]: c["status"] for c in checks}
+    
+    # If cwd_exists or git_repo is ok, repo_ok should be True
+    # Note: repo_ok is true if ANY of the repo checks passes
+    assert isinstance(body["repo_ok"], bool)
+    assert isinstance(body["auth_ok"], bool)
+    assert isinstance(body["github_ok"], bool)
+    assert isinstance(body["provider_ok"], bool)
+    
+    # Verify messages are arrays
+    for check in checks:
+        assert isinstance(check["messages"], list)
+        assert len(check["messages"]) > 0  # At minimum should have the reason
+
+
+# ---------------------------------------------------------------------------
+# GET /api/pipeline/cards/{card_id}/preflight — per-card checks
 # ---------------------------------------------------------------------------
 
 

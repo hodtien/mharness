@@ -298,6 +298,68 @@ def get_pipeline_card(
     )
 
 
+@router.get("/preflight", dependencies=_AUTH_DEPENDENCY)
+def get_pipeline_preflight(state: WebUIState = Depends(get_state)) -> dict:
+    """Run general preflight checks for the pipeline (system-wide health check).
+
+    Returns {"ok": bool, "checks": [{name, status, reason, messages}...]}.
+    This endpoint checks the system health without requiring a specific card,
+    useful for displaying health status before user triggers run-next.
+
+    Checks performed:
+    - provider_ok: Provider/API endpoint availability
+    - auth_ok: Authentication/API key status
+    - github_ok: GitHub CLI availability (for PR flows)
+    - repo_ok: Git repository validity
+    """
+    from openharness.autopilot.types import PreflightCheck
+
+    store = RepoAutopilotStore(state.cwd)
+    checks: list[PreflightCheck] = []
+
+    # 1. Check cwd exists
+    checks.append(store._check_cwd_exists())
+
+    # 2. Check git repo validity
+    checks.append(store._check_git_repo())
+
+    # 3. Check auth/API key status
+    checks.append(store._check_auth_status())
+
+    # 4. Check GitHub availability (for PR flows)
+    checks.append(store._check_github_available())
+
+    # 5. Check model availability (using default model from policy)
+    policies = store.load_policies()
+    execution = dict(policies.get("autopilot", {}).get("execution", {}))
+    default_model = execution.get("default_model")
+    checks.append(store._check_model_available(default_model))
+
+    # Aggregate status
+    has_fatal = any(c.status in {"fail", "error"} and not c.transient for c in checks)
+    has_transient = any(c.status == "error" and c.transient for c in checks)
+    ok = not has_fatal and not has_transient
+
+    # Format checks for frontend
+    formatted_checks = []
+    for check in checks:
+        formatted_checks.append({
+            "name": check.name,
+            "status": check.status,
+            "reason": check.reason,
+            "messages": [check.reason] + ([check.detail] if check.detail else []),
+        })
+
+    return {
+        "ok": ok,
+        "provider_ok": any(c.name == "model_available" and c.status == "ok" for c in checks),
+        "auth_ok": any(c.name == "auth_ok" and c.status == "ok" for c in checks),
+        "github_ok": any(c.name == "github_available" and c.status == "ok" for c in checks),
+        "repo_ok": any(c.name in {"cwd_exists", "git_repo"} and c.status == "ok" for c in checks),
+        "checks": formatted_checks,
+    }
+
+
 @router.get("/cards/{card_id}/preflight", dependencies=_AUTH_DEPENDENCY)
 def get_card_preflight(
     card_id: str,
