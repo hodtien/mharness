@@ -9,7 +9,7 @@ import pytest
 
 import openharness.commands.registry as registry_module
 from openharness.commands.registry import CommandContext, create_default_command_registry
-from openharness.autopilot import RepoVerificationStep
+from openharness.autopilot import PreflightResult, RepoVerificationStep
 from openharness.config.paths import get_feedback_log_path, get_project_issue_file, get_project_pr_comments_file
 from openharness.config.settings import load_settings, save_settings, Settings
 from openharness.engine.messages import ConversationMessage, TextBlock
@@ -359,6 +359,10 @@ async def test_ship_command_queues_and_executes_card(tmp_path: Path, monkeypatch
     def fake_run_verification_steps(self, policies, *, cwd=None):
         return [RepoVerificationStep(command="uv run pytest -q", returncode=0, status="success")]
 
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt",
         fake_run_agent_prompt,

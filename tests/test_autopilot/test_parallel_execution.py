@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from openharness.autopilot import RepoAutopilotStore, RepoVerificationStep
+from openharness.autopilot import PreflightResult, RepoAutopilotStore, RepoVerificationStep
 from openharness.config.paths import (
     get_project_autopilot_policy_path,
     get_project_verification_policy_path,
@@ -157,6 +157,11 @@ def test_two_cards_run_parallel_end_to_end_with_real_git_and_worktrees(
         )
 
     monkeypatch.setattr(WorktreeManager, "__init__", init_with_temp_root)
+    monkeypatch.setattr(
+        RepoAutopilotStore,
+        "run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
     monkeypatch.setattr(RepoAutopilotStore, "_run_agent_prompt", fake_agent)
     monkeypatch.setattr(RepoAutopilotStore, "_upsert_pull_request", fake_upsert)
     monkeypatch.setattr(RepoAutopilotStore, "_wait_for_pr_ci", fake_wait)
