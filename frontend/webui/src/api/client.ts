@@ -298,6 +298,16 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+  cloneAgent: (name: string, newName: string) =>
+    apiFetch<AgentProfile>(`/api/agents/${encodeURIComponent(name)}/clone`, {
+      method: "POST",
+      body: JSON.stringify({ new_name: newName }),
+    }),
+  validateAgent: (name: string, patch: AgentPatch) =>
+    apiFetch<{ valid: boolean; errors: string[] }>(
+      `/api/agents/${encodeURIComponent(name)}/validate`,
+      { method: "POST", body: JSON.stringify(patch) },
+    ),
   listProjects: () => apiFetch<ProjectsResponse>("/api/projects"),
   getProject: (projectId: string) =>
     apiFetch<Project>(`/api/projects/${encodeURIComponent(projectId)}`),

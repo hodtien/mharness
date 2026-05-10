@@ -4,7 +4,7 @@ import LoadingSkeleton from "../components/LoadingSkeleton";
 import { toast } from "../store/toast";
 
 const EFFORT_OPTIONS = ["low", "medium", "high"] as const;
-const PERMISSION_OPTIONS = ["default", "plan", "full_auto"] as const;
+const PERMISSION_OPTIONS = ["default", "acceptEdits", "bypassPermissions", "plan", "dontAsk"] as const;
 
 
 function truncate(text: string, maxLen: number): string {
@@ -19,9 +19,13 @@ export default function AgentsSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [saveBusy, setSaveBusy] = useState(false);
+  const [validateBusy, setValidateBusy] = useState(false);
+  const [validateErrors, setValidateErrors] = useState<string[]>([]);
 
   // Draft state when editing an agent
   const [draft, setDraft] = useState<AgentPatch>({});
+  // Track initial draft to detect changes
+  const [initialDraft, setInitialDraft] = useState<AgentPatch>({});
 
   // Detail modal state
   const [detailAgent, setDetailAgent] = useState<string | null>(null);
@@ -29,6 +33,11 @@ export default function AgentsSettingsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [systemPromptExpanded, setSystemPromptExpanded] = useState(false);
+
+  // Clone modal state
+  const [cloneSource, setCloneSource] = useState<string | null>(null);
+  const [cloneName, setCloneName] = useState("");
+  const [cloneBusy, setCloneBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,18 +66,29 @@ export default function AgentsSettingsPage() {
   }
 
   const startEdit = (agent: AgentProfile) => {
-    setEditing(agent.name);
-    setDraft({
+    const init = {
       model: agent.model ?? undefined,
       effort: agent.effort ?? undefined,
       permission_mode: agent.permission_mode ?? undefined,
-    });
+    };
+    setEditing(agent.name);
+    setDraft(init);
+    setInitialDraft(init);
+    setValidateErrors([]);
   };
 
   const cancelEdit = () => {
     setEditing(null);
     setDraft({});
+    setInitialDraft({});
+    setValidateErrors([]);
   };
+
+  // True when the draft has unsaved changes relative to what was loaded.
+  const draftChanged =
+    draft.model !== initialDraft.model ||
+    draft.effort !== initialDraft.effort ||
+    draft.permission_mode !== initialDraft.permission_mode;
 
   const saveEdit = async () => {
     if (!editing) return;
@@ -79,11 +99,31 @@ export default function AgentsSettingsPage() {
         prev.map((a) => (a.name === editing ? { ...a, ...updated } : a)),
       );
       setEditing(null);
+      setInitialDraft({});
+      setValidateErrors([]);
       toast.success(`Agent ${editing} saved.`);
     } catch (err) {
       toast.error(String(err));
     } finally {
       setSaveBusy(false);
+    }
+  };
+
+  const validateEdit = async () => {
+    if (!editing) return;
+    setValidateBusy(true);
+    setValidateErrors([]);
+    try {
+      const result = await api.validateAgent(editing, draft);
+      if (result.valid) {
+        toast.success("Config looks valid ✓");
+      } else {
+        setValidateErrors(result.errors);
+      }
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setValidateBusy(false);
     }
   };
 
@@ -103,6 +143,26 @@ export default function AgentsSettingsPage() {
     }
   };
 
+  const openClone = (agentName: string) => {
+    setCloneSource(agentName);
+    setCloneName(`${agentName}-copy`);
+  };
+
+  const submitClone = async () => {
+    if (!cloneSource || !cloneName.trim()) return;
+    setCloneBusy(true);
+    try {
+      const created = await api.cloneAgent(cloneSource, cloneName.trim());
+      setAgents((prev) => [...prev, created]);
+      setCloneSource(null);
+      setCloneName("");
+      toast.success(`Agent cloned as "${created.name}".`);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setCloneBusy(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -139,6 +199,7 @@ export default function AgentsSettingsPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           {agents.map((agent) => {
             const isEditing = editing === agent.name;
+            const isUserOwned = !!agent.source_file;
             return (
               <div
                 key={agent.name}
@@ -148,29 +209,52 @@ export default function AgentsSettingsPage() {
                   {/* Header row — always visible */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h2 className="truncate text-base font-semibold text-[var(--text)]">
-                        {agent.name}
-                      </h2>
+                      <div className="flex items-center gap-2">
+                        <h2 className="truncate text-base font-semibold text-[var(--text)]">
+                          {agent.name}
+                        </h2>
+                        {isUserOwned && (
+                          <span className="shrink-0 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-medium text-cyan-400">
+                            custom
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-1 text-xs text-[var(--text-dim)]">
                         {truncate(agent.description, 120)}
                       </p>
+                      {/* Source file path */}
+                      {agent.source_file && (
+                        <p className="mt-1 truncate font-mono text-[10px] text-[var(--text-dim)] opacity-60" title={agent.source_file}>
+                          {agent.source_file}
+                        </p>
+                      )}
                     </div>
                     {!isEditing && (
-                      <div className="flex shrink-0 gap-2">
+                      <div className="flex shrink-0 flex-col gap-1.5">
                         <button
                           type="button"
                           onClick={() => openDetail(agent.name)}
-                          className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)]"
+                          className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)]"
                         >
                           View details
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => startEdit(agent)}
-                          className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)]"
-                        >
-                          Edit
-                        </button>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => startEdit(agent)}
+                            className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)]"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openClone(agent.name)}
+                            className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)]"
+                            title="Clone this agent as a new custom agent"
+                          >
+                            Clone
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -193,6 +277,14 @@ export default function AgentsSettingsPage() {
                   {/* Inline editor */}
                   {isEditing && (
                     <div className="mt-4 space-y-3" data-testid={`editor-${agent.name}`}>
+                      {/* Changed indicator */}
+                      {draftChanged && (
+                        <div className="flex items-center gap-1.5 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                          Unsaved changes
+                        </div>
+                      )}
+
                       <Field label="Model">
                         <select
                           value={draft.model ?? ""}
@@ -240,6 +332,15 @@ export default function AgentsSettingsPage() {
                         </select>
                       </Field>
 
+                      {/* Validate errors */}
+                      {validateErrors.length > 0 && (
+                        <div className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-300 space-y-0.5">
+                          {validateErrors.map((e, i) => (
+                            <p key={i}>{e}</p>
+                          ))}
+                        </div>
+                      )}
+
                       <div className="flex justify-end gap-2 pt-2">
                         <button
                           type="button"
@@ -248,6 +349,14 @@ export default function AgentsSettingsPage() {
                           className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text-dim)] hover:border-[var(--border)] hover:text-[var(--text)] disabled:opacity-60"
                         >
                           Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={validateEdit}
+                          disabled={saveBusy || validateBusy}
+                          className="rounded-lg border border-cyan-400/40 bg-[var(--panel-2)] px-4 py-2 text-sm text-cyan-400 hover:bg-cyan-500/10 disabled:opacity-60"
+                        >
+                          {validateBusy ? "Checking…" : "Validate"}
                         </button>
                         <button
                           type="button"
@@ -319,12 +428,17 @@ export default function AgentsSettingsPage() {
                   </div>
 
                   {/* Source file */}
-                  {detailData.source_file && (
+                  {detailData.source_file ? (
                     <div>
                       <Label>Source File</Label>
                       <p className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs font-mono text-[var(--text-dim)] break-all">
                         {detailData.source_file}
                       </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <Label>Source File</Label>
+                      <p className="text-xs text-[var(--text-dim)]">Built-in (not editable)</p>
                     </div>
                   )}
 
@@ -349,36 +463,112 @@ export default function AgentsSettingsPage() {
                     )}
                   </div>
 
-                  {/* System Prompt */}
+                  {/* System Prompt — with expand modal */}
                   {detailData.has_system_prompt && (
                     <div>
-                      <Label>System Prompt</Label>
+                      <div className="mb-1 flex items-center justify-between">
+                        <Label>System Prompt</Label>
+                        {(detailData.system_prompt ?? "").length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSystemPromptExpanded(true)}
+                            className="text-xs text-cyan-400 hover:text-cyan-300"
+                          >
+                            Expand
+                          </button>
+                        )}
+                      </div>
                       {(() => {
                         const sp = detailData.system_prompt ?? "";
                         const truncated = sp.length > 500 ? sp.slice(0, 500) : sp;
-                        const isLong = sp.length > 500;
-                        const shown = isLong && !systemPromptExpanded ? truncated : sp;
                         return (
-                          <>
-                            <pre className="whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs text-[var(--text-dim)]">
-                              {shown}
-                            </pre>
-                            {isLong && (
-                              <button
-                                type="button"
-                                onClick={() => setSystemPromptExpanded((v) => !v)}
-                                className="mt-1.5 text-xs text-cyan-400 hover:text-cyan-300"
-                              >
-                                {systemPromptExpanded ? "Show less" : `Show more (${sp.length} chars)`}
-                              </button>
+                          <pre className="whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs text-[var(--text-dim)]">
+                            {truncated}
+                            {sp.length > 500 && (
+                              <span className="text-[var(--text-dim)] opacity-60">… ({sp.length} chars)</span>
                             )}
-                          </>
+                          </pre>
                         );
                       })()}
                     </div>
                   )}
                 </>
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* System prompt expand modal */}
+      {systemPromptExpanded && detailData?.system_prompt && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setSystemPromptExpanded(false); }}
+        >
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--panel)] shadow-2xl">
+            <div className="sticky top-0 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-6 py-4">
+              <h2 className="text-base font-semibold text-[var(--text)]">System Prompt — {detailAgent}</h2>
+              <button
+                type="button"
+                onClick={() => setSystemPromptExpanded(false)}
+                className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-sm text-[var(--text-dim)] hover:text-[var(--text)]"
+              >
+                ✕
+              </button>
+            </div>
+            <pre className="whitespace-pre-wrap px-6 py-5 text-sm text-[var(--text)]">
+              {detailData.system_prompt}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {/* Clone modal */}
+      {cloneSource && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) { setCloneSource(null); setCloneName(""); } }}
+        >
+          <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--panel)] shadow-2xl">
+            <div className="border-b border-[var(--border)] px-6 py-4">
+              <h2 className="text-base font-semibold text-[var(--text)]">
+                Clone agent &ldquo;{cloneSource}&rdquo;
+              </h2>
+              <p className="mt-1 text-xs text-[var(--text-dim)]">
+                Creates a new editable agent file from this template.
+              </p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <Field label="New agent name">
+                <input
+                  type="text"
+                  value={cloneName}
+                  onChange={(e) => setCloneName(e.target.value)}
+                  placeholder="my-custom-agent"
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
+                  onKeyDown={(e) => { if (e.key === "Enter") submitClone(); }}
+                  // eslint-disable-next-line jsx-a11y/no-autofocus
+                  autoFocus
+                />
+              </Field>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setCloneSource(null); setCloneName(""); }}
+                  disabled={cloneBusy}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text-dim)] hover:text-[var(--text)] disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submitClone}
+                  disabled={cloneBusy || !cloneName.trim()}
+                  className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-60"
+                >
+                  {cloneBusy ? "Cloning…" : "Clone"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
