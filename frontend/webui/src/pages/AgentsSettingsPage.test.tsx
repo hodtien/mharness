@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi, afterEach } from "vitest";
+import { fireEvent, render, screen, waitFor, within, cleanup } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import AgentsSettingsPage from "./AgentsSettingsPage";
 
@@ -136,7 +136,11 @@ async function renderAgentsPage() {
 }
 
 describe("AgentsSettingsPage", () => {
-  it("renders loading state then agent cards with badges", async () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders loading skeleton then agent cards with badges", async () => {
     mockLocalStorage();
     setupFetch();
 
@@ -146,7 +150,8 @@ describe("AgentsSettingsPage", () => {
       </BrowserRouter>,
     );
 
-    expect(screen.getByText(/loading agents/i)).toBeTruthy();
+    // Loading state shows skeleton, not text
+    expect(screen.getByLabelText("Loading content")).toBeTruthy();
     await waitFor(() => expect(screen.getByText("general-purpose")).toBeTruthy());
     expect(screen.getByText("researcher")).toBeTruthy();
     // model badge value rendered
@@ -198,20 +203,26 @@ describe("AgentsSettingsPage", () => {
     expect(modalContent.getByText("bash")).toBeTruthy();
   });
 
-  it("expands and collapses long system prompts with Show more toggle", async () => {
+  it("opens detail modal and expands system prompt via expand button", async () => {
     mockLocalStorage();
     setupFetch();
 
     await renderAgentsPage();
+    // Click View details to open the detail modal
     fireEvent.click(screen.getAllByRole("button", { name: /view details/i })[0]);
 
-    const showMore = await screen.findByRole("button", { name: `Show more (${LONG_SYSTEM_PROMPT.length} chars)` });
+    // In detail modal, expand button appears when system prompt exists
+    await waitFor(() => expect(screen.getByRole("button", { name: /^expand$/i })).toBeTruthy());
+    // Full system prompt text not yet visible
     expect(screen.queryByText(/Final expanded instructions/)).toBeNull();
 
-    fireEvent.click(showMore);
+    // Click the expand button to open the system prompt full-screen modal
+    fireEvent.click(screen.getByRole("button", { name: /^expand$/i }));
 
+    // Full content is now visible
     expect(screen.getByText(/Final expanded instructions/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /show less/i })).toBeTruthy();
+    // A System Prompt heading should appear in the expanded modal
+    expect(screen.getByText(/System Prompt — general-purpose/)).toBeTruthy();
   });
 
   it("opens inline editor when clicking Edit and saves changes", async () => {
@@ -269,6 +280,13 @@ describe("AgentsSettingsPage", () => {
     await waitFor(() => expect(screen.getByTestId("editor-general-purpose")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
-    await waitFor(() => expect(screen.getByText(/Invalid effort|400/i)).toBeTruthy());
+    // Error feedback badge appears with the API error details visible in the form
+    await waitFor(() => {
+      const alert = screen.getByRole("alert");
+      expect(alert).toBeTruthy();
+      // Verify the badge contains meaningful error info (status code or message)
+      const text = alert.textContent ?? "";
+      expect(text).toMatch(/400|Invalid effort/i);
+    });
   });
 });
