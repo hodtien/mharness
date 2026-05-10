@@ -1444,6 +1444,33 @@ class RepoAutopilotStore:
         linked_pr_number = self._linked_pr_number(card)
         use_worktree = bool(execution.get("use_worktree", True)) and self._is_git_repo(self._cwd)
 
+        if (
+            linked_pr_number is not None
+            and bool(card.metadata.get("autopilot_managed"))
+            and _safe_text(card.metadata.get("last_ci_conclusion")) == "success"
+        ):
+            pr_snapshot = self._pr_status_snapshot(linked_pr_number)
+            if self._automerge_eligible(pr_snapshot, policies):
+                self._merge_pull_request(linked_pr_number)
+                pr_url = _safe_text(pr_snapshot.get("url"))
+                self.update_status(
+                    card.id,
+                    status="merged",
+                    note=f"autopilot managed PR #{linked_pr_number} CI passed, merged automatically",
+                    metadata_updates={
+                        "linked_pr_number": linked_pr_number,
+                        "linked_pr_url": pr_url,
+                    },
+                )
+                return RepoRunResult(
+                    card_id=card.id,
+                    status="merged",
+                    run_report_path="",
+                    verification_report_path="",
+                    pr_number=linked_pr_number,
+                    pr_url=pr_url,
+                )
+
         if linked_pr_number is not None and (
             (card.source_kind == "github_pr" and not card.metadata.get("autopilot_managed"))
             or (
