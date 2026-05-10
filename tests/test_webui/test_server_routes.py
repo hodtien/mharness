@@ -777,10 +777,13 @@ def test_pipeline_cards_returns_serialized_cards(tmp_path) -> None:
     assert card1["labels"] == ["bug", "urgent"]
     assert card1["created_at"] == 900.0
     assert card1["updated_at"] == 950.0
-    # body, model, attempt_count IS included for the card detail drawer.
+    # body, model, attempt_count, pending retry fields are included for the card detail drawer.
     assert card1["body"] == "Fix the bug"
     assert card1["model"] is None
     assert card1["attempt_count"] == 0
+    assert card1["pending_reason"] is None
+    assert card1["next_retry_at"] is None
+    assert card1["retry_count"] == 0
     # Extra internal fields (fingerprint, source_ref, score_reasons)
     # must NOT appear in the response.
     assert "fingerprint" not in card1
@@ -1066,6 +1069,53 @@ def test_pipeline_retry_now_accepts_failed_card_and_spawns_task(tmp_path, monkey
     assert card["metadata"]["retry_by"] == "user"
 
 
+def test_pipeline_retry_now_accepts_pending_card(tmp_path, monkeypatch) -> None:
+    registry = {
+        "version": 1,
+        "updated_at": 1000.0,
+        "cards": [
+            {
+                "id": "ap-pending-retry",
+                "title": "Pending retry",
+                "body": "",
+                "status": "pending",
+                "source_kind": "manual_idea",
+                "source_ref": "",
+                "fingerprint": "manual_idea:pending-retry",
+                "score": 5,
+                "score_reasons": [],
+                "labels": [],
+                "metadata": {
+                    "pending_reason": "preflight_transient",
+                    "next_retry_at": 0.0,
+                    "retry_count": 2,
+                },
+                "created_at": 600.0,
+                "updated_at": 700.0,
+            },
+        ],
+    }
+    reg_dir = tmp_path / ".openharness" / "autopilot"
+    reg_dir.mkdir(parents=True)
+    (reg_dir / "registry.json").write_text(json.dumps(registry))
+
+    async def fake_create_shell_task(*, command, description, cwd, task_type):
+        return SimpleNamespace(id="task-pending-retry")
+
+    monkeypatch.setattr(get_task_manager(), "create_shell_task", fake_create_shell_task)
+
+    client = _client(tmp_path)
+    response = client.post(
+        "/api/pipeline/cards/ap-pending-retry/retry-now",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 202
+    saved = json.loads((reg_dir / "registry.json").read_text())
+    card = next(card for card in saved["cards"] if card["id"] == "ap-pending-retry")
+    assert card["status"] == "preparing"
+
+
 def test_pipeline_cards_action_rejects_invalid_action(tmp_path) -> None:
     registry = {
         "version": 1,
@@ -1099,6 +1149,54 @@ def test_pipeline_cards_action_rejects_invalid_action(tmp_path) -> None:
         json={"action": "invalid"},
     )
     assert response.status_code == 422
+
+
+def test_pipeline_cards_returns_pending_retry_fields(tmp_path) -> None:
+    registry = {
+        "version": 1,
+        "updated_at": 1000.5,
+        "cards": [
+            {
+                "id": "card-pending",
+                "title": "Pending card",
+                "body": "Waiting for retry",
+                "status": "pending",
+                "source_kind": "manual_idea",
+                "source_ref": "",
+                "fingerprint": "manual_idea:pending",
+                "score": 50,
+                "score_reasons": [],
+                "labels": ["pending"],
+                "metadata": {
+                    "pending_reason": "preflight_transient",
+                    "next_retry_at": 1000.0,
+                    "retry_count": 3,
+                    "last_note": "Transient failure, will retry",
+                },
+                "created_at": 900.0,
+                "updated_at": 950.0,
+            },
+        ],
+    }
+    (tmp_path / ".openharness" / "autopilot").mkdir(parents=True)
+    (tmp_path / ".openharness" / "autopilot" / "registry.json").write_text(
+        json.dumps(registry)
+    )
+    client = _client(tmp_path)
+    response = client.get(
+        "/api/pipeline/cards",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["cards"]) == 1
+
+    card = data["cards"][0]
+    assert card["id"] == "card-pending"
+    assert card["status"] == "pending"
+    assert card["pending_reason"] == "preflight_transient"
+    assert card["next_retry_at"] == 1000.0
+    assert card["retry_count"] == 3
 
 
 def test_pipeline_cards_model_patch_updates_execution_model(tmp_path) -> None:
