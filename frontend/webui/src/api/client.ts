@@ -87,6 +87,9 @@ export interface ProviderProfile {
   base_url?: string | null;
   has_credentials: boolean;
   is_active: boolean;
+  last_verified_at?: string | null;
+  verification_latency_ms?: number | null;
+  model_count?: number | null;
 }
 
 export interface ProviderListResponse {
@@ -102,6 +105,7 @@ export interface ProviderVerifyResponse {
   ok: boolean;
   error?: string;
   models?: string[];
+  latency_ms?: number;
 }
 
 export interface ProviderActivateResponse {
@@ -257,6 +261,10 @@ export const api = {
     ),
   verifyProvider: (name: string) =>
     apiFetch<ProviderVerifyResponse>(`/api/providers/${encodeURIComponent(name)}/verify`, {
+      method: "POST",
+    }),
+  verifyAllProviders: () =>
+    apiFetch<{ results: Record<string, ProviderVerifyResponse> }>("/api/providers/verify", {
       method: "POST",
     }),
   activateProvider: (name: string) =>

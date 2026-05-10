@@ -67,6 +67,19 @@ describe("ProviderSettingsPage", () => {
     expect(screen.getByText("gpt-4o-mini")).toBeTruthy();
   });
 
+  it("renders Verify all button when providers with credentials exist", async () => {
+    mockLocalStorage();
+    vi.stubGlobal("fetch", (url: string) => {
+      if (url === "/api/providers") return Promise.resolve(jsonResponse(sampleProviders));
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+
+    render(<BrowserRouter><ProviderSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("OpenAI")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /verify all/i })).toBeTruthy();
+  });
+
   it("opens modal on card click and verifies provider", async () => {
     mockLocalStorage();
     const calls: Array<{ url: string; init?: RequestInit }> = [];
@@ -77,7 +90,7 @@ describe("ProviderSettingsPage", () => {
         return Promise.resolve(jsonResponse({ ok: true, api_key_suffix: "abcd" }));
       }
       if (url === "/api/providers/openai-default/verify") {
-        return Promise.resolve(jsonResponse({ ok: true, models: ["gpt-4o-mini", "gpt-4o"] }));
+        return Promise.resolve(jsonResponse({ ok: true, models: ["gpt-4o-mini", "gpt-4o"], latency_ms: 150 }));
       }
       return Promise.reject(new Error(`unexpected ${url}`));
     });
@@ -91,7 +104,7 @@ describe("ProviderSettingsPage", () => {
     await waitFor(() => expect(screen.getByPlaceholderText("Enter API key")).toBeTruthy());
 
     fireEvent.change(screen.getByPlaceholderText("Enter API key"), { target: { value: "sk-test" } });
-    fireEvent.click(screen.getByRole("button", { name: /verify/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Verify$/ }));
 
     await waitFor(() => {
       expect(screen.getByText("Verification succeeded.")).toBeTruthy();
@@ -99,5 +112,38 @@ describe("ProviderSettingsPage", () => {
     expect(screen.getByText("gpt-4o")).toBeTruthy();
     expect(calls.some((c) => c.url === "/api/providers/openai-default/credentials" && c.init?.method === "POST")).toBe(true);
     expect(calls.some((c) => c.url === "/api/providers/openai-default/verify" && c.init?.method === "POST")).toBe(true);
+  });
+
+  it("disables modal and cards while batch verifying", async () => {
+    mockLocalStorage();
+    let resolveVerify: (value: unknown) => void;
+    const verifyPromise = new Promise((r) => { resolveVerify = r; });
+    vi.stubGlobal("fetch", (url: string) => {
+      if (url === "/api/providers") return Promise.resolve(jsonResponse(sampleProviders));
+      if (url.includes("/verify")) return verifyPromise;
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+
+    render(<BrowserRouter><ProviderSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("OpenAI")).toBeTruthy());
+
+    // Click verify all
+    fireEvent.click(screen.getByRole("button", { name: /verify all/i }));
+
+    // While verifying, "Verify all" button should be disabled
+    await waitFor(() => expect(screen.getByRole("button", { name: /verifying…/i })).toBeTruthy());
+
+    // Cards should be disabled (pointer-events-none + opacity-60)
+    const cards = screen.getAllByRole("button");
+    // First two buttons are cards, third is verify all
+    expect(cards[0]).toHaveProperty("disabled", true);
+
+    // Modal should NOT be open during batch verify
+    expect(screen.queryByPlaceholderText("Enter API key")).toBeNull();
+
+    // Resolve verify and wait for completion
+    resolveVerify!(jsonResponse({ ok: true, models: [] }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /verify all/i })).toBeTruthy());
   });
 });

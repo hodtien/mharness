@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
-import { api, type ProviderProfile } from "../api/client";
+import { useEffect, useMemo, useState } from "react";
+import { api, type ProviderProfile, type ProviderVerifyResponse } from "../api/client";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import ErrorBanner from "../components/ErrorBanner";
 import EmptyState from "../components/EmptyState";
 
-interface VerifyResult {
-  ok: boolean;
-  error?: string;
-  models?: string[];
+interface VerifyResult extends ProviderVerifyResponse {
+  verifiedAt?: string;
+}
+
+interface ConnectionStatus {
+  state: "idle" | "checking" | "ok" | "error";
+  result?: VerifyResult;
 }
 
 const providerIcons: Record<string, string> = {
@@ -34,11 +37,27 @@ function statusLabel(provider: ProviderProfile): "Active" | "Configured" | "Not 
   return "Not configured";
 }
 
+function formatLatency(ms: number | undefined): string {
+  if (ms === undefined) return "";
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+function formatTime(iso: string | undefined): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleTimeString();
+  } catch {
+    return iso;
+  }
+}
+
 export default function ProviderSettingsPage() {
   const [providers, setProviders] = useState<ProviderProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<ProviderProfile | null>(null);
+  const [connectionStatuses, setConnectionStatuses] = useState<Record<string, ConnectionStatus>>({});
+  const [batchVerifying, setBatchVerifying] = useState(false);
 
   const loadProviders = async () => {
     setError(null);
@@ -64,6 +83,61 @@ export default function ProviderSettingsPage() {
     };
   }, []);
 
+  const configuredProviders = useMemo(
+    () => providers.filter((p) => p.has_credentials),
+    [providers],
+  );
+
+  const verifyAll = async () => {
+    if (batchVerifying || configuredProviders.length === 0) return;
+    setBatchVerifying(true);
+    // Mark all configured as checking
+    setConnectionStatuses((prev) => {
+      const next = { ...prev };
+      for (const p of configuredProviders) {
+        next[p.id] = { state: "checking" };
+      }
+      return next;
+    });
+    // Verify each in parallel
+    const results = await Promise.allSettled(
+      configuredProviders.map(async (p) => {
+        const start = Date.now();
+        const res = await api.verifyProvider(p.id);
+        return { id: p.id, res, latency_ms: Date.now() - start };
+      }),
+    );
+    setConnectionStatuses((prev) => {
+      const next = { ...prev };
+      for (const r of results) {
+        if (r.status === "fulfilled") {
+          const { id, res, latency_ms } = r.value;
+          next[id] = {
+            state: res.ok ? "ok" : "error",
+            result: { ...res, latency_ms: res.latency_ms ?? latency_ms, verifiedAt: new Date().toISOString() },
+          };
+        } else {
+          // failed provider — find id from position
+          // settled index aligns with configuredProviders index
+          const idx = results.indexOf(r);
+          const providerId = configuredProviders[idx]?.id;
+          if (providerId) {
+            next[providerId] = {
+              state: "error",
+              result: { ok: false, error: String(r.reason), verifiedAt: new Date().toISOString() },
+            };
+          }
+        }
+      }
+      return next;
+    });
+    setBatchVerifying(false);
+  };
+
+  const updateConnectionStatus = (providerId: string, status: ConnectionStatus) => {
+    setConnectionStatuses((prev) => ({ ...prev, [providerId]: status }));
+  };
+
   if (loading) {
     return (
       <div className="flex flex-1 overflow-y-auto p-6">
@@ -77,42 +151,62 @@ export default function ProviderSettingsPage() {
   return (
     <div className="flex flex-1 overflow-y-auto p-6">
       <div className="w-full max-w-5xl space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--text)]">Providers</h1>
-          <p className="mt-1 text-sm text-[var(--text-dim)]">
-            Configure API credentials and activate the provider used by new sessions.
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-[var(--text)]">Providers</h1>
+            <p className="mt-1 text-sm text-[var(--text-dim)]">
+              Configure API credentials and activate the provider used by new sessions.
+            </p>
+          </div>
+          {configuredProviders.length > 0 && (
+            <button
+              type="button"
+              onClick={verifyAll}
+              disabled={batchVerifying}
+              className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text)] hover:border-cyan-400/40 disabled:opacity-60"
+              title="Verify connectivity for all configured providers"
+            >
+              {batchVerifying ? "Verifying…" : "Verify all"}
+            </button>
+          )}
         </div>
 
         {error && <ErrorBanner message={error} />}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {providers.map((provider) => (
-            <button
-              key={provider.id}
-              type="button"
-              onClick={() => setSelected(provider)}
-              className={`rounded-xl border bg-[var(--panel)] p-5 text-left shadow-lg transition hover:border-cyan-400/40 ${
-                provider.is_active ? "border-cyan-400/70 ring-1 ring-cyan-400/30" : "border-[var(--border)]"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl" aria-hidden="true">{providerIcon(provider)}</span>
-                  <div>
-                    <div className="font-semibold text-[var(--text)]">{provider.label}</div>
-                    <div className="text-xs text-[var(--text-dim)]">{provider.provider}</div>
+          {providers.map((provider) => {
+            const connStatus = connectionStatuses[provider.id];
+            return (
+              <button
+                key={provider.id}
+                type="button"
+                onClick={() => setSelected(provider)}
+                disabled={batchVerifying}
+                className={`rounded-xl border bg-[var(--panel)] p-5 text-left shadow-lg transition hover:border-cyan-400/40 disabled:pointer-events-none disabled:opacity-60 ${
+                  provider.is_active ? "border-cyan-400/70 ring-1 ring-cyan-400/30" : "border-[var(--border)]"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl" aria-hidden="true">{providerIcon(provider)}</span>
+                    <div>
+                      <div className="font-semibold text-[var(--text)]">{provider.label}</div>
+                      <div className="text-xs text-[var(--text-dim)]">{provider.provider}</div>
+                    </div>
                   </div>
+                  <StatusBadge status={statusLabel(provider)} />
                 </div>
-                <StatusBadge status={statusLabel(provider)} />
-              </div>
-              <div className="mt-4 text-xs uppercase tracking-wide text-[var(--text-dim)]">Default model</div>
-              <div className="mt-1 truncate font-mono text-sm text-cyan-100">{provider.default_model || "—"}</div>
-              {provider.base_url && (
-                <div className="mt-3 truncate text-xs text-[var(--text-dim)]">{provider.base_url}</div>
-              )}
-            </button>
-          ))}
+                <div className="mt-4 text-xs uppercase tracking-wide text-[var(--text-dim)]">Default model</div>
+                <div className="mt-1 truncate font-mono text-sm text-cyan-100">{provider.default_model || "—"}</div>
+                {provider.base_url && (
+                  <div className="mt-3 truncate text-xs text-[var(--text-dim)]">{provider.base_url}</div>
+                )}
+                {connStatus && (
+                  <ConnectionStatusRow status={connStatus} />
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {providers.length === 0 && (
@@ -120,16 +214,41 @@ export default function ProviderSettingsPage() {
         )}
       </div>
 
-      {selected && (
+      {selected && !batchVerifying && (
         <ProviderModal
           provider={selected}
+          initialStatus={connectionStatuses[selected.id]}
           onClose={() => setSelected(null)}
           onRefresh={async () => {
             await loadProviders();
             setSelected(null);
           }}
+          onStatusChange={(status) => updateConnectionStatus(selected.id, status)}
         />
       )}
+    </div>
+  );
+}
+
+function ConnectionStatusRow({ status }: { status: ConnectionStatus }) {
+  if (status.state === "idle") return null;
+  if (status.state === "checking") {
+    return (
+      <div className="mt-3 flex items-center gap-1.5 text-xs text-[var(--text-dim)]">
+        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-cyan-400/70" />
+        Checking…
+      </div>
+    );
+  }
+  const ok = status.state === "ok";
+  const res = status.result;
+  return (
+    <div className={`mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs ${ok ? "text-emerald-300" : "text-red-300"}`}>
+      <span>{ok ? "✓" : "✗"}</span>
+      {ok && res?.models && <span>{res.models.length} models</span>}
+      {res?.latency_ms !== undefined && <span>{formatLatency(res.latency_ms)}</span>}
+      {res?.verifiedAt && <span className="text-[var(--text-dim)]">{formatTime(res.verifiedAt)}</span>}
+      {!ok && res?.error && <span className="truncate max-w-[160px]">{res.error}</span>}
     </div>
   );
 }
@@ -144,13 +263,27 @@ function StatusBadge({ status }: { status: "Active" | "Configured" | "Not config
   return <span className={`rounded-full border px-2 py-1 text-xs ${classes}`}>{status}</span>;
 }
 
-function ProviderModal({ provider, onClose, onRefresh }: { provider: ProviderProfile; onClose: () => void; onRefresh: () => Promise<void> }) {
+function ProviderModal({
+  provider,
+  initialStatus,
+  onClose,
+  onRefresh,
+  onStatusChange,
+}: {
+  provider: ProviderProfile;
+  initialStatus?: ConnectionStatus;
+  onClose: () => void;
+  onRefresh: () => Promise<void>;
+  onStatusChange: (status: ConnectionStatus) => void;
+}) {
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState(provider.base_url || "");
   const [verifying, setVerifying] = useState(false);
   const [activating, setActivating] = useState(false);
-  const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
+  const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(initialStatus?.result ?? null);
   const [error, setError] = useState<string | null>(null);
+
+  const busy = verifying || activating;
 
   const saveCredentials = () =>
     api.saveProviderCredentials(provider.id, {
@@ -162,11 +295,19 @@ function ProviderModal({ provider, onClose, onRefresh }: { provider: ProviderPro
     setVerifying(true);
     setError(null);
     setVerifyResult(null);
+    onStatusChange({ state: "checking" });
+    const start = Date.now();
     try {
       await saveCredentials();
-      setVerifyResult(await api.verifyProvider(provider.id));
+      const res = await api.verifyProvider(provider.id);
+      const latency_ms = res.latency_ms ?? (Date.now() - start);
+      const result: VerifyResult = { ...res, latency_ms, verifiedAt: new Date().toISOString() };
+      setVerifyResult(result);
+      onStatusChange({ state: res.ok ? "ok" : "error", result });
     } catch (err) {
+      const result: VerifyResult = { ok: false, error: String(err), verifiedAt: new Date().toISOString() };
       setError(String(err));
+      onStatusChange({ state: "error", result });
     } finally {
       setVerifying(false);
     }
@@ -194,7 +335,7 @@ function ProviderModal({ provider, onClose, onRefresh }: { provider: ProviderPro
             <h2 className="text-xl font-semibold text-[var(--text)]">{provider.label}</h2>
             <p className="mt-1 text-sm text-[var(--text-dim)]">Configure credentials, verify connectivity, or activate this provider.</p>
           </div>
-          <button type="button" onClick={onClose} className="text-[var(--text-dim)] hover:text-[var(--text)]" aria-label="Close">✕</button>
+          <button type="button" onClick={onClose} disabled={busy} className="text-[var(--text-dim)] hover:text-[var(--text)] disabled:opacity-40" aria-label="Close">✕</button>
         </div>
 
         <div className="mt-5 space-y-4">
@@ -204,8 +345,9 @@ function ProviderModal({ provider, onClose, onRefresh }: { provider: ProviderPro
               type="password"
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
+              disabled={busy}
               placeholder={provider.has_credentials ? "Existing key saved" : "Enter API key"}
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[var(--text)] outline-none focus:border-cyan-400/60"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[var(--text)] outline-none focus:border-cyan-400/60 disabled:opacity-60"
             />
           </label>
           <label className="block text-sm">
@@ -214,8 +356,9 @@ function ProviderModal({ provider, onClose, onRefresh }: { provider: ProviderPro
               type="url"
               value={baseUrl}
               onChange={(event) => setBaseUrl(event.target.value)}
+              disabled={busy}
               placeholder="https://api.example.com/v1"
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[var(--text)] outline-none focus:border-cyan-400/60"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[var(--text)] outline-none focus:border-cyan-400/60 disabled:opacity-60"
             />
           </label>
         </div>
@@ -223,7 +366,18 @@ function ProviderModal({ provider, onClose, onRefresh }: { provider: ProviderPro
         {error && <div className="mt-4 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
         {verifyResult && (
           <div className={`mt-4 rounded-lg border p-3 text-sm ${verifyResult.ok ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100" : "border-red-400/30 bg-red-500/10 text-red-200"}`}>
-            {verifyResult.ok ? "Verification succeeded." : verifyResult.error || "Verification failed."}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>{verifyResult.ok ? "Verification succeeded." : verifyResult.error || "Verification failed."}</span>
+              {verifyResult.latency_ms !== undefined && (
+                <span className="text-xs opacity-70">{formatLatency(verifyResult.latency_ms)}</span>
+              )}
+              {verifyResult.ok && verifyResult.models && (
+                <span className="text-xs opacity-70">{verifyResult.models.length} models</span>
+              )}
+              {verifyResult.verifiedAt && (
+                <span className="text-xs opacity-60">at {formatTime(verifyResult.verifiedAt)}</span>
+              )}
+            </div>
             {verifyResult.ok && verifyResult.models && verifyResult.models.length > 0 && (
               <div className="mt-3">
                 <div className="mb-2 text-xs uppercase tracking-wide text-[var(--text-dim)]">Models available to import</div>
@@ -238,10 +392,10 @@ function ProviderModal({ provider, onClose, onRefresh }: { provider: ProviderPro
         )}
 
         <div className="mt-6 flex justify-end gap-3">
-          <button type="button" onClick={verify} disabled={verifying || activating} className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text)] hover:border-cyan-400/40 disabled:opacity-60">
+          <button type="button" onClick={verify} disabled={busy} className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text)] hover:border-cyan-400/40 disabled:opacity-60">
             {verifying ? "Verifying…" : "Verify"}
           </button>
-          <button type="button" onClick={activate} disabled={verifying || activating} className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-60">
+          <button type="button" onClick={activate} disabled={busy} className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-60">
             {activating ? "Activating…" : "Activate"}
           </button>
         </div>
