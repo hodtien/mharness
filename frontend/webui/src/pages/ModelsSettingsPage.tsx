@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ChangeEvent } from "react";
 import {
   api,
   type ModelProfile,
@@ -44,7 +45,7 @@ export default function ModelsSettingsPage() {
   const [addModal, setAddModal] = useState<AddModalState | null>(null);
   const [editModal, setEditModal] = useState<EditModalState | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null);
-  
+  const [search, setSearch] = useState("");
 
   const reload = async () => {
     setError(null);
@@ -84,6 +85,22 @@ export default function ModelsSettingsPage() {
     for (const p of providers) map[p.id] = p.label;
     return map;
   }, [providers]);
+
+  const filteredProviderEntries = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const entries = Object.entries(models).map(([providerId, items]) => {
+      const filtered = query
+        ? items.filter((model) => {
+            const haystack = `${model.id} ${model.label}`.toLowerCase();
+            return haystack.includes(query);
+          })
+        : items;
+      const builtIn = filtered.filter((model) => !model.is_custom);
+      const custom = filtered.filter((model) => model.is_custom);
+      return [providerId, [...custom, ...builtIn]] as [string, ModelProfile[]];
+    });
+    return entries.filter(([, items]) => items.length > 0);
+  }, [models, search]);
 
   if (loading) {
     return (
@@ -232,59 +249,107 @@ export default function ModelsSettingsPage() {
 
         {error && <ErrorBanner message={error} />}
 
-        {providerEntries.length === 0 && (
-          <EmptyState message="No provider profiles configured." description="Add a provider in Provider settings first." />
-        )}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[var(--text-dim)]">
+              🔍
+            </span>
+            <input
+              type="search"
+              value={search}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+              placeholder="Filter models by id or label…"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] py-2 pl-10 pr-4 text-sm text-[var(--text)] placeholder-[var(--text-dim)] outline-none focus:border-cyan-400/50"
+            />
+          </div>
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs text-[var(--text-dim)] hover:border-[var(--text-dim)]"
+            >
+              Clear
+            </button>
+          )}
+        </div>
 
         <div className="space-y-3">
-          {providerEntries.map(([providerId, items]) => {
-            const open = openProviders[providerId] ?? true;
-            const label = providerLabels[providerId] ?? providerId;
-            return (
-              <section
-                key={providerId}
-                className="rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-lg"
-              >
-                <button
-                  type="button"
-                  onClick={() => toggle(providerId)}
-                  aria-expanded={open}
-                  aria-controls={`models-panel-${providerId}`}
-                  className="flex w-full items-center justify-between gap-3 px-5 py-3 text-left"
+          {Object.keys(models).length === 0 && !search && (
+            <EmptyState message="No provider profiles configured." description="Add a provider in Provider settings first." />
+          )}
+          {filteredProviderEntries.length === 0 && Object.keys(models).length > 0 ? (
+            search ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--panel)] p-8 text-center">
+                <span aria-hidden="true" className="mb-3 text-4xl">🔍</span>
+                <p className="text-sm font-medium text-[var(--text)]">No models match &ldquo;{search}&rdquo;</p>
+                <p className="mt-1 text-xs text-[var(--text-dim)]">Try a different search term.</p>
+              </div>
+            ) : null
+          ) : (
+            filteredProviderEntries.map(([providerId, items]) => {
+              const open = openProviders[providerId] ?? true;
+              const label = providerLabels[providerId] ?? providerId;
+              const customCount = items.filter((m) => m.is_custom).length;
+              return (
+                <section
+                  key={providerId}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-lg"
                 >
-                  <div className="flex items-center gap-3">
-                    <span aria-hidden="true" className="text-xs text-[var(--text-dim)]">
-                      {open ? "▼" : "▶"}
-                    </span>
-                    <div>
-                      <div className="font-semibold text-[var(--text)]">{label}</div>
-                      <div className="text-xs text-[var(--text-dim)]">
-                        {items.length} model{items.length === 1 ? "" : "s"}
+                  <button
+                    type="button"
+                    onClick={() => toggle(providerId)}
+                    aria-expanded={open}
+                    aria-controls={`models-panel-${providerId}`}
+                    className="flex w-full items-center justify-between gap-3 px-5 py-3 text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span aria-hidden="true" className="text-xs text-[var(--text-dim)]">
+                        {open ? "▼" : "▶"}
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-[var(--text)]">{label}</span>
+                          {customCount > 0 && (
+                            <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-200">
+                              {customCount} custom
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-[var(--text-dim)]">
+                          {items.length} model{items.length === 1 ? "" : "s"}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="text-xs font-mono text-[var(--text-dim)]">{providerId}</div>
-                </button>
-                {open && (
-                  <div id={`models-panel-${providerId}`} className="border-t border-[var(--border)]">
-                    <ModelsTable
-                      providerId={providerId}
-                      models={items}
-                      onEdit={(model) => openEdit(providerId, model)}
-                      onDelete={(model) =>
-                        setDeleteConfirm({
-                          provider: providerId,
-                          modelId: model.id,
-                          busy: false,
-                          error: null,
-                        })
-                      }
-                    />
-                  </div>
-                )}
-              </section>
-            );
-          })}
+                    <div className="text-xs font-mono text-[var(--text-dim)]">{providerId}</div>
+                  </button>
+                  {open && (
+                    <div id={`models-panel-${providerId}`} className="border-t border-[var(--border)]">
+                      {items.length === 0 ? (
+                        <div className="px-5 py-6 text-center">
+                          <p className="text-sm text-[var(--text-dim)]">No models in this provider.</p>
+                          <p className="mt-0.5 text-xs text-[var(--text-dim)]">Add a custom model using the button above.</p>
+                        </div>
+                      ) : (
+                        <ModelsTable
+                          providerId={providerId}
+                          models={items}
+                          onEdit={(model) => openEdit(providerId, model)}
+                          onDelete={(model) =>
+                            setDeleteConfirm({
+                              provider: providerId,
+                              modelId: model.id,
+                              busy: false,
+                              error: null,
+                            })
+                          }
+                        />
+                      )}
+                    </div>
+                  )}
+                </section>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -332,6 +397,15 @@ function ModelsTable({
   onEdit: (model: ModelProfile) => void;
   onDelete: (model: ModelProfile) => void;
 }) {
+  const { builtInModels, customModels } = useMemo(() => {
+    const customModels = models.filter((model) => model.is_custom);
+    const builtInModels = models.filter((model) => !model.is_custom);
+    return {
+      builtInModels: builtInModels.sort((a, b) => a.id.localeCompare(b.id)),
+      customModels: customModels.sort((a, b) => a.id.localeCompare(b.id)),
+    };
+  }, [models]);
+
   if (models.length === 0) {
     return <div className="px-5 py-3 text-sm text-[var(--text-dim)]">No models.</div>;
   }
@@ -342,6 +416,7 @@ function ModelsTable({
           <tr className="text-left text-xs uppercase tracking-wide text-[var(--text-dim)]">
             <th className="px-5 py-2 font-medium">Model id</th>
             <th className="px-5 py-2 font-medium">Label</th>
+            <th className="px-5 py-2 font-medium">Capabilities</th>
             <th className="px-5 py-2 font-medium">Context window</th>
             <th className="px-5 py-2 font-medium">Default</th>
             <th className="px-5 py-2 font-medium">Type</th>
@@ -349,64 +424,117 @@ function ModelsTable({
           </tr>
         </thead>
         <tbody>
-          {models.map((model) => (
-            <tr
-              key={`${providerId}:${model.id}`}
-              className="border-t border-[var(--border)] text-[var(--text)]"
-            >
-              <td className="px-5 py-2 font-mono text-xs">{model.id}</td>
-              <td className="px-5 py-2">{model.label}</td>
-              <td className="px-5 py-2 text-[var(--text-dim)]">
-                {model.context_window ? model.context_window.toLocaleString() : "—"}
-              </td>
-              <td className="px-5 py-2">
-                {model.is_default ? (
-                  <span
-                    aria-label="default model"
-                    className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-xs text-cyan-100"
-                  >
-                    ✓ default
-                  </span>
-                ) : (
-                  <span className="text-xs text-[var(--text-dim)]">—</span>
-                )}
-              </td>
-              <td className="px-5 py-2">
-                {model.is_custom ? (
-                  <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-100">
-                    custom
-                  </span>
-                ) : (
-                  <span className="text-xs text-[var(--text-dim)]">built-in</span>
-                )}
-              </td>
-              <td className="px-5 py-2 text-right">
-                {model.is_custom && (
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onEdit(model)}
-                      aria-label={`Edit ${model.id}`}
-                      className="rounded-md border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-xs text-cyan-200 hover:border-cyan-400/60"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDelete(model)}
-                      aria-label={`Delete ${model.id}`}
-                      className="rounded-md border border-red-400/30 bg-red-500/10 px-3 py-1 text-xs text-red-200 hover:border-red-400/60"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </td>
-            </tr>
-          ))}
+          <ModelSectionRows models={customModels} onEdit={onEdit} onDelete={onDelete} providerId={providerId} />
+          <ModelSectionRows models={builtInModels} onEdit={onEdit} onDelete={onDelete} providerId={providerId} />
         </tbody>
       </table>
     </div>
+  );
+}
+
+function CapabilityBadge({ label, variant = "default" }: { label: string; variant?: "default" | "highlight" }) {
+  const styles: Record<string, string> = {
+    default: "rounded-full border border-[var(--border)] bg-[var(--panel-2)] px-1.5 py-0.5 text-[10px] text-[var(--text-dim)]",
+    highlight: "rounded-full border border-violet-400/40 bg-violet-400/10 px-1.5 py-0.5 text-[10px] text-violet-200",
+  };
+  return <span className={styles[variant]}>{label}</span>;
+}
+
+function ModelSectionRows({
+  models,
+  onEdit,
+  onDelete,
+  providerId,
+}: {
+  models: ModelProfile[];
+  onEdit: (model: ModelProfile) => void;
+  onDelete: (model: ModelProfile) => void;
+  providerId: string;
+}) {
+  return (
+    <>
+      {models.map((model) => {
+        const ctx = model.context_window;
+        const badges: Array<{ label: string; variant?: "default" | "highlight" }> = [];
+
+        if (ctx && ctx >= 100000) {
+          badges.push({ label: "long ctx", variant: "highlight" });
+        }
+        if (/\bfast\b/i.test(model.id) || /\bflash\b/i.test(model.id)) {
+          badges.push({ label: "fast", variant: "highlight" });
+        }
+        if (/vision/i.test(model.id) || /-\d(?:\.\d+)?-vision/i.test(model.id)) {
+          badges.push({ label: "vision", variant: "highlight" });
+        }
+        if (/-\d(?:\.\d+)?-tools/i.test(model.id) || /-tool/i.test(model.id)) {
+          badges.push({ label: "tools", variant: "highlight" });
+        }
+
+        return (
+          <tr
+            key={`${providerId}:${model.id}`}
+            className="border-t border-[var(--border)] text-[var(--text)]"
+          >
+            <td className="px-5 py-2 font-mono text-xs">{model.id}</td>
+            <td className="px-5 py-2">{model.label}</td>
+            <td className="px-5 py-2">
+              <div className="flex flex-wrap gap-1">
+                {badges.map((b) => (
+                  <CapabilityBadge key={b.label} label={b.label} variant={b.variant} />
+                ))}
+                {badges.length === 0 && <span className="text-xs text-[var(--text-dim)]">—</span>}
+              </div>
+            </td>
+            <td className="px-5 py-2 text-[var(--text-dim)]">
+              {ctx ? ctx.toLocaleString() : "—"}
+            </td>
+            <td className="px-5 py-2">
+              {model.is_default ? (
+                <span
+                  aria-label="default model"
+                  className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-xs text-cyan-100"
+                >
+                  ✓ default
+                </span>
+              ) : (
+                <span className="text-xs text-[var(--text-dim)]">—</span>
+              )}
+            </td>
+            <td className="px-5 py-2">
+              {model.is_custom ? (
+                <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-100">
+                  custom
+                </span>
+              ) : (
+                <span className="text-xs text-[var(--text-dim)]">built-in</span>
+              )}
+            </td>
+            <td className="px-5 py-2 text-right">
+              {model.is_custom && (
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onEdit(model)}
+                    aria-label={`Edit ${model.id}`}
+                    className="rounded-md border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-xs text-cyan-200 hover:border-cyan-400/60"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(model)}
+                    aria-label={`Delete ${model.id}`}
+                    className="rounded-md border border-red-400/30 bg-red-500/10 px-3 py-1 text-xs text-red-200 hover:border-red-400/60"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
+            </td>
+          </tr>
+        );
+      })}
+    </>
   );
 }
 
