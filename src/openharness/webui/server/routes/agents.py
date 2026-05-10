@@ -346,3 +346,174 @@ def update_agent(name: str, body: _UpdateAgentBody) -> dict[str, object | None]:
         # Should not happen — file was just written — but stay defensive.
         return _summarize(target)
     return _summarize(refreshed)
+
+
+class _CloneAgentBody(BaseModel):
+    """Request body for ``POST /api/agents/{name}/clone``."""
+
+    new_name: str
+
+
+@router.post("/{name}/clone")
+def clone_agent(name: str, body: _CloneAgentBody) -> dict[str, object | None]:
+    """Clone an existing agent definition into a new user-owned file.
+
+    The new file is written to ``<config_dir>/agents/<new_name>.md``.  The
+    original agent's body and all frontmatter except ``name`` are preserved.
+    Returns the summary of the newly-created agent.
+
+    Raises **404** if the source agent is not found.
+    Raises **400** if ``new_name`` is empty, already taken, or contains
+    path-unsafe characters.
+    """
+
+    new_name = body.new_name.strip()
+    if not new_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="new_name must not be empty",
+        )
+    # Guard against path traversal.
+    if any(c in new_name for c in ("/", "\\", "\0", ".")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="new_name must not contain path separators or dots",
+        )
+
+    try:
+        agents = get_all_agent_definitions()
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("failed to load agent definitions: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load agent definitions",
+        ) from exc
+
+    # Ensure target name is not already taken.
+    if any(a.name == new_name for a in agents):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"An agent named {new_name!r} already exists",
+        )
+
+    source_agent = next((a for a in agents if a.name == name), None)
+    if source_agent is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent {name!r} not found",
+        )
+
+    # Build the new agent file content.
+    source_path_str = _source_file(source_agent)
+    if source_path_str is not None and Path(source_path_str).is_file():
+        # Preserve original markdown body from disk.
+        original_content = Path(source_path_str).read_text(encoding="utf-8")
+        fm_dict, _fm_text, raw_body = _split_frontmatter_raw(original_content)
+    else:
+        # Built-in: synthesize minimal frontmatter from the definition.
+        fm_dict = {
+            "description": source_agent.description,
+        }
+        if source_agent.model:
+            fm_dict["model"] = source_agent.model
+        if source_agent.effort:
+            fm_dict["effort"] = source_agent.effort
+        if source_agent.permission_mode:
+            fm_dict["permission_mode"] = source_agent.permission_mode
+        raw_body = source_agent.system_prompt or ""
+
+    fm_dict["name"] = new_name
+    new_fm_text = yaml.safe_dump(fm_dict, sort_keys=False, allow_unicode=True)
+    new_content = f"---\n{new_fm_text}---\n{raw_body}"
+
+    from openharness.config.paths import get_config_dir  # local import avoids circular
+
+    dest_dir = get_config_dir() / "agents"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = dest_dir / f"{new_name}.md"
+
+    try:
+        dest_path.write_text(new_content, encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to write clone file: {exc}",
+        ) from exc
+
+    # Return summary for the newly-created agent.
+    refreshed = next(
+        (a for a in get_all_agent_definitions() if a.name == new_name),
+        None,
+    )
+    if refreshed is None:
+        # Fallback: synthesize from source.
+        return {
+            "name": new_name,
+            "description": source_agent.description,
+            "model": source_agent.model,
+            "effort": source_agent.effort,
+            "permission_mode": source_agent.permission_mode,
+            "tools_count": _tools_count(source_agent),
+            "has_system_prompt": bool(source_agent.system_prompt),
+            "source_file": str(dest_path),
+        }
+    return _summarize(refreshed)
+
+
+class _ValidateAgentBody(BaseModel):
+    """Request body for ``POST /api/agents/{name}/validate``."""
+
+    model: str | None = None
+    effort: str | None = None
+    permission_mode: str | None = None
+
+
+class _ValidateAgentResponse(BaseModel):
+    valid: bool
+    errors: list[str]
+
+
+@router.post("/{name}/validate", response_model=_ValidateAgentResponse)
+def validate_agent(name: str, body: _ValidateAgentBody) -> _ValidateAgentResponse:
+    """Validate a prospective agent configuration patch without persisting it.
+
+    Returns ``{"valid": true, "errors": []}`` when the proposed values are all
+    acceptable.  When one or more values are invalid, returns
+    ``{"valid": false, "errors": ["...", ...]}``.
+
+    Unknown agent names return **404**.  The endpoint never modifies any file.
+    """
+
+    try:
+        agents = get_all_agent_definitions()
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("failed to load agent definitions: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load agent definitions",
+        ) from exc
+
+    target = next((a for a in agents if a.name == name), None)
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent {name!r} not found",
+        )
+
+    errors: list[str] = []
+
+    if body.effort is not None and body.effort not in EFFORT_LEVELS:
+        errors.append(
+            f"Invalid effort {body.effort!r}; expected one of {list(EFFORT_LEVELS)}"
+        )
+
+    if body.permission_mode is not None and body.permission_mode not in PERMISSION_MODES:
+        errors.append(
+            f"Invalid permission_mode {body.permission_mode!r}; "
+            f"expected one of {list(PERMISSION_MODES)}"
+        )
+
+    if body.model is not None and not _model_exists(body.model):
+        errors.append(f"Model {body.model!r} is not available in /api/models")
+
+    return _ValidateAgentResponse(valid=len(errors) == 0, errors=errors)

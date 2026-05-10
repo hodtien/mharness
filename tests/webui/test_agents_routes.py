@@ -99,3 +99,109 @@ def test_patch_unknown_agent_returns_404(tmp_path) -> None:
     )
 
     assert response.status_code == 404
+
+
+def test_clone_agent_creates_new_file(tmp_path, monkeypatch) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    _write_user_agent(config_dir, "source-agent", model="sonnet")
+
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/agents/source-agent/clone",
+        headers=AUTH,
+        json={"new_name": "cloned-agent"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["name"] == "cloned-agent"
+    # Verify the file was created.
+    agents_dir = config_dir / "agents"
+    assert (agents_dir / "cloned-agent.md").is_file()
+
+
+def test_clone_agent_rejects_duplicate_name(tmp_path, monkeypatch) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    _write_user_agent(config_dir, "original")
+    _write_user_agent(config_dir, "duplicate")
+
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/agents/original/clone",
+        headers=AUTH,
+        json={"new_name": "duplicate"},
+    )
+
+    assert response.status_code == 400
+    assert "already exists" in response.json()["detail"]
+
+
+def test_clone_unknown_agent_returns_404(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/agents/nonexistent/clone",
+        headers=AUTH,
+        json={"new_name": "new-name"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_validate_agent_returns_valid(tmp_path, monkeypatch) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    _write_user_agent(config_dir, "my-agent")
+
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/agents/my-agent/validate",
+        headers=AUTH,
+        json={"effort": "high", "permission_mode": "acceptEdits"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["valid"] is True
+    assert payload["errors"] == []
+
+
+def test_validate_agent_returns_errors_for_invalid_values(tmp_path, monkeypatch) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    _write_user_agent(config_dir, "my-agent")
+
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/agents/my-agent/validate",
+        headers=AUTH,
+        json={"effort": "invalid-effort", "model": "nonexistent-model-xyz"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["valid"] is False
+    assert "invalid-effort" in payload["errors"][0]
+    assert "nonexistent-model-xyz" in payload["errors"][1]
+
+
+def test_validate_unknown_agent_returns_404(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/agents/nonexistent/validate",
+        headers=AUTH,
+        json={"effort": "low"},
+    )
+
+    assert response.status_code == 404
