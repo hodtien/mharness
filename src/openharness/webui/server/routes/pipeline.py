@@ -30,7 +30,7 @@ from openharness.autopilot.session_store import (
     load_latest_checkpoint,
 )
 from openharness.config.paths import get_project_autopilot_policy_path
-from openharness.autopilot.types import RepoAutopilotRegistry, RepoJournalEntry, RepoTaskStatus
+from openharness.autopilot.types import RepoAutopilotRegistry, RepoJournalEntry, RepoTaskCard, RepoTaskStatus
 from openharness.webui.server.state import WebUIState, get_state, get_task_manager, require_stream_token, require_token
 
 _CARD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -329,11 +329,19 @@ def get_pipeline_preflight(state: WebUIState = Depends(get_state)) -> dict:
     # 4. Check GitHub availability (for PR flows)
     checks.append(store._check_github_available())
 
-    # 5. Check model availability (using default model from policy)
+    # 5. Check model availability using the same policy resolution as card execution
     policies = store.load_policies()
     execution = dict(policies.get("autopilot", {}).get("execution", {}))
-    default_model = execution.get("default_model")
-    checks.append(store._check_model_available(default_model))
+    probe_card = RepoTaskCard(
+        id="preflight-probe",
+        fingerprint="preflight-probe",
+        title="preflight probe",
+        body="",
+        source_kind="manual_idea",
+        created_at=0.0,
+        updated_at=0.0,
+    )
+    checks.append(store._check_model_available(store._resolve_model_for_card(probe_card, execution)))
 
     # Aggregate status
     has_fatal = any(c.status in {"fail", "error"} and not c.transient for c in checks)
@@ -355,7 +363,7 @@ def get_pipeline_preflight(state: WebUIState = Depends(get_state)) -> dict:
         "provider_ok": any(c.name == "model_available" and c.status == "ok" for c in checks),
         "auth_ok": any(c.name == "auth_ok" and c.status == "ok" for c in checks),
         "github_ok": any(c.name == "github_available" and c.status == "ok" for c in checks),
-        "repo_ok": any(c.name in {"cwd_exists", "git_repo"} and c.status == "ok" for c in checks),
+        "repo_ok": any(c.name == "git_repo" and c.status == "ok" for c in checks),
         "checks": formatted_checks,
     }
 

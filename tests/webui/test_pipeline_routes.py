@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from openharness.autopilot.session_store import save_checkpoint
+from openharness.autopilot.types import PreflightCheck
 from openharness.webui.server.app import create_app
 
 AUTH = {"Authorization": "Bearer test-token"}
@@ -652,18 +653,100 @@ def test_preflight_global_endpoint_failure_mapping(tmp_path) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    
-    # Verify the boolean flags are boolean
+
     assert isinstance(body["repo_ok"], bool)
     assert isinstance(body["auth_ok"], bool)
     assert isinstance(body["github_ok"], bool)
     assert isinstance(body["provider_ok"], bool)
-    
-    # Verify messages are arrays
+
     checks = body["checks"]
     for check in checks:
         assert isinstance(check["messages"], list)
-        assert len(check["messages"]) > 0  # At minimum should have the reason
+        assert len(check["messages"]) > 0
+
+
+def test_preflight_global_repo_ok_requires_git_repo(tmp_path, monkeypatch) -> None:
+    from openharness.autopilot.service import RepoAutopilotStore
+
+    monkeypatch.setattr(
+        RepoAutopilotStore,
+        "_check_cwd_exists",
+        lambda self: PreflightCheck(name="cwd_exists", status="ok", reason="cwd exists"),
+    )
+    monkeypatch.setattr(
+        RepoAutopilotStore,
+        "_check_git_repo",
+        lambda self: PreflightCheck(name="git_repo", status="fail", reason="not a git repo"),
+    )
+    monkeypatch.setattr(
+        RepoAutopilotStore,
+        "_check_auth_status",
+        lambda self: PreflightCheck(name="auth_ok", status="ok", reason="auth ok"),
+    )
+    monkeypatch.setattr(
+        RepoAutopilotStore,
+        "_check_github_available",
+        lambda self: PreflightCheck(name="github_available", status="ok", reason="gh ok"),
+    )
+    monkeypatch.setattr(
+        RepoAutopilotStore,
+        "_check_model_available",
+        lambda self, model: PreflightCheck(name="model_available", status="ok", reason="model ok"),
+    )
+    client = _client(tmp_path)
+
+    response = client.get("/api/pipeline/preflight", headers=AUTH)
+
+    assert response.status_code == 200
+    assert response.json()["repo_ok"] is False
+
+
+def test_preflight_global_uses_execution_model_resolution(tmp_path, monkeypatch) -> None:
+    from openharness.autopilot.service import RepoAutopilotStore
+
+    seen_models: list[str | None] = []
+    monkeypatch.setattr(
+        RepoAutopilotStore,
+        "load_policies",
+        lambda self: {"autopilot": {"execution": {"implement_agent": "gan-generator"}}},
+    )
+    monkeypatch.setattr(
+        RepoAutopilotStore,
+        "_resolve_model_for_card",
+        lambda self, card, execution: "resolved-model" if execution.get("implement_agent") == "gan-generator" else None,
+    )
+    monkeypatch.setattr(
+        RepoAutopilotStore,
+        "_check_cwd_exists",
+        lambda self: PreflightCheck(name="cwd_exists", status="ok", reason="cwd exists"),
+    )
+    monkeypatch.setattr(
+        RepoAutopilotStore,
+        "_check_git_repo",
+        lambda self: PreflightCheck(name="git_repo", status="ok", reason="git repo"),
+    )
+    monkeypatch.setattr(
+        RepoAutopilotStore,
+        "_check_auth_status",
+        lambda self: PreflightCheck(name="auth_ok", status="ok", reason="auth ok"),
+    )
+    monkeypatch.setattr(
+        RepoAutopilotStore,
+        "_check_github_available",
+        lambda self: PreflightCheck(name="github_available", status="ok", reason="gh ok"),
+    )
+
+    def check_model(self, model: str | None) -> PreflightCheck:
+        seen_models.append(model)
+        return PreflightCheck(name="model_available", status="ok", reason="model ok")
+
+    monkeypatch.setattr(RepoAutopilotStore, "_check_model_available", check_model)
+    client = _client(tmp_path)
+
+    response = client.get("/api/pipeline/preflight", headers=AUTH)
+
+    assert response.status_code == 200
+    assert seen_models == ["resolved-model"]
 
 
 # ---------------------------------------------------------------------------
