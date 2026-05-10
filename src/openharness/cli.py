@@ -1327,6 +1327,63 @@ def autopilot_scan_cmd(
     raise typer.Exit(1)
 
 
+@autopilot_app.command("preflight")
+def autopilot_preflight_cmd(
+    cwd: str = typer.Option(str(Path.cwd()), "--cwd", help="Repository root"),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON output"),
+) -> None:
+    """Run repo autopilot pre-flight checks and print diagnostics.
+
+    Use this before triggering runs from the CLI or WebUI.
+    """
+    from openharness.autopilot import RepoAutopilotStore, RepoTaskCard
+
+    store = RepoAutopilotStore(cwd)
+    probe_card = RepoTaskCard(
+        id="preflight-probe",
+        fingerprint="preflight-probe",
+        title="preflight probe",
+        body="",
+        source_kind="manual_idea",
+        created_at=0.0,
+        updated_at=0.0,
+    )
+    result = store.run_preflight(probe_card)
+    payload = {
+        "ok": result.passed,
+        "checks": [c.model_dump() for c in result.checks],
+        "diagnostics": [
+            {
+                "type": c.name,
+                "status": c.status,
+                "transient": c.transient,
+                "human": c.reason or c.detail,
+                "machine": {"reason": c.reason, "detail": c.detail},
+            }
+            for c in result.checks
+        ],
+        "failure_help": {
+            "cwd_exists": "Working directory is missing or unavailable.",
+            "git_repo": "Repository is not a git checkout when worktree mode is enabled.",
+            "model_available": "The active execution model is not configured or not allowed by the current profile.",
+            "auth_ok": "Authentication is missing or not configured for the active provider.",
+            "github_available": "GitHub CLI or network access is unavailable for GitHub flows.",
+        },
+    }
+    if json_output:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    print("Autopilot preflight:")
+    print(f"  ok: {payload['ok']}")
+    for check in payload["checks"]:
+        print(f"  - {check['name']}: {check['status']} — {check['reason']}")
+        if check.get("detail"):
+            print(f"    detail: {check['detail']}")
+    print("Failure help:")
+    for name, help_text in payload["failure_help"].items():
+        print(f"  {name}: {help_text}")
+
+
 @autopilot_app.command("run-next")
 def autopilot_run_next_cmd(
     cwd: str = typer.Option(str(Path.cwd()), "--cwd", help="Repository root"),

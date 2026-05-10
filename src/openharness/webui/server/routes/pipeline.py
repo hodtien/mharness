@@ -35,6 +35,14 @@ from openharness.webui.server.state import WebUIState, get_state, get_task_manag
 
 _CARD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
+_PRELIGHT_FAILURE_HELP = {
+    "cwd_exists": "Working directory is missing or unavailable.",
+    "git_repo": "Repository is not a git checkout when worktree mode is enabled.",
+    "model_available": "The active execution model is not configured or not allowed by the current profile.",
+    "auth_ok": "Authentication is missing or not configured for the active provider.",
+    "github_available": "GitHub CLI or network access is unavailable for GitHub flows.",
+}
+
 
 def _ensure_safe_card_id(card_id: str) -> None:
     """Reject path-traversal attempts at the HTTP boundary."""
@@ -51,6 +59,24 @@ router = APIRouter(
 )
 
 _AUTH_DEPENDENCY = [Depends(require_token)]
+
+
+def _preflight_diagnostics(checks: list[object]) -> list[dict[str, object]]:
+    diagnostics: list[dict[str, object]] = []
+    for check in checks:
+        diagnostics.append(
+            {
+                "type": check.name,
+                "status": check.status,
+                "transient": check.transient,
+                "human": check.reason or check.detail,
+                "machine": {
+                    "reason": check.reason,
+                    "detail": check.detail,
+                },
+            }
+        )
+    return diagnostics
 
 
 class CreateManualCardRequest(BaseModel):
@@ -333,15 +359,11 @@ def get_pipeline_card(
 def get_pipeline_preflight(state: WebUIState = Depends(get_state)) -> dict:
     """Run general preflight checks for the pipeline (system-wide health check).
 
-    Returns {"ok": bool, "checks": [{name, status, reason, messages}...]}.
-    This endpoint checks the system health without requiring a specific card,
-    useful for displaying health status before user triggers run-next.
-
-    Checks performed:
-    - provider_ok: Provider/API endpoint availability
-    - auth_ok: Authentication/API key status
-    - github_ok: GitHub CLI availability (for PR flows)
-    - repo_ok: Git repository validity
+    Returns a standardized payload with:
+    - ok: overall status
+    - checks: raw preflight checks
+    - diagnostics: human-readable + machine-readable summaries
+    - failure_help: short help text for each failure type
     """
     from openharness.autopilot.types import PreflightCheck
 
@@ -387,6 +409,8 @@ def get_pipeline_preflight(state: WebUIState = Depends(get_state)) -> dict:
             "status": check.status,
             "reason": check.reason,
             "messages": [check.reason] + ([check.detail] if check.detail else []),
+            "transient": check.transient,
+            "detail": check.detail,
         })
 
     return {
@@ -396,6 +420,8 @@ def get_pipeline_preflight(state: WebUIState = Depends(get_state)) -> dict:
         "github_ok": any(c.name == "github_available" and c.status == "ok" for c in checks),
         "repo_ok": any(c.name == "git_repo" and c.status == "ok" for c in checks),
         "checks": formatted_checks,
+        "diagnostics": _preflight_diagnostics(checks),
+        "failure_help": _PRELIGHT_FAILURE_HELP,
     }
 
 
@@ -421,6 +447,8 @@ def get_card_preflight(
     return {
         "ok": result.passed,
         "checks": [c.model_dump() for c in result.checks],
+        "diagnostics": _preflight_diagnostics(result.checks),
+        "failure_help": _PRELIGHT_FAILURE_HELP,
     }
 
 
