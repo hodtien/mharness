@@ -297,6 +297,105 @@ def test_pending_becomes_pickable_after_retry_time(tmp_path: Path) -> None:
     assert chosen.id == card.id, "Pending card with past retry time should be picked"
 
 
+def test_pick_and_claim_pending_resets_to_preparing(tmp_path: Path) -> None:
+    """pick_and_claim_card should reset pending status to preparing and log journal."""
+    import time
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Pending retry", body="body")
+
+    past_time = time.time() - 60
+    store.update_status(
+        card.id,
+        status="pending",
+        metadata_updates={"pending_reason": "preflight_transient", "next_retry_at": past_time, "retry_count": 2},
+    )
+
+    claimed = store.pick_and_claim_card("worker-1")
+    assert claimed is not None
+    assert claimed.id == card.id
+    assert claimed.status == "preparing"
+    assert claimed.metadata.get("resumed_from_pending") is True
+
+    # Check journal was appended
+    journal = store.load_journal(limit=10)
+    resumed_entries = [e for e in journal if e.kind == "resumed_from_pending"]
+    assert len(resumed_entries) == 1
+    assert card.id in resumed_entries[0].task_id
+
+
+def test_pick_and_claim_pending_retry_exhausted_fails(tmp_path: Path) -> None:
+    """pick_and_claim_card should move exhausted pending cards to failed."""
+    import time
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Exhausted retry", body="body")
+
+    # Set pending at max retry count (7)
+    past_time = time.time() - 60
+    store.update_status(
+        card.id,
+        status="pending",
+        metadata_updates={"pending_reason": "preflight_transient", "next_retry_at": past_time, "retry_count": 7},
+    )
+
+    claimed = store.pick_and_claim_card("worker-1")
+    assert claimed is None  # Should return None because card moved to failed
+
+    # Verify card is now failed
+    failed_card = store.get_card(card.id)
+    assert failed_card is not None
+    assert failed_card.status == "failed"
+    assert failed_card.metadata.get("last_failure_stage") == "retry_exhausted"
+    assert "exhausted 7 pending retries" in failed_card.metadata.get("last_failure_summary", "")
+
+    # Check journal for retry_exhausted entry
+    journal = store.load_journal(limit=10)
+    exhausted_entries = [e for e in journal if e.kind == "retry_exhausted"]
+    assert len(exhausted_entries) == 1
+    assert card.id in exhausted_entries[0].task_id
+
+
+def test_pick_specific_card_manual_retry_clears_pending(tmp_path: Path) -> None:
+    """pick_specific_card for pending card should clear pending metadata immediately."""
+    import time
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Manual retry", body="body")
+
+    future_time = time.time() + 3600
+    store.update_status(
+        card.id,
+        status="pending",
+        metadata_updates={
+            "pending_reason": "preflight_transient",
+            "next_retry_at": future_time,
+            "retry_count": 3,
+        },
+    )
+
+    # Manual retry should clear pending even with future next_retry_at
+    claimed = store.pick_specific_card(card.id, "worker-manual")
+    assert claimed is not None
+    assert claimed.status == "preparing"
+    assert "next_retry_at" not in claimed.metadata
+    assert "pending_reason" not in claimed.metadata
+    assert "retry_count" not in claimed.metadata
+    assert claimed.metadata.get("manual_retry") is True
+
+    # Check journal for manual_retry entry
+    journal = store.load_journal(limit=10)
+    manual_retry_entries = [e for e in journal if e.kind == "manual_retry"]
+    assert len(manual_retry_entries) == 1
+    assert card.id in manual_retry_entries[0].task_id
+
+
 def test_calc_next_retry_at_exponential_backoff() -> None:
     """Test that _calc_next_retry_at uses exponential backoff."""
     import time
