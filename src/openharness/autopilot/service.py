@@ -372,7 +372,6 @@ class RepoAutopilotStore:
         self._main_checkout_lock_path = self._registry_path.parent / "main-checkout.lock"
         self._repo_full_name: str | None = None
         self._ensure_layout()
-        self._startup_cleanup_task: asyncio.Task[list[str]] | None = None
         self._start_startup_cleanup()
 
     @property
@@ -535,10 +534,11 @@ class RepoAutopilotStore:
 
     def has_capacity(self, policies: dict[str, Any]) -> bool:
         """Return True when fewer active cards are running than max_parallel_runs allows."""
+        execution = policies.get("execution")
+        if not isinstance(execution, dict):
+            execution = dict(policies.get("autopilot", {}).get("execution", {}))
         max_parallel = int(
-            policies.get("autopilot", {})
-            .get("execution", {})
-            .get("max_parallel_runs", _DEFAULT_AUTOPILOT_POLICY["execution"]["max_parallel_runs"])
+            execution.get("max_parallel_runs", _DEFAULT_AUTOPILOT_POLICY["execution"]["max_parallel_runs"])
         )
         return self.count_active_cards() < max_parallel
 
@@ -4481,11 +4481,9 @@ class RepoAutopilotStore:
 
     def _start_startup_cleanup(self) -> None:
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
         except RuntimeError:
             asyncio.run(self._cleanup_stale_worktrees())
-            return
-        self._startup_cleanup_task = loop.create_task(self._cleanup_stale_worktrees())
 
     def _load_registry(self) -> RepoAutopilotRegistry:
         with RepoFileLock(self._registry_lock_path):

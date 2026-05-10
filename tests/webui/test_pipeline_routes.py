@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -349,9 +350,14 @@ def test_run_next_returns_409_when_no_queued_cards(tmp_path) -> None:
     assert response.json()["detail"]["error"] == "no_queued_cards"
 
 
-def test_run_next_returns_409_when_at_capacity(tmp_path) -> None:
+async def test_run_next_returns_409_when_at_capacity(tmp_path, monkeypatch) -> None:
     """When max_parallel_runs=1 and one card is running, capacity is reached."""
     import json
+    from unittest.mock import AsyncMock, MagicMock
+
+    import httpx
+    from openharness.webui.server.app import create_app
+    import openharness.webui.server.routes.pipeline as pipeline_routes
 
     reg_dir = tmp_path / ".openharness" / "autopilot"
     reg_dir.mkdir(parents=True)
@@ -394,8 +400,15 @@ def test_run_next_returns_409_when_at_capacity(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    client = _client(tmp_path)
-    response = client.post("/api/pipeline/run-next", headers=AUTH)
+    fake_task = MagicMock()
+    fake_task.id = "task-stub-001"
+    mock_manager = MagicMock()
+    mock_manager.create_shell_task = AsyncMock(return_value=fake_task)
+    monkeypatch.setattr(pipeline_routes, "get_task_manager", lambda: mock_manager)
+
+    app = create_app(token="test-token", cwd=tmp_path, spa_dir="")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/pipeline/run-next", headers=AUTH)
 
     assert response.status_code == 409
     body = response.json()["detail"]
@@ -485,13 +498,14 @@ def test_run_next_returns_202_and_task_id_when_queued_card_exists(tmp_path, monk
     mock_manager.create_shell_task.assert_called_once()
 
 
-def test_resume_card_allows_stale_active_card_with_checkpoint(tmp_path, monkeypatch) -> None:
+async def test_resume_card_allows_stale_active_card_with_checkpoint(tmp_path, monkeypatch) -> None:
     from unittest.mock import AsyncMock, MagicMock
 
     import openharness.webui.server.routes.pipeline as pipeline_routes
 
-    client = _client(tmp_path)
-    created = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Stuck card"})
+    app = create_app(token="test-token", cwd=tmp_path, model="sonnet")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        created = await client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Stuck card"})
     assert created.status_code == 201
     card_id = created.json()["id"]
 
@@ -523,12 +537,13 @@ def test_resume_card_allows_stale_active_card_with_checkpoint(tmp_path, monkeypa
     mock_manager.create_shell_task = AsyncMock(return_value=fake_task)
     monkeypatch.setattr(pipeline_routes, "get_task_manager", lambda: mock_manager)
 
-    response = client.post(f"/api/pipeline/cards/{card_id}/resume", headers=AUTH)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(f"/api/pipeline/cards/{card_id}/resume", headers=AUTH)
+        updated = await client.get(f"/api/pipeline/cards/{card_id}", headers=AUTH)
 
     assert response.status_code == 202
     body = response.json()
     assert body["status"] == "accepted"
-    updated = client.get(f"/api/pipeline/cards/{card_id}", headers=AUTH)
     assert updated.status_code == 200
     payload = updated.json()
     assert payload["status"] == "queued"
@@ -537,9 +552,10 @@ def test_resume_card_allows_stale_active_card_with_checkpoint(tmp_path, monkeypa
     assert payload["metadata"]["stuck_resume"]["checkpoint_phase"] == "implement"
 
 
-def test_resume_card_rejects_fresh_active_card_without_stale_checkpoint(tmp_path) -> None:
-    client = _client(tmp_path)
-    created = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Fresh card"})
+async def test_resume_card_rejects_fresh_active_card_without_stale_checkpoint(tmp_path) -> None:
+    app = create_app(token="test-token", cwd=tmp_path, model="sonnet")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        created = await client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Fresh card"})
     assert created.status_code == 201
     card_id = created.json()["id"]
 
@@ -552,15 +568,17 @@ def test_resume_card_rejects_fresh_active_card_without_stale_checkpoint(tmp_path
             break
     registry_path.write_text(json.dumps(registry), encoding="utf-8")
 
-    response = client.post(f"/api/pipeline/cards/{card_id}/resume", headers=AUTH)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(f"/api/pipeline/cards/{card_id}/resume", headers=AUTH)
 
     assert response.status_code == 409
     assert response.json()["detail"]["error"] == "card_active"
 
 
-def test_resume_card_rejects_active_card_without_checkpoint(tmp_path) -> None:
-    client = _client(tmp_path)
-    created = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "No checkpoint"})
+async def test_resume_card_rejects_active_card_without_checkpoint(tmp_path) -> None:
+    app = create_app(token="test-token", cwd=tmp_path, model="sonnet")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        created = await client.post("/api/pipeline/cards", headers=AUTH, json={"title": "No checkpoint"})
     assert created.status_code == 201
     card_id = created.json()["id"]
 
@@ -573,7 +591,8 @@ def test_resume_card_rejects_active_card_without_checkpoint(tmp_path) -> None:
             break
     registry_path.write_text(json.dumps(registry), encoding="utf-8")
 
-    response = client.post(f"/api/pipeline/cards/{card_id}/resume", headers=AUTH)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(f"/api/pipeline/cards/{card_id}/resume", headers=AUTH)
 
     assert response.status_code == 409
     assert response.json()["detail"]["error"] == "no_resumable_checkpoint"
@@ -621,9 +640,8 @@ def test_preflight_endpoint_validates_card_id(tmp_path) -> None:
     """Invalid card IDs are rejected at the HTTP boundary."""
     client = _client(tmp_path)
 
-    # Path traversal attempt - should return 400 (invalid_card_id) or 404 (not found)
-    response = client.get("/api/pipeline/cards/../../../etc/passwd/preflight", headers=AUTH)
-    assert response.status_code in (400, 404)
+    response = client.get("/api/pipeline/cards/invalid$id/preflight", headers=AUTH)
+    assert response.status_code == 400
 
     # Too long - should return 400 (invalid_card_id)
     response = client.get("/api/pipeline/cards/" + "a" * 100 + "/preflight", headers=AUTH)
