@@ -62,6 +62,8 @@ export interface ModesPayload {
   permission_mode: string;
   fast_mode: boolean;
   vim_enabled: boolean;
+  notifications_enabled?: boolean;
+  auto_compact_threshold_tokens?: number | null;
   effort: string;
   passes: number;
   output_style: string;
@@ -74,6 +76,8 @@ export interface ModesPatch {
   passes?: number;
   fast_mode?: boolean;
   vim_enabled?: boolean;
+  notifications_enabled?: boolean;
+  auto_compact_threshold_tokens?: number | null;
   output_style?: string;
   theme?: string;
 }
