@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:8765";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -8,10 +10,18 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"]],
   use: {
-    baseURL: "http://127.0.0.1:8765",
+    baseURL: BASE_URL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
+  webServer: process.env.E2E_BASE_URL
+    ? undefined
+    : {
+        command: "npm run dev -- --port 8765",
+        url: "http://127.0.0.1:8765",
+        reuseExistingServer: true,
+        timeout: 60_000,
+      },
   projects: [
     {
       name: "chromium",
@@ -19,6 +29,3 @@ export default defineConfig({
     },
   ],
 });
-
-// This suite targets the already-running WebUI served at http://127.0.0.1:8765.
-// API traffic is stubbed in-spec, so verification depends on the app host being up.
