@@ -397,44 +397,44 @@ const COLUMNS: {
     id: "queue",
     label: "Queue",
     statuses: ["queued", "accepted"],
-    badgeColor: "bg-blue-500/20 text-blue-300 border-blue-500/40",
+    badgeColor: "bg-[var(--status-queue-bg)] text-[var(--status-queue-text)] border-[var(--status-queue-border)]",
   },
   {
     id: "pending",
     label: "Pending",
     statuses: ["pending"],
-    badgeColor: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
+    badgeColor: "bg-[var(--status-pending-bg)] text-[var(--status-pending-text)] border-[var(--status-pending-border)]",
   },
   {
     id: "in_progress",
     label: "In Progress",
     statuses: ["preparing", "running", "verifying", "repairing"],
-    badgeColor: "bg-orange-500/20 text-orange-300 border-orange-500/40",
+    badgeColor: "bg-[var(--status-running-bg)] text-[var(--status-running-text)] border-[var(--status-running-border)]",
     pulseWhenActive: true,
   },
   {
     id: "review",
     label: "Review",
     statuses: ["pr_open", "waiting_ci"],
-    badgeColor: "bg-purple-500/20 text-purple-300 border-purple-500/40",
+    badgeColor: "bg-[var(--status-review-bg)] text-[var(--status-review-text)] border-[var(--status-review-border)]",
   },
   {
     id: "completed",
     label: "Completed",
     statuses: ["completed", "merged"],
-    badgeColor: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+    badgeColor: "bg-[var(--status-done-bg)] text-[var(--status-done-text)] border-[var(--status-done-border)]",
   },
   {
     id: "failed",
     label: "Failed",
     statuses: ["failed"],
-    badgeColor: "bg-red-500/20 text-red-300 border-red-500/40",
+    badgeColor: "bg-[var(--status-failed-bg)] text-[var(--status-failed-text)] border-[var(--status-failed-border)]",
   },
   {
     id: "rejected",
     label: "Rejected",
     statuses: ["rejected", "killed", "paused"],
-    badgeColor: "bg-gray-500/20 text-gray-400 border-gray-500/40",
+    badgeColor: "bg-[var(--status-rejected-bg)] text-[var(--status-rejected-text)] border-[var(--status-rejected-border)]",
   },
 ];
 
@@ -447,11 +447,11 @@ const SOURCE_LABELS: Record<RepoTaskSource, string> = {
 };
 
 const SOURCE_COLOR: Record<RepoTaskSource, string> = {
-  github_issue: "bg-violet-500/20 text-violet-300 border-violet-500/40",
-  github_pr: "bg-blue-500/20 text-blue-300 border-blue-500/40",
-  manual_idea: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-  ohmo_request: "bg-amber-500/20 text-amber-300 border-amber-500/40",
-  claude_code_candidate: "bg-orange-500/20 text-orange-300 border-orange-500/40",
+  github_issue: "bg-[var(--status-review-bg)] text-[var(--status-review-text)] border-[var(--status-review-border)]",
+  github_pr: "bg-[var(--status-queue-bg)] text-[var(--status-queue-text)] border-[var(--status-queue-border)]",
+  manual_idea: "bg-[var(--status-done-bg)] text-[var(--status-done-text)] border-[var(--status-done-border)]",
+  ohmo_request: "bg-[var(--status-pending-bg)] text-[var(--status-pending-text)] border-[var(--status-pending-border)]",
+  claude_code_candidate: "bg-[var(--status-running-bg)] text-[var(--status-running-text)] border-[var(--status-running-border)]",
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -501,10 +501,10 @@ function Card({ card, onClick }: { card: PipelineCard; onClick: () => void }) {
     >
       <div className="mb-1.5 font-medium leading-snug text-[var(--text)]">{card.title}</div>
       {card.status === "pending" && (
-        <div className="mb-2 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 text-[11px] text-yellow-200">
+        <div className="mb-2 rounded-md border border-[var(--status-pending-border)] bg-[var(--status-pending-bg)] px-2 py-1 text-[11px] text-[var(--status-pending-text)]">
           <div className="font-medium">Pending</div>
-          {pendingReason && <div className="mt-0.5 break-words text-yellow-100/90">{pendingReason}</div>}
-          {nextRetryAt && <div className="mt-0.5 text-yellow-100/80">Next retry {formatRelativeTime(nextRetryAt)}</div>}
+          {pendingReason && <div className="mt-0.5 break-words opacity-90">{pendingReason}</div>}
+          {nextRetryAt && <div className="mt-0.5 opacity-80">Next retry {formatRelativeTime(nextRetryAt)}</div>}
         </div>
       )}
       <div className="flex items-center justify-between gap-2">

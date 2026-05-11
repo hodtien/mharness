@@ -1,29 +1,142 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN TOKENS — UI Foundation Layer
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── Animations ─────────────────────────────────────────── */
 @keyframes pulse-subtle {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
+/* ─── Spacing Scale ──────────────────────────────────────── */
 :root {
+  /* 4px base unit scale */
+  --space-1:  0.25rem;  /* 4px  */
+  --space-2:  0.5rem;   /* 8px  */
+  --space-3:  0.75rem;  /* 12px */
+  --space-4:  1rem;     /* 16px */
+  --space-5:  1.25rem;  /* 20px */
+  --space-6:  1.5rem;   /* 24px */
+  --space-8:  2rem;     /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+
+  /* ─── Radius Scale ───────────────────────────────────────── */
+  --radius-sm:  0.25rem;  /* 4px  */
+  --radius-md:  0.5rem;   /* 8px  */
+  --radius-lg:  0.75rem;   /* 12px */
+  --radius-xl:  1rem;     /* 16px */
+  --radius-full: 9999px;
+
+  /* ─── Typography Scale ───────────────────────────────────── */
+  --text-2xs: 0.625rem;   /* 10px */
+  --text-xs:  0.75rem;    /* 12px */
+  --text-sm:  0.875rem;   /* 14px */
+  --text-base: 1rem;      /* 16px */
+  --text-lg:  1.125rem;   /* 18px */
+  --text-xl:  1.25rem;    /* 20px */
+  --text-2xl: 1.5rem;      /* 24px */
+
+  /* ─── Semantic Status Colors — Queue/Pipeline ────────────── */
+  /* Queue column */
+  --status-queue-bg: rgba(59, 130, 246, 0.12);
+  --status-queue-text: #93c5fd;
+  --status-queue-border: rgba(59, 130, 246, 0.3);
+
+  /* Pending */
+  --status-pending-bg: rgba(251, 191, 36, 0.1);
+  --status-pending-text: #fbbf24;
+  --status-pending-border: rgba(251, 191, 36, 0.25);
+
+  /* Running / In Progress (active) */
+  --status-running-bg: rgba(251, 146, 60, 0.12);
+  --status-running-text: #fb923c;
+  --status-running-border: rgba(251, 146, 60, 0.3);
+
+  /* Review / PR open */
+  --status-review-bg: rgba(168, 85, 247, 0.12);
+  --status-review-text: #c084fc;
+  --status-review-border: rgba(168, 85, 247, 0.3);
+
+  /* Done / Completed / Merged */
+  --status-done-bg: rgba(52, 211, 153, 0.1);
+  --status-done-text: #34d399;
+  --status-done-border: rgba(52, 211, 153, 0.25);
+
+  /* Failed */
+  --status-failed-bg: rgba(248, 113, 113, 0.1);
+  --status-failed-text: #f87171;
+  --status-failed-border: rgba(248, 113, 113, 0.25);
+
+  /* Rejected / Killed / Paused */
+  --status-rejected-bg: rgba(148, 163, 184, 0.1);
+  --status-rejected-text: #94a3b8;
+  --status-rejected-border: rgba(148, 163, 184, 0.25);
+
+  /* ─── Priority Colors ───────────────────────────────────── */
+  --priority-low-bg:    rgba(52, 211, 153, 0.1);
+  --priority-low-text:  #34d399;
+  --priority-medium-bg: rgba(251, 191, 36, 0.1);
+  --priority-medium-text: #fbbf24;
+  --priority-high-bg:   rgba(251, 146, 60, 0.1);
+  --priority-high-text:  #fb923c;
+  --priority-critical-bg: rgba(248, 113, 113, 0.1);
+  --priority-critical-text: #f87171;
+
+  /* ─── Shadows ───────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+  --shadow-panel: 0 0 0 1px var(--border), var(--shadow-lg);
+
+  /* ─── Transitions ───────────────────────────────────────── */
+  --transition-fast:   100ms ease;
+  --transition-base:   150ms ease;
+  --transition-slow:   250ms ease;
+  --transition-spring: 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ─── Focus Ring ────────────────────────────────────────── */
+  --focus-ring: 0 0 0 2px var(--accent);
+
+  /* ─── Base Color Palette ────────────────────────────────── */
   color-scheme: dark;
-  --bg: #0b1020;
-  --panel: #131a2c;
-  --panel-2: #1a2238;
-  --border: #2a3350;
-  --text: #e6e8ef;
-  --text-dim: #8a93a8;
-  --accent: #38bdf8;
-  --accent-strong: #0ea5e9;
-  --user: #93c5fd;
-  --assistant: #d6e0ff;
-  --tool: #fbbf24;
-  --error: #f87171;
+  --bg:           #0b1020;
+  --panel:        #131a2c;
+  --panel-2:      #1a2238;
+  --panel-3:      #1f2a45;
+  --border:       #2a3350;
+  --border-hover: #3d4d70;
+  --text:         #e6e8ef;
+  --text-dim:     #8a93a8;
+  --accent:       #38bdf8;
+  --accent-strong:#0ea5e9;
+  --accent-bg:    rgba(56, 189, 248, 0.12);
+  --user:         #93c5fd;
+  --assistant:    #d6e0ff;
+  --tool:         #fbbf24;
+  --error:        #f87171;
+  --success:      #34d399;
+  --warning:      #fbbf24;
 }
+
+/* ─── Focus-Visible Style (consistent across app) ────────── */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BASE RESETS & GLOBALS
+   ═══════════════════════════════════════════════════════════════ */
 
 html,
 body,
@@ -213,10 +326,10 @@ button {
   display: inline-flex;
   align-items: center;
   padding: 1px 7px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   letter-spacing: 0.3px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   border: 1px solid;
   max-width: 140px;
   overflow: hidden;
@@ -227,19 +340,19 @@ button {
   border-color: var(--border);
 }
 .status-pill-success {
-  background: rgba(52, 211, 153, 0.1);
-  color: #34d399;
-  border-color: rgba(52, 211, 153, 0.25);
+  background: var(--status-done-bg);
+  color: var(--status-done-text);
+  border-color: var(--status-done-border);
 }
 .status-pill-danger {
-  background: rgba(248, 113, 113, 0.1);
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.25);
+  background: var(--status-failed-bg);
+  color: var(--status-failed-text);
+  border-color: var(--status-failed-border);
 }
 .status-pill-warning {
-  background: rgba(251, 191, 36, 0.1);
-  color: #fbbf24;
-  border-color: rgba(251, 191, 36, 0.25);
+  background: var(--status-pending-bg);
+  color: var(--status-pending-text);
+  border-color: var(--status-pending-border);
 }
 
 /* ─── Sidebar Status Sub-group / Sub-section ─── */
@@ -275,20 +388,20 @@ button {
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 .job-badge-success {
-  background: rgba(52, 211, 153, 0.1);
-  color: #34d399;
+  background: var(--status-done-bg);
+  color: var(--status-done-text);
 }
 .job-badge-danger {
-  background: rgba(248, 113, 113, 0.1);
-  color: #f87171;
+  background: var(--status-failed-bg);
+  color: var(--status-failed-text);
 }
 .job-badge-warning {
-  background: rgba(251, 191, 36, 0.1);
-  color: #fbbf24;
+  background: var(--status-pending-bg);
+  color: var(--status-pending-text);
 }
 .job-badge-neutral {
   background: rgba(255, 255, 255, 0.04);
@@ -298,6 +411,44 @@ button {
 /* ─── Pulse animation for active badges ─────────── */
 .animate-pulse-subtle {
   animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* ─── Semantic Status Badge Classes ──────────────────────── */
+/* These map to CSS custom properties so palette stays consistent. */
+.status-badge-queue {
+  background: var(--status-queue-bg);
+  color: var(--status-queue-text);
+  border-color: var(--status-queue-border);
+}
+.status-badge-pending {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-text);
+  border-color: var(--status-pending-border);
+}
+.status-badge-running {
+  background: var(--status-running-bg);
+  color: var(--status-running-text);
+  border-color: var(--status-running-border);
+}
+.status-badge-review {
+  background: var(--status-review-bg);
+  color: var(--status-review-text);
+  border-color: var(--status-review-border);
+}
+.status-badge-done {
+  background: var(--status-done-bg);
+  color: var(--status-done-text);
+  border-color: var(--status-done-border);
+}
+.status-badge-failed {
+  background: var(--status-failed-bg);
+  color: var(--status-failed-text);
+  border-color: var(--status-failed-border);
+}
+.status-badge-rejected {
+  background: var(--status-rejected-bg);
+  color: var(--status-rejected-text);
+  border-color: var(--status-rejected-border);
 }
 
 /* ─── Sidebar Jobs / Cron Sections ────────────── */

@@ -7,9 +7,9 @@ import { formatRelativeTime, type HistorySession } from "./HistoryPanel";
 type PermissionMode = "default" | "plan" | "full_auto";
 
 const permissionOptions: Array<{ value: PermissionMode; label: string; color: string }> = [
-  { value: "default", label: "DEFAULT", color: "bg-gray-500" },
-  { value: "plan", label: "PLAN", color: "bg-cyan-500" },
-  { value: "full_auto", label: "AUTO", color: "bg-orange-500" },
+  { value: "default", label: "DEFAULT", color: "bg-[var(--text-dim)]" },
+  { value: "plan", label: "PLAN", color: "bg-[var(--accent)]" },
+  { value: "full_auto", label: "AUTO", color: "bg-[var(--status-pending-text)]" },
 ];
 
 export function PermissionModeChip() {
