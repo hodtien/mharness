@@ -677,7 +677,7 @@ class RepoAutopilotStore:
         self._save_registry(registry)
         self.append_journal(
             kind="intake_added",
-            summary=f"Queued {card.source_kind}: {card.title}",
+            summary=f"Queued from {card.source_kind}",
             task_id=card.id,
             metadata={"source_ref": card.source_ref, "score": card.score},
         )
@@ -776,9 +776,10 @@ class RepoAutopilotStore:
             card.metadata.update(metadata_updates)
         card.score, card.score_reasons = self._score_card(card)
         self._save_registry(registry)
-        summary = f"{status}: {card.title}"
         if note:
-            summary = f"{summary} ({_shorten(note, limit=80)})"
+            summary = _shorten(note, limit=120)
+        else:
+            summary = status
         self.append_journal(kind=f"status_{status}", summary=summary, task_id=card.id)
         self.rebuild_active_context()
         return card
@@ -1372,7 +1373,7 @@ class RepoAutopilotStore:
             )
             self.append_journal(
                 kind="preflight_failed",
-                summary=f"{card.title}: preflight fatal failure ({failure_reasons})",
+                summary=f"Preflight fatal: {failure_reasons}",
                 task_id=card.id,
                 metadata={"fatal_checks": [c.model_dump() for c in preflight.fatal]},
             )
@@ -1402,7 +1403,7 @@ class RepoAutopilotStore:
             )
             self.append_journal(
                 kind="preflight_pending",
-                summary=f"{card.title}: preflight transient failure ({transient_reasons}), moved to pending",
+                summary=f"Preflight transient: {transient_reasons} — moved to pending",
                 task_id=card.id,
                 metadata={"transient_checks": [c.model_dump() for c in preflight.transient]},
             )
@@ -1877,7 +1878,7 @@ class RepoAutopilotStore:
                         )
                         self.append_journal(
                             kind="run_failed",
-                            summary=f"{card.title}: agent execution failed",
+                            summary=f"Agent execution failed (attempt {attempt_count})",
                             task_id=card.id,
                             metadata={"error": str(exc), "attempt_count": attempt_count},
                         )
@@ -1910,7 +1911,7 @@ class RepoAutopilotStore:
                         atomic_write_text(path, pending_report)
                     self.append_journal(
                         kind="run_finished",
-                        summary=f"Agent run finished for {card.title}",
+                        summary=f"Agent run finished (attempt {attempt_count})",
                         task_id=card.id,
                         metadata={
                             "run_report_path": str(attempt_run_report),
@@ -2008,7 +2009,7 @@ class RepoAutopilotStore:
                             )
                             self.append_journal(
                                 kind="verification_failed",
-                                summary=f"{card.title}: local verification failed, retrying",
+                                summary=f"Local verification failed, retrying (attempt {attempt_count})",
                                 task_id=card.id,
                                 metadata={"attempt_count": attempt_count},
                             )
@@ -2028,7 +2029,7 @@ class RepoAutopilotStore:
                         )
                         self.append_journal(
                             kind="verification_failed",
-                            summary=f"{card.title}: {len(failing)} verification gate(s) failed",
+                            summary=f"{len(failing)} verification gate(s) failed",
                             task_id=card.id,
                         )
                         if issue_number is not None:
@@ -2124,7 +2125,7 @@ class RepoAutopilotStore:
                     if not commit_created:
                         self.append_journal(
                             kind="existing_progress_detected",
-                            summary=f"{card.title}: reusing existing local branch progress",
+                            summary=f"Reusing existing local branch progress ({head_branch})",
                             task_id=card.id,
                             metadata={"attempt_count": attempt_count, "head_branch": head_branch},
                         )
@@ -2153,7 +2154,7 @@ class RepoAutopilotStore:
                         )
                         self.append_journal(
                             kind="branch_sync_failed",
-                            summary=f"{card.title}: {push_summary}",
+                            summary=push_summary,
                             task_id=card.id,
                             metadata={
                                 "stage": push_stage,
@@ -2273,7 +2274,7 @@ class RepoAutopilotStore:
                             )
                             self.append_journal(
                                 kind="ci_failed_retry",
-                                summary=f"{card.title}: remote CI failed, retrying",
+                                summary=f"Remote CI failed, retrying (attempt {attempt_count})",
                                 task_id=card.id,
                                 metadata={
                                     "pr_number": linked_pr_number,
@@ -2356,7 +2357,7 @@ class RepoAutopilotStore:
                                 )
                                 self.append_journal(
                                     kind="remote_review_failed_retry",
-                                    summary=f"{card.title}: remote review failed, retrying",
+                                    summary=f"Remote review failed, retrying (attempt {attempt_count})",
                                     task_id=card.id,
                                     metadata={
                                         "pr_number": linked_pr_number,
@@ -2382,7 +2383,7 @@ class RepoAutopilotStore:
                             )
                             self.append_journal(
                                 kind="human_gate_pending",
-                                summary=f"{card.title}: remote review requires human gate for PR #{linked_pr_number}",
+                                summary=f"Remote review requires human gate for PR #{linked_pr_number}",
                                 task_id=card.id,
                                 metadata={
                                     "pr_number": linked_pr_number,
@@ -2418,7 +2419,7 @@ class RepoAutopilotStore:
                         )
                         self.append_journal(
                             kind="merged",
-                            summary=f"{card.title}: PR #{linked_pr_number} merged",
+                            summary=f"PR #{linked_pr_number} merged automatically",
                             task_id=card.id,
                             metadata={"pr_number": linked_pr_number},
                         )
@@ -2488,7 +2489,7 @@ class RepoAutopilotStore:
                     )
                     self.append_journal(
                         kind="human_gate_pending",
-                        summary=f"{card.title}: PR #{linked_pr_number} is ready for human gate",
+                        summary=f"PR #{linked_pr_number} is green — waiting for human gate",
                         task_id=card.id,
                         metadata={"pr_number": linked_pr_number},
                     )
@@ -2546,7 +2547,7 @@ class RepoAutopilotStore:
             )
             self.append_journal(
                 kind="run_failed",
-                summary=f"{card.title}: unexpected autopilot failure",
+                summary=f"Unexpected autopilot failure: {_shorten(str(exc), limit=100)}",
                 task_id=card.id,
                 metadata={"error": str(exc)},
             )
@@ -4187,7 +4188,7 @@ class RepoAutopilotStore:
                 )
                 self.append_journal(
                     kind="ci_failed",
-                    summary=f"{card.title}: remote CI failed, retrying",
+                    summary=f"Remote CI failed, retrying (attempt {attempt_count})",
                     task_id=card.id,
                     metadata={"attempt_count": attempt_count},
                 )
@@ -4265,7 +4266,7 @@ class RepoAutopilotStore:
                     )
                     self.append_journal(
                         kind="remote_review_failed_retry",
-                        summary=f"{card.title}: existing PR remote review failed, queued repair retry",
+                        summary=f"Existing PR remote review failed — queued repair retry (attempt {attempt_count})",
                         task_id=card.id,
                         metadata={"pr_number": pr_number, "attempt_count": attempt_count},
                     )
