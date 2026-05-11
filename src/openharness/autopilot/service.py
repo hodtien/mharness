@@ -1522,6 +1522,7 @@ class RepoAutopilotStore:
         if (
             linked_pr_number is not None
             and bool(card.metadata.get("autopilot_managed"))
+            and not bool(card.metadata.get("manual_retry"))
             # Skip CI-monitor path when card is requeued for repair — let the main
             # repair loop run the agent to actually fix the failing tests.
             and card.metadata.get("last_failure_stage") != "remote_ci_failed"
@@ -1616,6 +1617,7 @@ class RepoAutopilotStore:
         if (
             linked_pr_number is not None
             and bool(card.metadata.get("autopilot_managed"))
+            and not bool(card.metadata.get("manual_retry"))
             and card.metadata.get("last_failure_stage") != "remote_ci_failed"
         ):
             ci_state, ci_summary, pr_snapshot, _checks = await self._wait_for_pr_ci(

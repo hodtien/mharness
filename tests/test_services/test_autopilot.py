@@ -5826,6 +5826,71 @@ def test_autopilot_managed_card_repairs_when_ci_fail(tmp_path: Path, monkeypatch
     assert updated.metadata.get("repeated_failure_count") == 1
 
 
+def test_manual_retry_managed_pr_bypasses_ci_monitor(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Managed PR manual retry",
+        body="autopilot managed card should run repair",
+    )
+    store.update_status(
+        card.id,
+        status="queued",
+        metadata_updates={
+            "autopilot_managed": True,
+            "linked_pr_number": 99,
+            "head_branch": f"autopilot/{card.id}",
+            "manual_retry": True,
+        },
+    )
+
+    async def fail_if_called(self, pr_number: int, policies):
+        raise AssertionError("manual retry should bypass CI monitor")
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None):
+        return WorktreeInfo(path=repo, branch=branch or "main", name=slug)
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
+        lambda self, pr_number: {"state": "OPEN", "url": "https://example/pr/99"},
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fail_if_called
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", lambda self, path: None
+    )
+
+    async def fake_run_agent(*args, **kwargs):
+        return "manual retry repair ran"
+
+    store._run_agent_prompt = MethodType(fake_run_agent, store)
+    store._run_verification_steps = MethodType(lambda self, policies, *, cwd=None: [], store)
+    monkeypatch.setattr(
+        store,
+        "_upsert_pull_request",
+        lambda *args, **kwargs: {"number": 99, "url": "https://example/pr/99"},
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+
+    assert result.status in {"pr_open", "completed"}
+    updated = store.get_card(card.id)
+    assert updated is not None
+    assert updated.metadata.get("attempt_count") == 1
+
+
 def test_check_and_merge_managed_prs_merges_when_ci_pass_in_tick(
     tmp_path: Path, monkeypatch
 ) -> None:
