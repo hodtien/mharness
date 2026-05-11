@@ -729,10 +729,10 @@ class RepoAutopilotStore:
             # Check if this is a pending card being manually retried
             was_pending = chosen.status == "pending"
             if was_pending:
-                # Clear pending metadata for manual retry
                 chosen.metadata.pop("next_retry_at", None)
                 chosen.metadata.pop("pending_reason", None)
                 chosen.metadata.pop("retry_count", None)
+                chosen.metadata["attempt_count"] = 0
                 self.append_journal(
                     kind="manual_retry",
                     summary=f"{chosen.title}: manual retry cleared pending",
@@ -768,8 +768,24 @@ class RepoAutopilotStore:
         card = next((item for item in registry.cards if item.id == card_id), None)
         if card is None:
             raise ValueError(f"No autopilot card found with ID: {card_id}")
+        previous_status = card.status
         card.status = status
         card.updated_at = time.time()
+        if status == "queued" and previous_status in {"failed", "rejected", "killed", "pending"}:
+            for key in (
+                "worker_id",
+                "pending_reason",
+                "next_retry_at",
+                "retry_count",
+                "last_failure_stage",
+                "last_failure_summary",
+                "verification_failed",
+                "resume_available",
+                "resume_phase",
+            ):
+                card.metadata.pop(key, None)
+            card.metadata["attempt_count"] = 0
+            card.metadata["manual_retry"] = True
         if note:
             card.metadata["last_note"] = note.strip()
         if metadata_updates:

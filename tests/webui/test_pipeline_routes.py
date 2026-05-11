@@ -176,6 +176,35 @@ def test_action_retry_updates_card_status_to_queued(tmp_path) -> None:
     assert body["status"] == "queued"
 
 
+def test_action_reset_failed_card_clears_attempt_count(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    r = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Reset me"})
+    assert r.status_code == 201
+    card_id = r.json()["id"]
+
+    from openharness.autopilot import RepoAutopilotStore
+
+    store = RepoAutopilotStore(tmp_path)
+    store.update_status(
+        card_id,
+        status="failed",
+        metadata_updates={"attempt_count": 3, "last_failure_stage": "local_verification_failed"},
+    )
+
+    response = client.post(
+        f"/api/pipeline/cards/{card_id}/action",
+        headers=AUTH,
+        json={"action": "reset"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "queued"
+    assert body["attempt_count"] == 0
+    assert body["metadata"]["last_note"] is None
+
+
 def test_action_on_unknown_card_returns_404(tmp_path) -> None:
     client = _client(tmp_path)
 

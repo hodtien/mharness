@@ -6824,6 +6824,7 @@ def test_retry_now_reclaims_pending_card_and_clears_pending_metadata(tmp_path: P
         card.id,
         status="pending",
         metadata_updates={
+            "attempt_count": 3,
             "pending_reason": "preflight_transient",
             "next_retry_at": 9999999999.0,
             "retry_count": 3,
@@ -6836,10 +6837,39 @@ def test_retry_now_reclaims_pending_card_and_clears_pending_metadata(tmp_path: P
     assert claimed.status == "preparing"
     assert claimed.metadata["manual_retry"] is True
     assert claimed.metadata["worker_id"] == "worker-manual"
+    assert claimed.metadata["attempt_count"] == 0
     assert "pending_reason" not in claimed.metadata
     assert "next_retry_at" not in claimed.metadata
     assert "retry_count" not in claimed.metadata
 
     journal = store.load_journal(limit=10)
     assert any(entry.kind == "manual_retry" for entry in journal)
+
+
+def test_manual_reset_failed_card_clears_terminal_retry_metadata(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Failed reset", body="body")
+    store.update_status(
+        card.id,
+        status="failed",
+        metadata_updates={
+            "attempt_count": 3,
+            "last_failure_stage": "local_verification_failed",
+            "last_failure_summary": "tests failed",
+            "verification_failed": True,
+            "worker_id": "pid-1-deadbeef",
+        },
+    )
+
+    reset = store.update_status(card.id, status="queued")
+
+    assert reset.status == "queued"
+    assert reset.metadata["manual_retry"] is True
+    assert reset.metadata["attempt_count"] == 0
+    assert "last_failure_stage" not in reset.metadata
+    assert "last_failure_summary" not in reset.metadata
+    assert "verification_failed" not in reset.metadata
+    assert "worker_id" not in reset.metadata
 
