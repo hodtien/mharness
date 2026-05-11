@@ -448,21 +448,20 @@ Bug fixes trong P14:
 
 ### P15 — UI/UX Upgrade & Semantic Operator Experience
 
-Status: planned/backlog in `TASKS.md`.
+Status: DONE.
 
-- Design tokens và shared visual primitives.
-- Standardized PageHeader.
-- Sidebar noise reduction.
-- Top bar runtime summary.
-- Autopilot board card hierarchy và completed de-emphasis.
-- Semantic activity feed cho autopilot logs.
-- Collapsible semantic tool execution cards trong chat transcript.
-- Jobs filters, sorting, status badges, row expansion.
-- Projects UX safety polish và path ergonomics.
-- Settings contextual microcopy/help states.
-- Cross-cutting empty/loading/error/toast states.
-- Accessibility audit/fixes.
-- Playwright E2E core WebUI flows.
+- P15.1: Design tokens và shared visual primitives — expand `index.css` thành design-token layer với spacing scale, radius scale, typography scale, semantic status colors, priority colors, shadows, transitions, focus-visible style. Replace hardcoded palette/spacing trong Sidebar.tsx, Header.tsx, PipelinePage.tsx, TasksPage.tsx.
+- P15.2: Standardized PageHeader component — tạo `PageHeader.tsx` với title, description, actions slot, metadata row. Apply cho Autopilot, Jobs, Projects, History, Settings pages.
+- P15.3: Sidebar noise reduction — refactor Sidebar.tsx thành 3 zones: primary nav, collapsible Settings nav, collapsible System Status. Jobs snippet top 3 + View all.
+- P15.4: Top bar runtime summary — upgrade Header.tsx với active project, connection health, running job count, active model/provider, permission mode, primary interrupt action khi busy.
+- P15.5: Autopilot board card hierarchy và completed de-emphasis — card padding/line-height thoáng hơn, title hierarchy rõ hơn, semantic badges, sticky column headers, Completed column collapsed mặc định.
+- P15.6: Semantic activity feed cho autopilot logs — unified chronological stream, newest-first, tag filters (#agent, #tool, #error), semantic event cards thay raw JSON, inspector panel, raw payload ẩn sau "View raw event".
+- P15.7: Collapsible semantic tool execution cards trong chat transcript — default collapsed tool cards với tool name/status/duration/summary, expand on click, auto-collapse theo output size, group consecutive tool calls, extract ToolCard.tsx.
+- P15.8: Jobs UX — search input, status/type/review filters, sort control, richer status badges, review state copy rõ ràng, row expansion với prompt summary/duration/model/log preview.
+- P15.9: Projects UX safety polish và path ergonomics — active project pinned/visually prioritized, clearer Active badge, truncate path thành ~/relative/path, copy path button + full path tooltip, client-side search, empty state với Add project CTA.
+- P15.10: Settings UX contextual microcopy và help states — Modes permission/effort/passes descriptions, Providers clearer status/verify/latency, Models capability/search clarity, Agents prompt preview/clone/test clarity.
+- P15.11: Cross-cutting empty/loading/error/toast states — standardize guidance states across Chat, Autopilot, Jobs, Projects, Settings. Reuse EmptyState/ErrorBanner/LoadingSkeleton/ToastContainer.
+- P15.12: Accessibility foundation audit và fixes — WCAG AA contrast trên dark surfaces, focus-visible ring nhất quán, aria-label cho icon-only buttons, modal/drawer labels explicit, keyboard navigation logical, Escape closes modals/drawers, status không dựa hoàn toàn vào màu sắc.
 
 ---
 
@@ -477,7 +476,7 @@ Status: planned/backlog in `TASKS.md`.
   - Model search/filter.
   - Agent prompt preview/clone flow.
   - Dirty-state và unsaved warning behavior.
-- P15 định hướng bổ sung Playwright E2E cho navigation, chat tool cards, Autopilot board, semantic log filtering, Jobs filters, Projects safety, Settings help/save feedback.
+- P15 bổ sung coverage cho: design tokens smoke pass, PageHeader render tests, Sidebar collapse/a11y, Header runtime state badges, PipelinePage board hierarchy, log transform unit tests, ToolCard collapse/expand, TasksPage filter/sort/badges, ProjectsPage active highlight/search/path copy/delete safety, Settings help text visibility, cross-cutting empty/loading/error states.
 
 ---
 
