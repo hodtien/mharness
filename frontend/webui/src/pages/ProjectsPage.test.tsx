@@ -6,7 +6,7 @@ import type { ProjectsResponse, Project } from "../api/client";
 const makeProject = (overrides: Partial<Project>): Project => ({
   id: "proj-001",
   name: "My App",
-  path: "/Users/hodtien/projects/my-app",
+  path: "/workspace/my-app",
   description: null,
   created_at: null,
   updated_at: null,
@@ -16,8 +16,8 @@ const makeProject = (overrides: Partial<Project>): Project => ({
 
 const MOCK_PROJECTS_RESPONSE: ProjectsResponse = {
   projects: [
-    makeProject({ id: "proj-001", name: "My App", path: "/Users/hodtien/projects/my-app" }),
-    makeProject({ id: "proj-002", name: "CLI Tool", path: "/Users/hodtien/projects/cli-tool", is_active: true }),
+    makeProject({ id: "proj-001", name: "My App", path: "/workspace/my-app" }),
+    makeProject({ id: "proj-002", name: "CLI Tool", path: "/workspace/cli-tool", is_active: true }),
     makeProject({ id: "proj-003", name: "Web Dashboard", path: "/var/www/dashboard", description: "Production dashboard" }),
   ],
   active_project_id: "proj-002",
@@ -173,7 +173,7 @@ describe("ProjectsPage path truncation & copy", () => {
     fireEvent.click(copyBtn);
 
     await waitFor(() => {
-      expect(writeTextMock).toHaveBeenCalledWith("/Users/hodtien/projects/my-app");
+      expect(writeTextMock).toHaveBeenCalledWith("/workspace/my-app");
     });
   });
 });
@@ -291,7 +291,7 @@ describe("shortenPath utility", () => {
   });
 
   it("truncates long paths", async () => {
-    const longPath = "/Users/hodtien/projects/my-very-long-project-name-that-exceeds-limit-for-testing";
+    const longPath = "/workspace/my-very-long-project-name-that-exceeds-limit-for-testing";
     mockFetch({ projects: [makeProject({ id: "p1", name: "Y", path: longPath })], active_project_id: null });
     render(<ProjectsPage />);
     await waitForProjects(1);
