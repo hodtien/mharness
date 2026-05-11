@@ -1795,7 +1795,12 @@ class RepoAutopilotStore:
                         note="repairing failed run"
                         if attempt_count > 1
                         else "autopilot execution started",
-                        metadata_updates={"attempt_count": attempt_count},
+                        metadata_updates={
+                            "attempt_count": attempt_count,
+                            "manual_retry": None,
+                            "retry_requested": None,
+                            "retry_by": None,
+                        },
                     )
                     prompt = self._prepare_repair_prompt(
                         card,

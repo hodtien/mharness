@@ -5891,6 +5891,80 @@ def test_manual_retry_managed_pr_bypasses_ci_monitor(tmp_path: Path, monkeypatch
     assert updated.metadata.get("attempt_count") == 1
 
 
+def test_manual_retry_flag_cleared_when_agent_loop_starts(tmp_path: Path, monkeypatch) -> None:
+    """manual_retry should be cleared from metadata once the agent loop begins."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Managed PR manual retry clear test",
+        body="manual_retry flag must be cleared before agent runs",
+    )
+    store.update_status(
+        card.id,
+        status="queued",
+        metadata_updates={
+            "autopilot_managed": True,
+            "linked_pr_number": 42,
+            "head_branch": f"autopilot/{card.id}",
+            "manual_retry": True,
+            "retry_requested": True,
+            "retry_by": "user",
+        },
+    )
+
+    observed_metadata: dict = {}
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None):
+        return WorktreeInfo(path=repo, branch=branch or "main", name=slug)
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
+        lambda self, pr_number: {"state": "OPEN", "url": "https://example/pr/42"},
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", lambda self, path: None
+    )
+
+    async def fake_run_agent(self, *args, **kwargs):
+        # Capture metadata at the point the agent is invoked
+        current = store.get_card(card.id)
+        observed_metadata.update(current.metadata)
+        return "agent ran"
+
+    store._run_agent_prompt = MethodType(fake_run_agent, store)
+    store._run_verification_steps = MethodType(lambda self, policies, *, cwd=None: [], store)
+    monkeypatch.setattr(
+        store,
+        "_upsert_pull_request",
+        lambda *args, **kwargs: {"number": 42, "url": "https://example/pr/42"},
+    )
+
+    async def fake_wait_ci(self, pr_number, policies):
+        return "passed", "", {"state": "OPEN", "url": "https://example/pr/42"}, []
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_ci
+    )
+
+    import asyncio
+
+    asyncio.run(store.run_card(card.id))
+
+    # manual_retry and related keys must be cleared by the time the agent runs
+    assert observed_metadata.get("manual_retry") is None
+    assert observed_metadata.get("retry_requested") is None
+    assert observed_metadata.get("retry_by") is None
+
+
 def test_check_and_merge_managed_prs_merges_when_ci_pass_in_tick(
     tmp_path: Path, monkeypatch
 ) -> None:
