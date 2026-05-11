@@ -161,7 +161,6 @@ describe("Header runtime summary badges", () => {
         <Header
           onToggleSidebar={() => {}}
           onInterrupt={() => {}}
-          onResumeSession={() => Promise.resolve()}
         />
       </BrowserRouter>,
     );
@@ -187,7 +186,6 @@ describe("Header runtime summary badges", () => {
         <Header
           onToggleSidebar={() => {}}
           onInterrupt={() => {}}
-          onResumeSession={() => Promise.resolve()}
         />
       </BrowserRouter>,
     );
@@ -211,7 +209,6 @@ describe("Header runtime summary badges", () => {
         <Header
           onToggleSidebar={() => {}}
           onInterrupt={() => {}}
-          onResumeSession={() => Promise.resolve()}
         />
       </BrowserRouter>,
     );
@@ -235,7 +232,6 @@ describe("Header runtime summary badges", () => {
         <Header
           onToggleSidebar={() => {}}
           onInterrupt={onInterrupt}
-          onResumeSession={() => Promise.resolve()}
         />
       </BrowserRouter>,
     );
@@ -260,7 +256,6 @@ describe("Header runtime summary badges", () => {
         <Header
           onToggleSidebar={() => {}}
           onInterrupt={onInterrupt}
-          onResumeSession={() => Promise.resolve()}
         />
       </BrowserRouter>,
     );
@@ -283,7 +278,6 @@ describe("Header runtime summary badges", () => {
         <Header
           onToggleSidebar={() => {}}
           onInterrupt={() => {}}
-          onResumeSession={() => Promise.resolve()}
         />
       </BrowserRouter>,
     );
@@ -301,7 +295,6 @@ describe("Header runtime summary badges", () => {
         <Header
           onToggleSidebar={() => {}}
           onInterrupt={() => {}}
-          onResumeSession={() => Promise.resolve()}
         />
       </BrowserRouter>,
     );
