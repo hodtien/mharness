@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, MemoryRouter, Route, Routes } from "react-router-dom";
 import { PermissionModeChip } from "./Header";
 import Header from "./Header";
 import { useSession } from "../store/session";
@@ -254,11 +254,66 @@ describe("ModelPicker", () => {
     render(<ModelPicker />);
     fireEvent.click(screen.getByRole("button", { name: /claude-3-5-sonnet/i }));
 
-    const input = await screen.findByPlaceholderText(/Search 3 models/i);
+    const input = await screen.findByPlaceholderText(/Search 2 models/i);
     fireEvent.change(input, { target: { value: "gpt" } });
 
     expect(await screen.findByText(/GPT-4o/)).toBeTruthy();
     expect(screen.queryByText(/Claude 3.5 Haiku/)).toBeNull();
+  });
+});
+
+describe("Header navigation", () => {
+  beforeEach(() => {
+    mockLocalStorage();
+    useSession.setState({
+      appState: {
+        model: "claude-3-5-sonnet",
+        provider: "anthropic",
+        cwd: "/Users/hodtien/harness/my-harness",
+        permission_mode: "default",
+      },
+      connectionStatus: "open",
+      transcript: [],
+      tasks: [],
+      busy: false,
+      errorBanner: null,
+      pendingPermission: null,
+      pendingQuestion: null,
+      pendingSelect: null,
+      compact: null,
+      todoMarkdown: null,
+      planMode: null,
+      swarm: null,
+      resumedFrom: null,
+    });
+  });
+
+  it("renders a History link", () => {
+    render(
+      <BrowserRouter>
+        <Header
+          onToggleSidebar={() => {}}
+          onInterrupt={() => {}}
+        />
+      </BrowserRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "History" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "History" }).getAttribute("href")).toBe("/history");
+  });
+
+  it("navigates to /history when the History link is clicked", () => {
+    render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <Routes>
+          <Route path="/chat" element={<Header onToggleSidebar={() => {}} onInterrupt={() => {}} />} />
+          <Route path="/history" element={<div>History page</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: "History" }));
+    expect(screen.getByText("History page")).toBeTruthy();
   });
 });
 
