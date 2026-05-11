@@ -77,6 +77,20 @@ describe("HistoryPage", () => {
     expect(screen.getByRole("region", { name: /history/i })).toBeTruthy();
   });
 
+  it("shows empty state when no sessions", async () => {
+    mockLocalStorage();
+    mockApiFetchWithSessions([]);
+
+    render(
+      <BrowserRouter>
+        <HistoryPage onResume={vi.fn()} />
+      </BrowserRouter>,
+    );
+
+    await waitFor(() => expect(screen.getByText("No previous sessions.")).toBeTruthy());
+    expect(screen.getByText("Sessions you start will appear here once they have messages.")).toBeTruthy();
+  });
+
   it("calls POST /api/sessions with resume_id on Resume click", async () => {
     mockLocalStorage();
     const fetchMock = mockApiFetchWithSessions([

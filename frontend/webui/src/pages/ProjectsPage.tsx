@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, type Project, type ProjectsResponse } from "../api/client";
 import LoadingSkeleton from "../components/LoadingSkeleton";
+import EmptyState from "../components/EmptyState";
+import ErrorBanner from "../components/ErrorBanner";
 import { toast } from "../store/toast";
 import { useSession } from "../store/session";
 import PageHeader from "../components/PageHeader";
@@ -248,23 +250,14 @@ export default function ProjectsPage() {
 
       <div className="flex flex-1 flex-col overflow-y-auto p-6">
         <div className="w-full max-w-5xl space-y-6">
-          {error && (
-            <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
-              {error}
-            </div>
-          )}
+          {error && <ErrorBanner message={`Failed to load projects${error ? `: ${error}` : "."}`} />}
 
           {projects.length === 0 && (
-            <div className="flex flex-col items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-10 text-center">
-              <p className="text-sm text-[var(--text-dim)]">No projects yet.</p>
-              <button
-                type="button"
-                onClick={() => setShowNewModal(true)}
-                className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400"
-              >
-                + New Project
-              </button>
-            </div>
+            <EmptyState
+              message="No projects yet."
+              description="Create your first project to get started."
+              action={{ label: "+ New Project", onClick: () => setShowNewModal(true) }}
+            />
           )}
 
           {!!projects.length && (

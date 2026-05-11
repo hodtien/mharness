@@ -109,12 +109,12 @@ describe("ProjectsPage rendering", () => {
     expect(cliCard?.textContent).toContain("📌");
   });
 
-  it("shows New Project CTA in empty state", async () => {
+  it("shows an empty state with a create CTA", async () => {
     mockFetch({ projects: [], active_project_id: null });
     render(<ProjectsPage />);
     await waitFor(() => expect(screen.getByText("No projects yet.")).toBeTruthy());
-    const ctaButtons = screen.getAllByRole("button", { name: /\+ New Project/ });
-    expect(ctaButtons.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Create your first project to get started.")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^\+ New Project$/ }).length).toBeGreaterThanOrEqual(2);
   });
 });
 

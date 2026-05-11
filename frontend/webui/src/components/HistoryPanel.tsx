@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../api/client";
 import HistoryDetailDrawer from "./HistoryDetailDrawer";
-import HistoryCardSkeleton from "./HistoryCardSkeleton";
+import EmptyState from "../components/EmptyState";
+import ErrorBanner from "../components/ErrorBanner";
+import LoadingSkeleton from "../components/LoadingSkeleton";
 
 /**
  * Session metadata returned by `GET /api/history`.
@@ -338,38 +340,20 @@ export default function HistoryPanel({
       )}
 
       {state === "loading" && sessions.length === 0 ? (
-        <div role="status" aria-live="polite" aria-label="Loading history" className="flex flex-col gap-2">
-          <span className="sr-only">Loading history…</span>
-          {Array.from({ length: 3 }).map((_, index) => (
-            <HistoryCardSkeleton key={index} />
-          ))}
+        <div role="status" aria-live="polite" aria-label="Loading history" className="space-y-2">
+          <LoadingSkeleton rows={3} />
         </div>
       ) : null}
 
       {state === "error" ? (
-        <div
-          role="alert"
-          className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200"
-        >
-          <div className="font-medium">Failed to load history</div>
-          <div className="mt-1 break-words text-xs opacity-80">{error}</div>
-          <button
-            type="button"
-            onClick={() => loadSessions()}
-            className="mt-2 rounded-md border border-red-400/40 bg-red-500/10 px-2 py-1 text-xs hover:bg-red-500/20"
-          >
-            Retry
-          </button>
-        </div>
+        <ErrorBanner message={`Failed to load history${error ? `: ${error}` : "."}`} onRetry={() => loadSessions()} />
       ) : null}
 
       {state === "ready" && sessions.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-1 text-sm text-[var(--text-dim)]">
-          <div className="text-base">No previous sessions</div>
-          <div className="text-xs">
-            Sessions you start will appear here once they have messages.
-          </div>
-        </div>
+        <EmptyState
+          message="No previous sessions."
+          description="Sessions you start will appear here once they have messages."
+        />
       ) : null}
 
       {/* Empty search state */}
