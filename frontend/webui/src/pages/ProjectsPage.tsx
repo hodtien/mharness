@@ -5,6 +5,42 @@ import { toast } from "../store/toast";
 import { useSession } from "../store/session";
 import PageHeader from "../components/PageHeader";
 
+// Truncate path for display: ~/.../<last-segment> pattern
+function shortenPath(path: string, maxLen = 48): string {
+  if (!path) return "";
+  const home = typeof process !== "undefined" ? process.env?.HOME : undefined;
+  const display = home && path.startsWith(home) ? `~${path.slice(home.length)}` : path;
+  if (display.length <= maxLen) return display;
+  const segs = display.split("/").filter(Boolean);
+  if (segs.length <= 1) return display.slice(0, maxLen);
+  const last = segs[segs.length - 1];
+  const prefix = display.startsWith("~") ? "~/" : "/";
+  const avail = maxLen - last.length - prefix.length - 2;
+  if (avail > 4) {
+    return `${prefix}${segs[0].slice(0, avail)}…/${last}`;
+  }
+  return `${prefix}…/${last}`;
+}
+
+function CopyButton({ text, className = "" }: { text: string; className?: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Copy path ${text}`}
+      onClick={() => {
+        navigator.clipboard.writeText(text).then(
+          () => toast.success("Path copied."),
+          () => toast.error("Copy failed.")
+        );
+      }}
+      title={`Copy: ${text}`}
+      className={`shrink-0 rounded border border-[var(--border)] bg-[var(--panel-2)] p-1 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)] ${className}`}
+    >
+      📋
+    </button>
+  );
+}
+
 export default function ProjectsPage() {
   const { setActiveProjectId } = useSession();
   const [data, setData] = useState<ProjectsResponse | null>(null);
@@ -16,6 +52,10 @@ export default function ProjectsPage() {
   const [activating, setActivating] = useState<string | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteName, setConfirmDeleteName] = useState<string>("");
+
+  // Client-side search filter
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Inline edit draft
   const [draft, setDraft] = useState({ name: "", description: "" });
@@ -150,6 +190,12 @@ export default function ProjectsPage() {
     }
   };
 
+  // Client-side search filter
+  const lowerQ = searchQuery.trim().toLowerCase();
+  const filteredProjects = data?.projects.filter((p) =>
+    lowerQ ? p.name.toLowerCase().includes(lowerQ) || p.path.toLowerCase().includes(lowerQ) : true
+  ) ?? [];
+
   if (loading) {
     return (
       <div className="flex flex-1 overflow-y-auto p-6">
@@ -202,23 +248,49 @@ export default function ProjectsPage() {
         )}
 
         {data?.projects.length === 0 && (
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 text-sm text-[var(--text-dim)] text-center">
-            No projects yet. Click <strong>+ New Project</strong> to add one.
+          <div className="flex flex-col items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-10 text-center">
+            <p className="text-sm text-[var(--text-dim)]">No projects yet.</p>
+            <button
+              type="button"
+              onClick={() => setShowNewModal(true)}
+              className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400"
+            >
+              + New Project
+            </button>
+          </div>
+        )}
+
+        {/* Search bar */}
+        {!!data?.projects.length && (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Search by name or path…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
+            />
+            {searchQuery && (
+              <span className="shrink-0 text-xs text-[var(--text-dim)]">
+                {filteredProjects.length} / {data.projects.length}
+              </span>
+            )}
           </div>
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          {data?.projects.map((project) => {
+          {filteredProjects.map((project) => {
             const isEditing = editing === project.id;
-            const isActive = data.active_project_id === project.id;
+            const isActive = data?.active_project_id === project.id;
             const isDeleting = deleting === project.id;
             const isActivating = activating === project.id;
+            const displayPath = shortenPath(project.path);
             return (
               <div
                 key={project.id}
-                className={`rounded-xl border bg-[var(--panel)] shadow-lg ${
+                className={`group rounded-xl border bg-[var(--panel)] shadow-lg transition ${
                   isActive
-                    ? "border-cyan-400/50 shadow-cyan-400/10"
+                    ? "order-first border-cyan-400/50 shadow-cyan-400/10 ring-1 ring-cyan-400/20"
                     : "border-[var(--border)]"
                 }`}
               >
@@ -237,9 +309,15 @@ export default function ProjectsPage() {
                             </span>
                           )}
                         </div>
-                        <p className="mt-1 truncate font-mono text-xs text-[var(--text-dim)]">
-                          {project.path}
-                        </p>
+                        <div className="mt-1 flex items-center gap-1">
+                          <CopyButton text={project.path} />
+                          <p
+                            className="truncate font-mono text-xs text-[var(--text-dim)]"
+                            title={project.path}
+                          >
+                            {displayPath}
+                          </p>
+                        </div>
                         {project.description && (
                           <p className="mt-1 text-xs text-[var(--text-dim)]">
                             {project.description}
@@ -266,7 +344,8 @@ export default function ProjectsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setConfirmDeleteId(project.id)}
+                          aria-label={`Delete project ${project.name}`}
+                          onClick={() => { setConfirmDeleteId(project.id); setConfirmDeleteName(project.name); }}
                           disabled={isDeleting}
                           className="shrink-0 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-300 hover:border-red-400/60 hover:bg-red-500/20 disabled:opacity-60"
                         >
@@ -406,7 +485,7 @@ export default function ProjectsPage() {
 
       {confirmDeleteId && (
         <DeleteConfirmDialog
-          projectName={data?.projects.find((p) => p.id === confirmDeleteId)?.name ?? ""}
+          projectName={confirmDeleteName}
           onConfirm={() => { handleDelete(confirmDeleteId); setConfirmDeleteId(null); }}
           onCancel={() => setConfirmDeleteId(null)}
         />
@@ -447,6 +526,7 @@ function DeleteConfirmDialog({
           </button>
           <button
             type="button"
+            aria-label="Confirm delete project"
             onClick={onConfirm}
             className="rounded-lg border border-red-400/50 bg-red-500/20 px-4 py-2 text-sm font-medium text-red-200 hover:border-red-400 hover:bg-red-500/30"
           >
