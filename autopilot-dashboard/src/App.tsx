@@ -34,6 +34,8 @@ function SpinnerIcon() {
       viewBox="0 0 12 12"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      focusable="false"
       style={{ flexShrink: 0 }}
     >
       <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="8 20" />
@@ -50,6 +52,8 @@ function PRIcon() {
       viewBox="0 0 10 10"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      focusable="false"
       style={{ flexShrink: 0 }}
     >
       <path
@@ -100,6 +104,7 @@ function CardView({ card }: { card: TaskCard }) {
               rel="noopener noreferrer"
               className="pr-link"
               title={`Open PR: ${pr_url}`}
+              aria-label={`Open pull request in a new tab: ${pr_url}`}
               onClick={(e) => e.stopPropagation()}
             >
               <PRIcon />
@@ -170,14 +175,16 @@ function GroupColumnView({
   emptyText?: string;
 }) {
   return (
-    <section className="column">
+    <section className="column" aria-label={`${label} column`}>
       <div className="column-header">
         <div className="column-title-row">
-          <span className="column-dot" style={{ background: color }} />
+          <span className="column-dot" style={{ background: color }} aria-hidden="true" />
           <h2>{label}</h2>
         </div>
         {showCount && (
-          <span className="column-count">{cards.length}</span>
+          <span aria-label={`${cards.length} items`} className="column-count">
+            {cards.length}
+          </span>
         )}
       </div>
       <div className="cards">
@@ -192,7 +199,7 @@ function GroupColumnView({
                 </button>
               </div>
             )
-            : <div className="empty">—</div>
+            : <div className="empty" role="status">—</div>
         }
       </div>
     </section>
@@ -271,11 +278,11 @@ function NewIdeaModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !submitting) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, submitting]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -302,10 +309,10 @@ function NewIdeaModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
   return (
     <>
       <div className="modal-overlay" onClick={onClose} aria-hidden="true" />
-      <div className="modal-box" role="dialog" aria-modal="true" aria-label="New idea">
+      <div className="modal-box" role="dialog" aria-modal="true" aria-labelledby="new-idea-title">
         <div className="modal-header">
-          <h2>New idea</h2>
-          <button onClick={onClose} className="btn-close" aria-label="Close">✕</button>
+          <h2 id="new-idea-title">New idea</h2>
+          <button onClick={onClose} className="btn-close" aria-label="Close dialog">✕</button>
         </div>
         <form onSubmit={handleSubmit} className="modal-form">
           <div className="form-field">
@@ -328,7 +335,9 @@ function NewIdeaModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
               onChange={(e) => setBody(e.target.value)}
               placeholder="Optional details…"
               rows={4}
+              aria-describedby="idea-body-hint"
             />
+            <span id="idea-body-hint" className="label-hint">Markdown supported</span>
           </div>
           <div className="form-field">
             <label htmlFor="idea-labels">Labels <span className="label-hint">(comma-separated)</span></label>
@@ -340,9 +349,13 @@ function NewIdeaModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
               placeholder="frontend, bug, enhancement"
             />
           </div>
-          {error && <div className="error-msg">{error}</div>}
+          {error && (
+            <div className="error-msg" role="alert" aria-live="assertive">
+              {error}
+            </div>
+          )}
           <div className="modal-actions">
-            <button type="button" onClick={onClose} className="btn-cancel">Cancel</button>
+            <button type="button" onClick={onClose} disabled={submitting} className="btn-cancel">Cancel</button>
             <button type="submit" disabled={!title.trim() || submitting} className="btn-submit">
               {submitting ? "Submitting…" : "Submit"}
             </button>
@@ -363,6 +376,7 @@ export function App() {
   const [lastRefresh, setLastRefresh] = useState<number>(Date.now());
   const [showIdeaModal, setShowIdeaModal] = useState(false);
   const [ideaSuccess, setIdeaSuccess] = useState(false);
+  const ideaOpenerRef = useRef<HTMLElement | null>(null);
 
   const loadSnapshot = useCallback(async () => {
     setLoading(true);
@@ -475,11 +489,11 @@ export function App() {
               {loading ? "↻ refreshing…" : `Last refresh ${fmtAgo(Math.floor((Date.now() - lastRefresh) / 1000))}`}
               {hasActive && (
                 <span style={{ color: "var(--accent)", marginLeft: 8 }}>
-                  ● active
+                  ● active tasks running
                 </span>
               )}
             </div>
-            <div className="pipeline-viz">
+            <div className="pipeline-viz" aria-hidden="true">
               <PipelineAnimation />
             </div>
           </div>
@@ -528,20 +542,25 @@ export function App() {
 
         {/* ── Toolbar ────────────────────── */}
         <section className="toolbar">
+          <label htmlFor="dashboard-filter" className="sr-only">
+            Filter tasks
+          </label>
           <input
+            id="dashboard-filter"
             type="search"
+            aria-describedby="dashboard-filter-hint"
             placeholder="Filter by title, body, source, label, branch, or note…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
-          <div className="hint">
+          <div id="dashboard-filter-hint" className="hint">
             Reads <code>snapshot.json</code> — auto-refresh{" "}
             <strong>{hasActive ? "3 s (active)" : "15 s (idle)"}</strong>
           </div>
         </section>
 
         {/* ── Kanban Board (7 columns) ────── */}
-        <section className="board board-7col">
+        <section className="board board-7col" aria-label="Task board">
           {groupedColumns.map((group) => {
             // Empty state action per column
             const emptyAction = group.key === "queue"
@@ -581,7 +600,7 @@ export function App() {
           />
         )}
         {ideaSuccess && (
-          <div className="toast">✓ Idea queued successfully</div>
+          <div className="toast" role="status" aria-live="polite">✓ Idea queued successfully</div>
         )}
       </div>
     </>

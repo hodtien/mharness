@@ -20,6 +20,47 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
+
+button:focus,
+input:focus,
+textarea:focus,
+a:focus {
+  outline: none;
+}
+
+button,
+a,
+input,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  color: inherit;
+}
+
+button,
+a,
+input,
+textarea,
+.btn-close,
+.btn-empty-action,
+.btn-cancel,
+.btn-submit,
+.pr-link {
+  min-height: 44px;
+}
+
+button,
+a {
+  min-width: 44px;
+}
+
 html { scroll-behavior: smooth; }
 
 body {
@@ -37,6 +78,36 @@ body {
   background: rgba(0, 212, 170, 0.25);
   color: #fff;
 }
+
+/* ─── Reduced motion ───────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  html { scroll-behavior: auto; }
+}
+
+/* ─── Screen-reader only utility ─────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
 
 /* ─── Scrollbar ──────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -186,7 +257,7 @@ body {
 
 .stat-sub {
   font-size: 10px;
-  color: #444;
+  color: #888;
   margin-top: 6px;
   letter-spacing: 1px;
 }
@@ -380,7 +451,7 @@ body {
   display: grid;
   gap: 4px;
   font-size: 10px;
-  color: #555;
+  color: #777;
   letter-spacing: 0.3px;
 }
 
@@ -416,25 +487,25 @@ body {
 
 .badge-red {
   background: rgba(255, 68, 68, 0.1);
-  color: #ff6666;
+  color: #ff8a8a;
   border: 1px solid rgba(255, 68, 68, 0.2);
 }
 
 .badge-blue {
   background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
+  color: #93c5fd;
   border: 1px solid rgba(59, 130, 246, 0.2);
 }
 
 .badge-amber {
   background: rgba(255, 170, 0, 0.1);
-  color: #ffaa00;
+  color: #ffd166;
   border: 1px solid rgba(255, 170, 0, 0.2);
 }
 
 .badge-gray {
   background: rgba(255, 255, 255, 0.04);
-  color: #888;
+  color: #aaa;
   border: 1px solid var(--line);
 }
 
@@ -555,8 +626,9 @@ body {
 .btn-empty-action {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 6px 14px;
+  padding: 10px 14px;
   border-radius: 4px;
   border: 1px solid var(--accent);
   background: transparent;
@@ -566,6 +638,15 @@ body {
   letter-spacing: 0.5px;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+.btn-empty-action:focus-visible,
+.btn-close:focus-visible,
+.btn-cancel:focus-visible,
+.btn-submit:focus-visible,
+.pr-link:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
 }
 
 .btn-empty-action:hover {
@@ -584,6 +665,7 @@ body {
   position: fixed;
   left: 50%;
   top: 50%;
+  outline: none;
   z-index: 50;
   width: 100%;
   max-width: 440px;
@@ -614,7 +696,7 @@ body {
   border-radius: 4px;
   color: var(--ink-secondary);
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 8px;
   font-size: 13px;
   transition: all 0.2s;
 }
@@ -678,7 +760,7 @@ body {
 }
 
 .btn-cancel {
-  padding: 7px 16px;
+  padding: 10px 16px;
   border-radius: 4px;
   border: 1px solid var(--line);
   background: transparent;
@@ -694,7 +776,7 @@ body {
 }
 
 .btn-submit {
-  padding: 7px 16px;
+  padding: 10px 16px;
   border-radius: 4px;
   border: 1px solid rgba(0, 212, 170, 0.4);
   background: rgba(0, 212, 170, 0.15);
