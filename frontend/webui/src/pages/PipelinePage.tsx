@@ -8,6 +8,7 @@ import {
   type LogStep,
   type StreamEvent,
 } from "./PipelineLogModel";
+import PageHeader from "../components/PageHeader";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -2079,16 +2080,48 @@ export default function PipelinePage() {
     );
   }
 
+  const activeCount = cards.filter((c) => ACTIVE_STATUSES.includes(c.status)).length;
+
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">
+      {/* Page header */}
+      <PageHeader
+        title="Autopilot"
+        description="Automated pipeline that picks up, runs, and reviews tasks from the queue."
+        primaryAction={
+          activeTab === "board" ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRunNext}
+                disabled={runningNext}
+                className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-300 transition hover:bg-blue-500/20 disabled:opacity-40"
+                title="Run the highest-priority queued card"
+              >
+                {runningNext ? "Starting…" : "▶ Run Next"}
+              </button>
+              <button
+                onClick={() => setShowNewIdea(true)}
+                className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+              >
+                + New idea
+              </button>
+            </div>
+          ) : undefined
+        }
+        secondaryAction={
+          runNextError ? (
+            <span className="text-[11px] text-red-400">{runNextError}</span>
+          ) : undefined
+        }
+        metadata={[
+          { label: "Total", value: String(cards.length) },
+          { label: "Active", value: String(activeCount), accent: activeCount > 0 ? "cyan" : "none" },
+          ...(lastUpdated !== null ? [{ label: "Last sync", value: formatSeconds(secondsAgo) }] : []),
+        ]}
+      />
+
       {/* Tab bar */}
-      <div className="flex items-center justify-between border-b border-[var(--border)] px-4 pt-3">
-        <div className="flex items-center gap-4">
-          <div className="mb-1">
-            <div className="text-[11px] uppercase tracking-wide text-[var(--text-dim)]">Home / Autopilot</div>
-            <h1 className="text-lg font-semibold text-[var(--text)]">Autopilot</h1>
-          </div>
-          <div className="flex gap-1">
+      <div className="flex items-center gap-1 border-b border-[var(--border)] px-4 pt-2">
           <button
             onClick={() => setActiveTab("board")}
             className={`rounded-t-lg border px-4 py-2 text-sm font-medium transition ${
@@ -2109,38 +2142,6 @@ export default function PipelinePage() {
           >
             Policy
           </button>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {lastUpdated !== null && activeTab === "board" && (
-            <span className="mb-1 text-xs text-[var(--text-dim)]">
-              Last updated {formatSeconds(secondsAgo)}
-            </span>
-          )}
-          {activeTab === "board" && (
-            <div className="mb-1 flex flex-col items-end gap-1">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleRunNext}
-                  disabled={runningNext}
-                  className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-300 transition hover:bg-blue-500/20 disabled:opacity-40"
-                  title="Run the highest-priority queued card"
-                >
-                  {runningNext ? "Starting…" : "▶ Run Next"}
-                </button>
-                <button
-                  onClick={() => setShowNewIdea(true)}
-                  className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20"
-                >
-                  + New idea
-                </button>
-              </div>
-              {runNextError && (
-                <span className="text-[11px] text-red-400">{runNextError}</span>
-              )}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Content */}

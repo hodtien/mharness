@@ -3,6 +3,7 @@ import { api, type AgentProfile, type AgentDetail, type AgentPatch, type ModelsR
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import { toast } from "../store/toast";
 import { useUnsavedWarning, FeedbackBadge, useFormFeedback } from "../hooks/useSettingsForm";
+import PageHeader from "../components/PageHeader";
 
 const EFFORT_OPTIONS = ["low", "medium", "high"] as const;
 const PERMISSION_OPTIONS = ["default", "acceptEdits", "bypassPermissions", "plan", "dontAsk"] as const;
@@ -184,14 +185,14 @@ export default function AgentsSettingsPage() {
   }
 
   return (
-    <div className="flex flex-1 overflow-y-auto p-6">
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <PageHeader
+        title="Agents"
+        description="Configure each agent's model, effort level, and permission mode."
+        metadata={[{ label: "Agents", value: String(agents.length) }]}
+      />
+      <div className="flex flex-1 flex-col overflow-y-auto p-6">
       <div className="w-full max-w-5xl space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--text)]">Agents</h1>
-          <p className="mt-1 text-sm text-[var(--text-dim)]">
-            Configure each agent&apos;s model, effort level, and permission mode.
-          </p>
-        </div>
 
         {error && (
           <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
@@ -585,6 +586,7 @@ export default function AgentsSettingsPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

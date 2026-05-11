@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { apiFetch } from "../api/client";
+import PageHeader from "../components/PageHeader";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -588,13 +589,21 @@ export default function TasksPage() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Page Header */}
-      <div className="border-b border-[var(--border)] bg-[var(--panel)] px-5 py-4">
-        <h1 className="text-lg font-semibold text-[var(--text)]">Background Jobs</h1>
-        <p className="mt-0.5 text-xs text-[var(--text-dim)]">
-          Background CLI processes spawned by the system. Autopilot cards are managed in the{" "}
-          <a href="/autopilot" className="underline hover:text-[var(--text)] transition">Autopilot board</a>.
-        </p>
-      </div>
+      <PageHeader
+        title="Background Jobs"
+        description="Background CLI processes spawned by the system. Autopilot cards are managed in the Autopilot board."
+        metadata={[
+          {
+            label: "Total",
+            value: String(tasks.length),
+          },
+          {
+            label: "Running",
+            value: String(tasks.filter((t) => t.status === "running").length),
+            accent: tasks.some((t) => t.status === "running") ? "cyan" : "none",
+          },
+        ]}
+      />
 
       {/* Toolbar */}
       <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-5 py-3">

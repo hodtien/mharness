@@ -10,6 +10,7 @@ import LoadingSkeleton from "../components/LoadingSkeleton";
 import ErrorBanner from "../components/ErrorBanner";
 import EmptyState from "../components/EmptyState";
 import { toast } from "../store/toast";
+import PageHeader from "../components/PageHeader";
 
 interface AddModalState {
   provider: string;
@@ -227,17 +228,14 @@ export default function ModelsSettingsPage() {
   };
 
   const providerEntries = Object.entries(models);
+  const totalModels = providerEntries.reduce((acc, [, items]) => acc + items.length, 0);
 
   return (
-    <div className="flex flex-1 overflow-y-auto p-6">
-      <div className="w-full max-w-5xl space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-[var(--text)]">Models</h1>
-            <p className="mt-1 text-sm text-[var(--text-dim)]">
-              Browse the built-in catalog and manage custom models per provider profile.
-            </p>
-          </div>
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <PageHeader
+        title="Models"
+        description="Browse the built-in catalog and manage custom models per provider profile."
+        primaryAction={
           <button
             type="button"
             onClick={openAdd}
@@ -245,7 +243,15 @@ export default function ModelsSettingsPage() {
           >
             Add custom model
           </button>
-        </div>
+        }
+        metadata={[
+          { label: "Total", value: String(totalModels) },
+          { label: "Providers", value: String(providerEntries.length) },
+        ]}
+      />
+
+      <div className="flex flex-1 flex-col overflow-y-auto p-6">
+        <div className="w-full max-w-5xl space-y-6">
 
         {error && <ErrorBanner message={error} />}
 
@@ -351,6 +357,7 @@ export default function ModelsSettingsPage() {
             })
           )}
         </div>
+      </div>
       </div>
 
       {addModal && (

@@ -4,6 +4,7 @@ import LoadingSkeleton from "../components/LoadingSkeleton";
 import ErrorBanner from "../components/ErrorBanner";
 import { toast } from "../store/toast";
 import { useUnsavedWarning, FeedbackBadge, useFormFeedback } from "../hooks/useSettingsForm";
+import PageHeader from "../components/PageHeader";
 
 // Interval thresholds for "too frequent" warnings (in minutes)
 const SCAN_THRESHOLD_MIN = 5;
@@ -217,14 +218,32 @@ export default function CronSettingsPage() {
   }
 
   return (
-    <div className="flex flex-1 overflow-y-auto p-6">
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <PageHeader
+        title="Autopilot Schedule"
+        description="Configure how often OpenHarness scans for new ideas and ticks autopilot jobs."
+        metadata={[
+          ...(config
+            ? [
+                {
+                  label: "Scan",
+                  value: config.scan_cron_description || config.scan_cron,
+                },
+                {
+                  label: "Tick",
+                  value: config.tick_cron_description || config.tick_cron,
+                },
+                {
+                  label: "Status",
+                  value: config.enabled ? "Enabled" : "Disabled",
+                  accent: (config.enabled ? "cyan" : "none") as "cyan" | "none",
+                },
+              ]
+            : []),
+        ]}
+      />
+      <div className="flex flex-1 flex-col overflow-y-auto p-6">
       <div className="w-full max-w-3xl space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--text)]">Autopilot Schedule</h1>
-          <p className="mt-1 text-sm text-[var(--text-dim)]">
-            Configure how often OpenHarness scans for new ideas and ticks autopilot jobs.
-          </p>
-        </div>
 
         {error && (
           <ErrorBanner message={error} onRetry={() => setError(null)} />
@@ -702,6 +721,7 @@ export default function CronSettingsPage() {
             All times shown in <span className="font-mono text-[var(--text)]">{config.timezone}</span>.
           </div>
         )}
+      </div>
       </div>
     </div>
   );
