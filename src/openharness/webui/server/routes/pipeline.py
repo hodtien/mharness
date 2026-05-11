@@ -846,7 +846,10 @@ async def resume_card(
         metadata_updates=metadata_updates,
     )
     oh_executable = str(Path(sys.executable).with_name("oh"))
-    command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
+    command = (
+        f"{shlex.quote(oh_executable)} autopilot run-next "
+        f"--cwd {shlex.quote(str(state.cwd))} --card-id {shlex.quote(card_id)}"
+    )
     manager = get_task_manager()
     task = await manager.create_shell_task(
         command=command,
@@ -967,11 +970,10 @@ async def resume_card_direct(
     card_id: str,
     state: WebUIState = Depends(get_state),
 ) -> dict:
-    """Resume a paused autopilot card by re-claiming and re-running it.
+    """Resume a paused autopilot card by queueing a targeted background run.
 
-    The card must be in ``paused`` status. Clears the ``paused_by`` metadata
-    and re-queues the card with a fresh worker_id, then spawns the run-next
-    background task.
+    The card must be in ``paused`` status. The spawned runner claims the card so
+    UI status only becomes active when the worker actually starts processing it.
     """
     _ensure_safe_card_id(card_id)
     store = RepoAutopilotStore(state.cwd)
@@ -991,26 +993,17 @@ async def resume_card_direct(
                 "message": f"Cannot resume a card in {card.status} status. Only paused cards can be resumed.",
             },
         )
-    worker_id = f"pid-{os.getpid()}-{uuid4().hex[:8]}"
-    claimed = store.pick_specific_card(card_id, worker_id)
-    if claimed is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": "claim_failed",
-                "card_id": card_id,
-                "message": "Could not claim the card for resume.",
-            },
-        )
-    # Clear paused metadata
     store.update_status(
         card_id,
-        status="preparing",
+        status="queued",
         note="resumed by user",
         metadata_updates={"resumed_by": "user"},
     )
     oh_executable = str(Path(sys.executable).with_name("oh"))
-    command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
+    command = (
+        f"{shlex.quote(oh_executable)} autopilot run-next "
+        f"--cwd {shlex.quote(str(state.cwd))} --card-id {shlex.quote(card_id)}"
+    )
     manager = get_task_manager()
     task = await manager.create_shell_task(
         command=command,
@@ -1026,12 +1019,11 @@ async def retry_card_now(
     card_id: str,
     state: WebUIState = Depends(get_state),
 ) -> dict:
-    """Retry a card immediately by re-claiming and re-running it.
+    """Retry a card immediately by queueing a targeted background run.
 
     The card must be in ``failed``, ``killed``, ``rejected``, or ``pending`` status.
-    For pending cards, this immediately clears the pending state and retries.
-    Increments the attempt counter, uses :meth:`pick_specific_card` to claim
-    the card, then spawns the run-next background task.
+    The spawned runner claims the specific card so UI status only becomes active
+    when the worker actually starts processing it.
     """
     _ensure_safe_card_id(card_id)
     store = RepoAutopilotStore(state.cwd)
@@ -1052,7 +1044,6 @@ async def retry_card_now(
             },
         )
     current_attempt = int(card.metadata.get("attempt_count", 0) or 0)
-    worker_id = f"pid-{os.getpid()}-{uuid4().hex[:8]}"
     store.update_status(
         card_id,
         status="queued",
@@ -1062,18 +1053,11 @@ async def retry_card_now(
             "attempt_count": current_attempt + 1,
         },
     )
-    claimed = store.pick_specific_card(card_id, worker_id)
-    if claimed is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": "claim_failed",
-                "card_id": card_id,
-                "message": "Could not claim the card for retry.",
-            },
-        )
     oh_executable = str(Path(sys.executable).with_name("oh"))
-    command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
+    command = (
+        f"{shlex.quote(oh_executable)} autopilot run-next "
+        f"--cwd {shlex.quote(str(state.cwd))} --card-id {shlex.quote(card_id)}"
+    )
     manager = get_task_manager()
     task = await manager.create_shell_task(
         command=command,

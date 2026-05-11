@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation, useSearchParams } from "react-router-dom";
 import { api, openWebSocket, type WsHandle } from "./api/client";
 import { useSession, clearPermission, clearQuestion, clearSelect } from "./store/session";
 import Header from "./components/Header";
@@ -59,12 +59,14 @@ export function AppLayout({ onInterrupt }: LayoutProps) {
 
 export default function App() {
   const wsRef = useRef<WsHandle | null>(null);
-  const { setStatus, setSessionId, ingest, appendUser, setResumedFrom, activeProjectId } = useSession();
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get("project") ?? undefined;
+  const { setStatus, setSessionId, ingest, appendUser, setResumedFrom } = useSession();
 
   const setupSession = useCallback(
     async (resumeId?: string) => {
       try {
-        const result = await api.createSession(resumeId);
+        const result = await api.createSession(resumeId, projectId);
         if (resumeId) {
           setResumedFrom(resumeId);
         }
@@ -76,7 +78,7 @@ export default function App() {
         useSession.getState().setError(String(err));
       }
     },
-    [ingest, setStatus, setSessionId, setResumedFrom],
+    [ingest, projectId, setStatus, setSessionId, setResumedFrom],
   );
 
   const reconnectWithSession = useCallback(
@@ -96,12 +98,6 @@ export default function App() {
     setupSession();
     return () => wsRef.current?.close();
   }, [setupSession]);
-
-  useEffect(() => {
-    if (activeProjectId === null) return;
-    wsRef.current?.close();
-    setupSession();
-  }, [activeProjectId, setupSession]);
 
   const sendLine = useCallback(
     (text: string) => {

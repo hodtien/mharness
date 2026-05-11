@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type Project, type ProjectsResponse } from "../api/client";
-import { toast } from "../store/toast";
-import { useSession } from "../store/session";
 
 /** Truncates a path string for display: shows leading ~ or first segment + trailing segment. */
 export function truncatePath(path: string, maxLen = 36): string {
@@ -23,11 +21,13 @@ export function truncatePath(path: string, maxLen = 36): string {
 }
 
 export default function ProjectSelector() {
-  const { setActiveProjectId } = useSession();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlProjectId = searchParams.get("project");
+
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<ProjectsResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activating, setActivating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
@@ -62,25 +62,19 @@ export default function ProjectSelector() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Active project: prefer URL param, fall back to server-side active_project_id.
+  const activeProjectId = urlProjectId ?? data?.active_project_id ?? null;
   const activeProject: Project | undefined = data?.projects.find(
-    (p) => p.id === data.active_project_id,
+    (p) => p.id === activeProjectId,
   );
 
-  const handleActivate = async (projectId: string) => {
-    const project = data?.projects.find((p) => p.id === projectId);
-    const projectName = project?.name ?? projectId;
-    setActivating(projectId);
-    try {
-      await api.activateProject(projectId);
-      setActiveProjectId(projectId);
-      setData((prev) => (prev ? { ...prev, active_project_id: projectId } : prev));
-      setOpen(false);
-      toast.success(`Switched to project: ${projectName}`);
-      window.location.reload();
-    } catch (err) {
-      setError(String(err));
-      setActivating(null);
-    }
+  const handleSelect = (projectId: string) => {
+    setOpen(false);
+    if (projectId === activeProjectId) return;
+    // Navigate to current path with updated ?project= param, preserving other params.
+    const next = new URLSearchParams(searchParams);
+    next.set("project", projectId);
+    navigate(`?${next.toString()}`, { replace: false });
   };
 
   return (
@@ -124,22 +118,14 @@ export default function ProjectSelector() {
           ) : (
             <ul className="max-h-72 overflow-y-auto py-1">
               {data!.projects.map((project) => {
-                const isActive = project.id === data!.active_project_id;
-                const isActivatingThis = activating === project.id;
+                const isActive = project.id === activeProjectId;
                 return (
                   <li key={project.id} role="option" aria-selected={isActive}>
                     <button
                       type="button"
-                      disabled={isActivatingThis}
-                      onClick={() => {
-                        if (isActive) {
-                          setOpen(false);
-                          return;
-                        }
-                        handleActivate(project.id);
-                      }}
+                      onClick={() => handleSelect(project.id)}
                       className={
-                        "flex w-full flex-col items-start gap-0.5 border-b border-[var(--border)] px-3 py-2 text-left text-[13px] transition last:border-b-0 disabled:cursor-wait disabled:opacity-60 " +
+                        "flex w-full flex-col items-start gap-0.5 border-b border-[var(--border)] px-3 py-2 text-left text-[13px] transition last:border-b-0 " +
                         (isActive
                           ? "bg-[var(--accent-strong)]/10 text-[var(--text)]"
                           : "hover:bg-[var(--panel-2)] text-[var(--text)]")
@@ -154,11 +140,6 @@ export default function ProjectSelector() {
                           )}
                           <span className="truncate font-medium">{project.name}</span>
                         </span>
-                        {isActivatingThis && (
-                          <span className="shrink-0 text-[10px] text-[var(--text-dim)]">
-                            Switching…
-                          </span>
-                        )}
                       </span>
                       <span className="truncate pl-[1.15rem] text-[11px] text-[var(--text-dim)]">
                         {truncatePath(project.path)}

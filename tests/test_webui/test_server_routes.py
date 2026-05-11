@@ -1048,7 +1048,17 @@ def test_pipeline_retry_now_accepts_failed_card_and_spawns_task(tmp_path, monkey
     reg_dir.mkdir(parents=True)
     (reg_dir / "registry.json").write_text(json.dumps(registry))
 
+    created_tasks: list[dict[str, object]] = []
+
     async def fake_create_shell_task(*, command, description, cwd, task_type):
+        created_tasks.append(
+            {
+                "command": command,
+                "description": description,
+                "cwd": cwd,
+                "task_type": task_type,
+            }
+        )
         return SimpleNamespace(id="task-retry-now")
 
     monkeypatch.setattr(get_task_manager(), "create_shell_task", fake_create_shell_task)
@@ -1061,9 +1071,12 @@ def test_pipeline_retry_now_accepts_failed_card_and_spawns_task(tmp_path, monkey
 
     assert response.status_code == 202
     assert response.json()["task_id"] == "task-retry-now"
+    assert created_tasks
+    assert "run-next" in created_tasks[0]["command"]
+    assert "--card-id ap-retry-now" in created_tasks[0]["command"]
     saved = json.loads((reg_dir / "registry.json").read_text())
     card = next(card for card in saved["cards"] if card["id"] == "ap-retry-now")
-    assert card["status"] == "preparing"
+    assert card["status"] == "queued"
     assert card["metadata"]["attempt_count"] == 1
     assert card["metadata"]["retry_requested"] is True
     assert card["metadata"]["retry_by"] == "user"
@@ -1099,7 +1112,17 @@ def test_pipeline_retry_now_accepts_pending_card(tmp_path, monkeypatch) -> None:
     reg_dir.mkdir(parents=True)
     (reg_dir / "registry.json").write_text(json.dumps(registry))
 
+    created_tasks: list[dict[str, object]] = []
+
     async def fake_create_shell_task(*, command, description, cwd, task_type):
+        created_tasks.append(
+            {
+                "command": command,
+                "description": description,
+                "cwd": cwd,
+                "task_type": task_type,
+            }
+        )
         return SimpleNamespace(id="task-pending-retry")
 
     monkeypatch.setattr(get_task_manager(), "create_shell_task", fake_create_shell_task)
@@ -1111,9 +1134,14 @@ def test_pipeline_retry_now_accepts_pending_card(tmp_path, monkeypatch) -> None:
     )
 
     assert response.status_code == 202
+    assert created_tasks
+    assert "run-next" in created_tasks[0]["command"]
+    assert "--card-id ap-pending-retry" in created_tasks[0]["command"]
     saved = json.loads((reg_dir / "registry.json").read_text())
     card = next(card for card in saved["cards"] if card["id"] == "ap-pending-retry")
-    assert card["status"] == "preparing"
+    assert card["status"] == "queued"
+    assert card["metadata"]["retry_requested"] is True
+    assert card["metadata"]["retry_by"] == "user"
 
 
 def test_pipeline_cards_action_rejects_invalid_action(tmp_path) -> None:

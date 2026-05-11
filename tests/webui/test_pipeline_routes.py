@@ -574,6 +574,10 @@ async def test_resume_card_allows_stale_active_card_with_checkpoint(tmp_path, mo
     assert response.status_code == 202
     body = response.json()
     assert body["status"] == "accepted"
+    mock_manager.create_shell_task.assert_called_once()
+    command = mock_manager.create_shell_task.call_args.kwargs["command"]
+    assert "run-next" in command
+    assert f"--card-id {card_id}" in command
     assert updated.status_code == 200
     payload = updated.json()
     assert payload["status"] == "queued"

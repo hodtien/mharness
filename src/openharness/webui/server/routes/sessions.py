@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
+from openharness.services.projects import get_project
 from openharness.services.session_storage import load_session_by_id
 from openharness.webui.server.sessions import SessionManager
 from openharness.webui.server.state import (
@@ -55,14 +56,32 @@ def create_session(
     body: CreateSessionRequest | None = None,
     state: WebUIState = Depends(get_state),
     manager: SessionManager = Depends(get_session_manager),
+    project_id: str | None = Query(default=None),
 ) -> dict[str, object]:
-    """Create a Web UI session, optionally restoring messages from history."""
+    """Create a Web UI session, optionally restoring messages from history.
+
+    If *project_id* is supplied as a query parameter the session will use that
+    project's working directory instead of the server-side global active project.
+    This enables per-tab project isolation: each browser tab sends its own
+    ``?project_id=`` so two tabs can target different projects simultaneously.
+    """
+    # Resolve the cwd: prefer the per-request project_id over the global state.
+    cwd = str(state.cwd)
+    if project_id:
+        project = get_project(project_id)
+        if project is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found",
+            )
+        cwd = project.path
+
     restore_messages: list[dict] | None = None
     restore_tool_metadata: dict[str, object] | None = None
     resumed_from: str | None = None
 
     if body and body.resume_id:
-        snapshot = load_session_by_id(state.cwd, body.resume_id)
+        snapshot = load_session_by_id(cwd, body.resume_id)
         if snapshot is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -80,7 +99,7 @@ def create_session(
         restore_messages=restore_messages,
         restore_tool_metadata=restore_tool_metadata,
         resumed_from=resumed_from,
-        cwd=str(state.cwd),
+        cwd=cwd,
     )
     return _entry_payload(entry)
 
@@ -90,6 +109,7 @@ def create_session_slash(
     body: CreateSessionRequest | None = None,
     state: WebUIState = Depends(get_state),
     manager: SessionManager = Depends(get_session_manager),
+    project_id: str | None = Query(default=None),
 ) -> dict[str, object]:
     """Keep behavior stable for callers that include a trailing slash."""
-    return create_session(body=body, state=state, manager=manager)
+    return create_session(body=body, state=state, manager=manager, project_id=project_id)
