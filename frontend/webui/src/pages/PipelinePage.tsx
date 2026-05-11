@@ -4,9 +4,11 @@ import { useSession } from "../store/session";
 import {
   LOG_FILTERS,
   type LogFilter,
-  type LogPhaseGroup,
   type LogStep,
   type StreamEvent,
+  eventsToLogSteps,
+  filterLogSteps,
+  getSelectedLogStep,
 } from "./PipelineLogModel";
 import PageHeader from "../components/PageHeader";
 
@@ -823,6 +825,7 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
   const [activeFilter, setActiveFilter] = useState<LogFilter>("all");
   const [query, setQuery] = useState("");
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [paused, setPaused] = useState(false);
   const sourceRef = useRef<EventSource | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef<boolean>(true);
@@ -869,6 +872,7 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
       };
 
       es.onmessage = (ev) => {
+        if (paused) return;
         const index = seenCountRef.current;
         seenCountRef.current += 1;
         try {
@@ -894,17 +898,42 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
   useEffect(() => {
     const node = scrollerRef.current;
     if (!node) return;
+    // Newest-first: keep user at top when near top
     if (stickRef.current) {
-      node.scrollTop = node.scrollHeight;
+      node.scrollTop = 0;
     }
   }, [events]);
 
   const onScroll = useCallback(() => {
     const node = scrollerRef.current;
     if (!node) return;
-    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
-    stickRef.current = distanceFromBottom < 40;
+    stickRef.current = node.scrollTop < 40;
   }, []);
+
+  const steps = useMemo(() => eventsToLogSteps(events), [events]);
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleSteps = useMemo(
+    () => filterLogSteps(steps, activeFilter, normalizedQuery),
+    [steps, activeFilter, normalizedQuery],
+  );
+  const selectedStep = getSelectedLogStep(visibleSteps, selectedStepId);
+
+  useEffect(() => {
+    if (!selectedStep && visibleSteps.length > 0) {
+      setSelectedStepId(visibleSteps[0]?.id ?? null);
+    }
+  }, [selectedStep, visibleSteps]);
+
+  const pauseButton = (
+    <button
+      type="button"
+      onClick={() => setPaused((v) => !v)}
+      className="rounded border border-[var(--border)] bg-[var(--panel-2)] px-2 py-0.5 text-[10px] text-[var(--text-dim)] hover:border-[var(--accent)]/40 hover:text-[var(--text)]"
+      title={paused ? "Resume stream" : "Pause stream"}
+    >
+      {paused ? "▶ Resume" : "⏸ Pause"}
+    </button>
+  );
 
   const badge = streamState === "open" ? (
     <span className="text-emerald-300">● live</span>
@@ -913,27 +942,16 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
   ) : (
     <span className="text-[var(--text-dim)]">○ ended</span>
   );
-  const phases = useMemo(() => eventsToLogPhaseGroups(events), [events]);
-  const normalizedQuery = query.trim().toLowerCase();
-  const visiblePhases = useMemo(
-    () => filterLogPhaseGroups(phases, activeFilter, normalizedQuery),
-    [activeFilter, normalizedQuery, phases],
-  );
-  const visibleStepCount = visiblePhases.reduce((total, phase) => total + phase.steps.length, 0);
-  const selectedStep = getSelectedLogStep(visiblePhases, selectedStepId);
-
-  useEffect(() => {
-    if (!selectedStep && visibleStepCount > 0) {
-      setSelectedStepId(visiblePhases[0]?.steps[0]?.id ?? null);
-    }
-  }, [selectedStep, visiblePhases, visibleStepCount]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="space-y-3 border-b border-[var(--border)] px-4 py-3 text-[11px]">
         <div className="flex items-center justify-between">
-          <div className="font-mono uppercase tracking-wider text-[var(--text-dim)]">Stream</div>
-          <div className="font-mono">{badge}</div>
+          <div className="flex items-center gap-2">
+            <div className="font-mono uppercase tracking-wider text-[var(--text-dim)]">Stream</div>
+            <div className="font-mono">{badge}</div>
+          </div>
+          {pauseButton}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <label className="sr-only" htmlFor="task-log-search">Search logs</label>
@@ -963,7 +981,7 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
             ))}
           </div>
         </div>
-        <div className="sr-only" aria-live="polite">{visibleStepCount} log steps shown</div>
+        <div className="sr-only" aria-live="polite">{visibleSteps.length} log steps shown</div>
       </div>
       {error && (
         <div className="px-4 py-2 text-xs text-red-300">{error}</div>
@@ -978,11 +996,11 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
             <div className="text-[var(--text-dim)]">
               {streamState === "open" ? "Waiting for activity…" : "No events yet."}
             </div>
-          ) : visibleStepCount === 0 ? (
+          ) : visibleSteps.length === 0 ? (
             <div className="text-[var(--text-dim)]">No log steps match this filter.</div>
           ) : (
-            <LogPhaseAccordion
-              phases={visiblePhases}
+            <LogStreamFeed
+              steps={visibleSteps}
               selectedStepId={selectedStep?.id ?? null}
               onSelectStep={setSelectedStepId}
             />
@@ -994,367 +1012,90 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
   );
 }
 
-function eventsToLogPhaseGroups(events: StreamEvent[]): LogPhaseGroup[] {
-  const steps: LogStep[] = [];
-  const pendingTools = new Map<string, LogStep[]>();
-  let textBuffer: { event: StreamEvent; index: number; text: string; phase: string } | null = null;
+// ─── Semantic log stream feed (newest-first, operator-first) ─────────────────
 
-  const flushText = () => {
-    if (!textBuffer) return;
-    steps.push(createLogStep({
-      id: `${textBuffer.index}-agent-${textBuffer.phase}`,
-      type: "agent",
-      phase: textBuffer.phase,
-      title: `Agent · ${textBuffer.phase}`,
-      summary: summarizeText(textBuffer.text) || "Agent output",
-      timestamp: textBuffer.event.ts,
-      isError: false,
-      details: [{ label: "Output", value: textBuffer.text }],
-      rawEvents: [textBuffer.event],
-    }));
-    textBuffer = null;
-  };
-
-  for (const [position, event] of events.entries()) {
-    const index = event.index ?? position;
-    const phase = getEventPhase(event);
-    if (event.kind === "text_delta") {
-      const text = String(event.payload?.text ?? "");
-      if (textBuffer && textBuffer.phase === phase) {
-        textBuffer.text += text;
-      } else {
-        flushText();
-        textBuffer = { event, index, text, phase };
-      }
-      continue;
-    }
-
-    flushText();
-
-    if (event.kind === "tool_call") {
-      const step = toolCallToStep(event, phase, index);
-      const key = getToolKey(event, phase);
-      if (key) pendingTools.set(key, [...(pendingTools.get(key) ?? []), step]);
-      steps.push(step);
-      continue;
-    }
-
-    if (event.kind === "tool_result") {
-      const key = getToolKey(event, phase);
-      const pendingQueue = key ? (pendingTools.get(key) ?? []) : [];
-      const pending = pendingQueue[0];
-      if (key && pending) {
-        const stepIndex = steps.findIndex((step) => step.id === pending.id);
-        const pairedStep = pairToolResult(pending, event);
-        if (stepIndex >= 0) steps[stepIndex] = pairedStep;
-        const nextQueue = pendingQueue.slice(1);
-        if (nextQueue.length > 0) {
-          pendingTools.set(key, nextQueue);
-        } else {
-          pendingTools.delete(key);
-        }
-      } else {
-        steps.push(toolResultToStep(event, phase, index));
-      }
-      continue;
-    }
-
-    steps.push(eventToLogStep(event, phase, index));
-  }
-
-  flushText();
-  return groupLogStepsByPhase(steps);
-}
-
-function filterLogPhaseGroups(phases: LogPhaseGroup[], activeFilter: LogFilter, normalizedQuery: string): LogPhaseGroup[] {
-  return phases
-    .map((phase) => {
-      const steps = phase.steps.filter((step) => {
-        const matchesFilter =
-          activeFilter === "all" ||
-          (activeFilter === "agent" && step.type === "agent") ||
-          (activeFilter === "tools" && step.type === "tool") ||
-          (activeFilter === "phases" && step.type === "phase") ||
-          (activeFilter === "errors" && step.isError);
-        return matchesFilter && (!normalizedQuery || step.searchText.includes(normalizedQuery));
-      });
-      return { ...phase, steps };
-    })
-    .filter((phase) => phase.steps.length > 0 || (activeFilter === "errors" && phase.hasErrors));
-}
-
-function getSelectedLogStep(phases: LogPhaseGroup[], selectedStepId: string | null): LogStep | null {
-  const steps = phases.flatMap((phase) => phase.steps);
-  return steps.find((step) => step.id === selectedStepId) ?? steps[0] ?? null;
-}
-
-function createLogStep(input: Omit<LogStep, "searchText">): LogStep {
-  const raw = input.rawEvents.map((event) => `${event.kind}\n${JSON.stringify(event.payload, null, 2)}`).join("\n\n");
-  const detailText = input.details.map((detail) => detail.value).join("\n");
-  return {
-    ...input,
-    searchText: `${input.phase} ${input.title} ${input.summary} ${detailText} ${raw}`.toLowerCase(),
-  };
-}
-
-function eventToLogStep(event: StreamEvent, phase: string, index: number): LogStep {
-  const { kind, payload } = event;
-  const rawPayload = JSON.stringify(payload, null, 2);
-  if (kind === "phase_start") {
-    const attempt = typeof payload?.attempt === "number" ? ` · attempt ${payload.attempt}` : "";
-    return createLogStep({
-      id: getEventId(event, index),
-      type: "phase",
-      phase,
-      title: `${String(payload?.phase ?? "phase")}${attempt}`,
-      summary: "Phase started",
-      timestamp: event.ts,
-      isError: false,
-      details: [{ label: "Payload", value: rawPayload }],
-      rawEvents: [event],
-    });
-  }
-  if (kind === "phase_end") {
-    const ok = payload?.ok !== false;
-    return createLogStep({
-      id: getEventId(event, index),
-      type: "phase",
-      phase,
-      title: `${String(payload?.phase ?? "phase")} ended`,
-      summary: ok ? "Phase completed" : "Phase failed",
-      timestamp: event.ts,
-      isError: !ok,
-      details: [{ label: "Payload", value: rawPayload }],
-      rawEvents: [event],
-    });
-  }
-  if (kind === "error") {
-    return createLogStep({
-      id: getEventId(event, index),
-      type: "error",
-      phase,
-      title: "Error",
-      summary: String(payload?.message ?? "Unknown error"),
-      timestamp: event.ts,
-      isError: true,
-      details: [{ label: "Payload", value: rawPayload }],
-      rawEvents: [event],
-    });
-  }
-  if (kind === "checkpoint_saved" || kind === "resume_started") {
-    return createLogStep({
-      id: getEventId(event, index),
-      type: "checkpoint",
-      phase,
-      title: kind === "checkpoint_saved" ? "Checkpoint saved" : "Resume started",
-      summary: `Phase: ${phase}`,
-      timestamp: event.ts,
-      isError: false,
-      details: [{ label: "Payload", value: rawPayload }],
-      rawEvents: [event],
-    });
-  }
-  return createLogStep({
-    id: getEventId(event, index),
-    type: "event",
-    phase,
-    title: kind,
-    summary: `Phase: ${phase}`,
-    timestamp: event.ts,
-    isError: false,
-    details: [{ label: "Payload", value: rawPayload }],
-    rawEvents: [event],
-  });
-}
-
-function toolCallToStep(event: StreamEvent, phase: string, index: number): LogStep {
-  const name = String(event.payload?.name ?? "tool");
-  const input = JSON.stringify(event.payload, null, 2);
-  return createLogStep({
-    id: `${getEventId(event, index)}-tool`,
-    type: "tool",
-    phase,
-    title: `Tool · ${name}`,
-    summary: String(event.payload?.input_summary ?? "Tool called"),
-    timestamp: event.ts,
-    isError: false,
-    details: [{ label: "Input", value: input }],
-    rawEvents: [event],
-  });
-}
-
-function toolResultToStep(event: StreamEvent, phase: string, index: number): LogStep {
-  const name = String(event.payload?.name ?? "tool");
-  const output = JSON.stringify(event.payload, null, 2);
-  const isError = event.payload?.is_error === true;
-  return createLogStep({
-    id: `${getEventId(event, index)}-tool-result`,
-    type: "tool",
-    phase,
-    title: `Tool result · ${name}`,
-    summary: String(event.payload?.summary ?? (isError ? "Tool failed" : "Tool returned")),
-    timestamp: event.ts,
-    isError,
-    details: [{ label: "Output", value: output }],
-    rawEvents: [event],
-  });
-}
-
-function pairToolResult(step: LogStep, event: StreamEvent): LogStep {
-  const output = JSON.stringify(event.payload, null, 2);
-  const isError = event.payload?.is_error === true;
-  return createLogStep({
-    ...step,
-    summary: String(event.payload?.summary ?? step.summary),
-    isError,
-    details: [...step.details, { label: "Output", value: output }],
-    rawEvents: [...step.rawEvents, event],
-  });
-}
-
-function groupLogStepsByPhase(steps: LogStep[]): LogPhaseGroup[] {
-  const groups = new Map<string, LogStep[]>();
-  for (const step of steps) {
-    groups.set(step.phase, [...(groups.get(step.phase) ?? []), step]);
-  }
-  return Array.from(groups.entries()).map(([phase, phaseSteps]) => {
-    const firstTimestamp = phaseSteps[0]?.timestamp ?? 0;
-    const lastTimestamp = phaseSteps[phaseSteps.length - 1]?.timestamp ?? firstTimestamp;
-    const hasErrors = phaseSteps.some((step) => step.isError);
-    const searchText = phaseSteps.map((step) => step.searchText).join(" ");
-    return {
-      id: `phase-${phase}`,
-      phase,
-      label: phase === "default" ? "General" : phase,
-      firstTimestamp,
-      lastTimestamp,
-      steps: phaseSteps,
-      hasErrors,
-      searchText,
-    };
-  });
-}
-
-function getEventPhase(event: StreamEvent): string {
-  return typeof event.payload?.phase === "string" && event.payload.phase.trim() ? event.payload.phase : "default";
-}
-
-function getEventId(event: StreamEvent, index: number): string {
-  return `${index}-${event.ts}-${event.kind}`;
-}
-
-function getToolKey(event: StreamEvent, phase: string): string | null {
-  const payload = event.payload ?? {};
-  const explicitId = payload.call_id ?? payload.tool_call_id ?? payload.id ?? payload.invocation_id;
-  if (typeof explicitId === "string" || typeof explicitId === "number") return `${phase}:${explicitId}`;
-  return null;
-}
-
-function summarizeText(text: string): string {
-  return text.trim().replace(/\s+/g, " ").slice(0, 180);
-}
-
-interface LogPhaseAccordionProps {
-  phases: LogPhaseGroup[];
+interface LogStreamFeedProps {
+  steps: LogStep[];
   selectedStepId: string | null;
   onSelectStep: (stepId: string) => void;
 }
 
-function LogPhaseAccordion({ phases, selectedStepId, onSelectStep }: LogPhaseAccordionProps) {
+function LogStreamFeed({ steps, selectedStepId, onSelectStep }: LogStreamFeedProps) {
   return (
-    <div className="space-y-3">
-      {phases.map((phase) => (
-        <LogPhasePanel
-          key={phase.id}
-          phase={phase}
-          selectedStepId={selectedStepId}
-          onSelectStep={onSelectStep}
+    <div className="space-y-1" aria-label="Activity log">
+      {steps.map((step) => (
+        <LogEventCard
+          key={step.id}
+          step={step}
+          isSelected={step.id === selectedStepId}
+          onSelect={() => onSelectStep(step.id)}
         />
       ))}
     </div>
   );
 }
 
-interface LogPhasePanelProps {
-  phase: LogPhaseGroup;
-  selectedStepId: string | null;
-  onSelectStep: (stepId: string) => void;
-}
-
-function LogPhasePanel({ phase, selectedStepId, onSelectStep }: LogPhasePanelProps) {
-  const triggerId = `${phase.id}-trigger`;
-  const panelId = `${phase.id}-panel`;
-  const [isOpen, setIsOpen] = useState(true);
-  return (
-    <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel-2)]">
-      <h3>
-        <button
-          type="button"
-          id={triggerId}
-          aria-expanded={isOpen}
-          aria-controls={panelId}
-          onClick={() => setIsOpen((value) => !value)}
-          className="flex min-h-12 w-full items-center justify-between gap-3 px-3 py-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-        >
-          <span className="min-w-0">
-            <span className="block truncate text-xs font-semibold text-[var(--text)]">{phase.label}</span>
-            <span className="block text-[10px] text-[var(--text-dim)]">
-              {phase.steps.length} steps · {formatLogTimeRange(phase.firstTimestamp, phase.lastTimestamp)}
-            </span>
-          </span>
-          <span className={phase.hasErrors ? "text-red-300" : "text-emerald-300"}>
-            {phase.hasErrors ? "has errors" : "ok"}
-          </span>
-        </button>
-      </h3>
-      {isOpen && (
-        <div id={panelId} role="region" aria-labelledby={triggerId} className="border-t border-[var(--border)] p-2">
-          <div aria-label={`${phase.label} log steps`} className="space-y-1">
-            {phase.steps.map((step) => (
-              <LogStepRow
-                key={step.id}
-                step={step}
-                isSelected={step.id === selectedStepId}
-                onSelect={() => onSelectStep(step.id)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-interface LogStepRowProps {
+interface LogEventCardProps {
   step: LogStep;
   isSelected: boolean;
   onSelect: () => void;
 }
 
-function LogStepRow({ step, isSelected, onSelect }: LogStepRowProps) {
+const STEP_TYPE_ICONS: Record<string, string> = {
+  agent: "🤖",
+  tool: "🔧",
+  phase: "🏁",
+  error: "❗",
+  checkpoint: "💾",
+  event: "📌",
+};
+
+function LogEventCard({ step, isSelected, onSelect }: LogEventCardProps) {
+  const icon = STEP_TYPE_ICONS[step.type] ?? "📌";
   const tone = step.isError
     ? "border-red-500/40 bg-red-500/10 text-red-100"
     : isSelected
       ? "border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--text)]"
       : "border-transparent text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-black/10 hover:text-[var(--text)]";
+
   return (
     <button
       type="button"
       aria-pressed={isSelected}
       onClick={onSelect}
-      className={`grid min-h-12 w-full grid-cols-[4.5rem_minmax(0,1fr)_auto] items-start gap-3 rounded-lg border px-3 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${tone}`}
+      className={`flex w-full items-start gap-2 rounded-lg border px-2 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${tone}`}
     >
-      <span className="text-[10px] text-[var(--text-dim)]">{new Date(step.timestamp * 1000).toLocaleTimeString()}</span>
-      <span className="min-w-0">
-        <span className="block truncate text-xs font-semibold">{step.title}</span>
-        <span className="block truncate text-[10px] text-[var(--text-dim)]">{step.summary}</span>
+      <span className="mt-0.5 shrink-0 text-base leading-none" aria-hidden="true">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5 flex-wrap">
+          <span className="truncate text-[11px] font-semibold">{step.title}</span>
+          {step.tags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full border border-current/20 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide opacity-70"
+            >
+              {tag}
+            </span>
+          ))}
+        </span>
+        <span className="block truncate text-[10px] text-[var(--text-dim)] mt-0.5">{step.summary}</span>
       </span>
-      <span className="rounded-full border border-current/20 px-2 py-0.5 text-[9px] uppercase tracking-wide">{step.type}</span>
+      <span className="shrink-0 text-[10px] text-[var(--text-dim)] mt-0.5 whitespace-nowrap">
+        {new Date(step.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+      </span>
     </button>
   );
 }
 
+// ─── Inspector panel ──────────────────────────────────────────────────────────
+
 function LogDetailInspector({ step }: { step: LogStep | null }) {
+  const [rawExpanded, setRawExpanded] = useState(false);
+
+  useEffect(() => {
+    setRawExpanded(false);
+  }, [step?.id]);
+
   return (
     <aside
       className="min-h-0 overflow-y-auto bg-[var(--panel)] px-4 pb-24 pt-3 font-mono text-[11px] leading-snug"
@@ -1363,12 +1104,21 @@ function LogDetailInspector({ step }: { step: LogStep | null }) {
       <div className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--panel)] pb-3">
         <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)]">Inspector</div>
         <h3 id="log-detail-heading" className="mt-1 text-sm font-semibold text-[var(--text)]">
-          {step ? step.title : "Select a log step"}
+          {step ? step.title : "Select an event"}
         </h3>
-        {step && <p className="mt-1 text-[10px] text-[var(--text-dim)]">{step.phase} · {new Date(step.timestamp * 1000).toLocaleString()}</p>}
+        {step && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            <span className="text-[10px] text-[var(--text-dim)]">{step.phase} · {new Date(step.timestamp * 1000).toLocaleString()}</span>
+            {step.tags.map((tag) => (
+              <span key={tag} className="rounded-full border border-[var(--border)] bg-[var(--panel-2)] px-1.5 py-0.5 text-[9px] text-[var(--text-dim)]">
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       {!step ? (
-        <div className="pt-4 text-[var(--text-dim)]">Select a timeline row to inspect full input, output, and raw payload.</div>
+        <div className="pt-4 text-[var(--text-dim)]">Select an event to inspect its input, output, and details.</div>
       ) : (
         <div className="space-y-4 pt-4">
           <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3">
@@ -1378,25 +1128,28 @@ function LogDetailInspector({ step }: { step: LogStep | null }) {
           {step.details.map((detail) => (
             <div key={detail.label} className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)]">
               <div className="border-b border-[var(--border)] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-dim)]">{detail.label}</div>
-              <pre className="max-h-[45vh] overflow-auto whitespace-pre-wrap p-3 text-[var(--text)]">{detail.value}</pre>
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap p-3 text-[var(--text)]">{detail.value}</pre>
             </div>
           ))}
           <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)]">
-            <div className="border-b border-[var(--border)] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-dim)]">Raw events</div>
-            <pre className="max-h-[45vh] overflow-auto whitespace-pre-wrap p-3 text-[var(--text)]">
-              {JSON.stringify(step.rawEvents, null, 2)}
-            </pre>
+            <button
+              type="button"
+              onClick={() => setRawExpanded((v) => !v)}
+              className="flex w-full items-center justify-between border-b border-[var(--border)] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-dim)] hover:text-[var(--text)]"
+            >
+              <span>View raw event</span>
+              <span aria-hidden="true">{rawExpanded ? "▲" : "▼"}</span>
+            </button>
+            {rawExpanded && (
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap p-3 text-[var(--text-dim)]">
+                {JSON.stringify(step.rawEvents, null, 2)}
+              </pre>
+            )}
           </div>
         </div>
       )}
     </aside>
   );
-}
-
-function formatLogTimeRange(firstTimestamp: number, lastTimestamp: number): string {
-  const first = new Date(firstTimestamp * 1000).toLocaleTimeString();
-  const last = new Date(lastTimestamp * 1000).toLocaleTimeString();
-  return first === last ? first : `${first} → ${last}`;
 }
 
 // ─── Blocker Banner ───────────────────────────────────────────────────────────
