@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, apiFetch } from "../api/client";
 import type { HistorySession } from "./HistoryPanel";
 
@@ -44,6 +45,7 @@ interface Props {
 // ---------------------------------------------------------------------------
 
 export default function HistoryDetailDrawer({ session, onClose, onResume }: Props) {
+  const [searchParams] = useSearchParams();
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -93,12 +95,13 @@ export default function HistoryDetailDrawer({ session, onClose, onResume }: Prop
     if (!session || resumeBusy) return;
     setResumeBusy(true);
     try {
-      const { session_id } = await api.createSession(session.session_id);
+      const projectId = searchParams.get("project");
+      const { session_id } = await api.createSession(session.session_id, projectId || undefined);
       onResume(session_id, session.session_id);
     } finally {
       setResumeBusy(false);
     }
-  }, [session, resumeBusy, onResume]);
+  }, [session, resumeBusy, onResume, searchParams]);
 
   if (!session) return null;
 

@@ -226,12 +226,19 @@ export interface ProjectUpdate {
 export const api = {
   health: () => apiFetch<{ status: string; version: string }>("/api/health"),
   meta: () => apiFetch<{ cwd?: string; model?: string; permission_mode?: string }>("/api/meta"),
-  createSession: (resumeId?: string) =>
-    apiFetch<{ session_id: string; resumed_from?: string | null }>("/api/sessions", {
+  createSession: (resumeId?: string, projectId?: string) => {
+    const hasBody = !!(resumeId || projectId);
+    return apiFetch<{ session_id: string; resumed_from?: string | null }>("/api/sessions", {
       method: "POST",
-      body: resumeId ? JSON.stringify({ resume_id: resumeId }) : undefined,
-      headers: resumeId ? { "Content-Type": "application/json" } : undefined,
-    }),
+      body: hasBody
+        ? JSON.stringify({
+            ...(resumeId ? { resume_id: resumeId } : {}),
+            ...(projectId ? { project_id: projectId } : {}),
+          })
+        : undefined,
+      headers: hasBody ? { "Content-Type": "application/json" } : undefined,
+    });
+  },
   listSessions: () =>
     apiFetch<{ sessions: Array<{ id: string; created_at: number; active: boolean }> }>(
       "/api/sessions",

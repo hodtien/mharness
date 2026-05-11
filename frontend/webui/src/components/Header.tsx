@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { api } from "../api/client";
 import { useSession } from "../store/session";
 
@@ -162,6 +162,7 @@ interface Props {
 }
 
 export default function Header({ onToggleSidebar, onInterrupt }: Props) {
+  const location = useLocation();
   const connectionStatus = useSession((s) => s.connectionStatus);
   const busy = useSession((s) => s.busy);
   const errorBanner = useSession((s) => s.errorBanner);
@@ -192,7 +193,7 @@ export default function Header({ onToggleSidebar, onInterrupt }: Props) {
         </div>
 
         <Link
-          to="/history"
+          to={`/history${location.search}`}
           className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1 text-xs text-[var(--text-dim)] hover:text-[var(--text)]"
         >
           History
