@@ -153,7 +153,7 @@ export default function ProviderSettingsPage() {
     <div className="flex flex-1 flex-col overflow-hidden">
       <PageHeader
         title="Providers"
-        description="Configure API credentials and activate the provider used by new sessions."
+        description="Configure API credentials and activate the provider used by new sessions. Click a card to add a key or change the base URL, then verify connectivity before activating."
         primaryAction={
           configuredProviders.length > 0 ? (
             <button
@@ -215,6 +215,15 @@ export default function ProviderSettingsPage() {
             );
           })}
         </div>
+
+        {providers.length > 0 && (
+          <p className="text-xs text-[var(--text-dim)]">
+            <strong className="font-medium text-[var(--text-dim)]">Active</strong> — currently used for new sessions.&nbsp;
+            <strong className="font-medium text-[var(--text-dim)]">Configured</strong> — credentials saved but not active.&nbsp;
+            <strong className="font-medium text-[var(--text-dim)]">Not configured</strong> — no API key stored yet.
+            Latency and &ldquo;last verified&rdquo; time appear after running <em>Verify</em>.
+          </p>
+        )}
 
         {providers.length === 0 && (
           <EmptyState message="No providers returned." description="Add or sync a provider to get started." />

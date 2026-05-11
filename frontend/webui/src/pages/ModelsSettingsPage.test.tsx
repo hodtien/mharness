@@ -116,6 +116,7 @@ describe("ModelsSettingsPage", () => {
     await waitFor(() => expect(screen.getAllByText(/128,000|128000/).length).toBeGreaterThan(0));
     expect(screen.getAllByText(/200,000|200000/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/✓ default/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/search by model id or label/i)).toBeTruthy();
   });
 
   it("hides delete button for built-in models, shows for custom", async () => {
@@ -155,9 +156,9 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
-    await waitFor(() => expect(screen.getByPlaceholderText(/filter models/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByPlaceholderText(/filter by model id or label/i)).toBeTruthy());
 
-    fireEvent.change(screen.getByPlaceholderText(/filter models/i), { target: { value: "vision" } });
+    fireEvent.change(screen.getByPlaceholderText(/filter by model id or label/i), { target: { value: "vision" } });
 
     await waitFor(() => {
       const noMatch = screen.queryAllByText(/no models match/i);
