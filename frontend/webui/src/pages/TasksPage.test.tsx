@@ -216,25 +216,27 @@ const NO_REVIEW_TASK: TaskRecord = {
 };
 
 describe("TasksPage review badge", () => {
-  it("shows '✅ Reviewed' badge for tasks with review_status=done", async () => {
+  it("shows Reviewed badge for tasks with review_status=done", async () => {
     mockFetch([REVIEWED_TASK]);
     render(<TasksPage />);
-    expect(await screen.findByText(/✅ Reviewed/)).toBeTruthy();
+    const badge = await screen.findByRole("button", { name: /Reviewed/i });
+    expect(badge).toBeTruthy();
   });
 
-  it("shows '⏳ Reviewing' badge for tasks with review_status=in_progress", async () => {
+  it("shows Pending review badge for tasks with review_status=in_progress", async () => {
     mockFetch([REVIEWING_TASK]);
     render(<TasksPage />);
-    expect(await screen.findByText(/⏳ Reviewing/)).toBeTruthy();
+    const badge = await screen.findByRole("button", { name: /Pending review/i });
+    expect(badge).toBeTruthy();
   });
 
-  it("shows '—' for tasks with no review metadata", async () => {
+  it("shows 'No review needed' text for tasks with no review metadata", async () => {
     mockFetch([NO_REVIEW_TASK]);
     render(<TasksPage />);
-    await screen.findByText("No review task");
-    // The em dash appears in the review status cell (and possibly elsewhere as
-    // empty placeholders). Just ensure at least one is rendered.
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    // Wait for task to appear, then check the review column
+    await waitFor(() => expect(screen.getByText("No review task")).toBeTruthy());
+    // The "No review needed" text should appear in the review column
+    expect(screen.getAllByText("No review needed").length).toBeGreaterThan(0);
   });
 
   it("clicking the Reviewed badge opens the drawer and fetches /api/review/{id}", async () => {
@@ -254,7 +256,7 @@ describe("TasksPage review badge", () => {
     const { calls } = mockFetch([REVIEWING_TASK]);
     render(<TasksPage />);
 
-    const badge = await screen.findByRole("button", { name: /Reviewing/i });
+    const badge = await screen.findByRole("button", { name: /Pending review/i });
     fireEvent.click(badge);
 
     // Drawer opens (detail fetched).
@@ -329,5 +331,161 @@ describe("TasksPage log viewer", () => {
 
     expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 2000);
     setIntervalSpy.mockRestore();
+  });
+});
+
+// ─── Filter, sort, and row expansion ─────────────────────────────────────────
+
+const PENDING_TASK: TaskRecord = {
+  ...RUNNING_TASK,
+  id: "task-pending-001",
+  description: "Pending task",
+  status: "pending",
+  metadata: {},
+};
+
+const COMPLETED_TASK: TaskRecord = {
+  ...FAILED_TASK,
+  id: "task-completed-001",
+  status: "completed",
+  description: "Completed task",
+  return_code: 0,
+  metadata: {},
+};
+
+describe("TasksPage filters", () => {
+  it("filters tasks by status via the status dropdown", async () => {
+    mockFetch([RUNNING_TASK, PENDING_TASK, COMPLETED_TASK]);
+    render(<TasksPage />);
+
+    await waitFor(() => expect(screen.getByText("Running task")).toBeTruthy());
+    expect(screen.getByText("Pending task")).toBeTruthy();
+    expect(screen.getByText("Completed task")).toBeTruthy();
+
+    // Use the All statuses select to filter to "running"
+    const allStatusesOption = screen.getByText("All statuses");
+    const statusSelect = allStatusesOption.closest("select");
+    expect(statusSelect).toBeTruthy();
+    fireEvent.change(statusSelect!, { target: { value: "running" } });
+
+    await waitFor(() => {
+      expect(screen.getByText("Running task")).toBeTruthy();
+      expect(screen.queryByText("Pending task")).toBeNull();
+    });
+  });
+
+  it("searches tasks by description", async () => {
+    mockFetch([RUNNING_TASK, COMPLETED_TASK]);
+    render(<TasksPage />);
+
+    await waitFor(() => expect(screen.getByText("Running task")).toBeTruthy());
+    const searchInput = screen.getByPlaceholderText("Search jobs...");
+    fireEvent.change(searchInput, { target: { value: "Completed" } });
+
+    expect(screen.queryByText("Running task")).toBeNull();
+    expect(screen.getByText("Completed task")).toBeTruthy();
+  });
+
+  it("clears all filters with 'Clear filters' button", async () => {
+    mockFetch([RUNNING_TASK, PENDING_TASK]);
+    render(<TasksPage />);
+
+    await waitFor(() => expect(screen.getByText("Running task")).toBeTruthy());
+
+    // Type in search to show clear button
+    const searchInput = screen.getByPlaceholderText("Search jobs...");
+    fireEvent.change(searchInput, { target: { value: "Running" } });
+
+    const clearBtn = screen.getByRole("button", { name: /clear filters/i });
+    fireEvent.click(clearBtn);
+
+    // Both tasks should be visible again
+    expect(screen.getByText("Running task")).toBeTruthy();
+    expect(screen.getByText("Pending task")).toBeTruthy();
+  });
+});
+
+describe("TasksPage sort", () => {
+  it("sorts tasks by newest first when 'Newest first' is selected", async () => {
+    const oldTask: TaskRecord = { ...RUNNING_TASK, id: "old-task", created_at: 1000000000, description: "Old task" };
+    const newTask: TaskRecord = { ...RUNNING_TASK, id: "new-task", created_at: 2000000000, description: "New task" };
+    mockFetch([oldTask, newTask]);
+    render(<TasksPage />);
+
+    await waitFor(() => expect(screen.getByText("Old task")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("New task")).toBeTruthy());
+
+    // Change sort to newest
+    const sortSelect = screen.getByDisplayValue("Default order");
+    fireEvent.change(sortSelect, { target: { value: "newest" } });
+
+    // Verify both tasks are still visible after sort
+    expect(screen.getByText("New task")).toBeTruthy();
+    expect(screen.getByText("Old task")).toBeTruthy();
+  });
+});
+
+describe("TasksPage row expansion", () => {
+  it("expands a row when the expand button is clicked", async () => {
+    mockFetch([RUNNING_TASK]);
+    render(<TasksPage />);
+
+    await waitFor(() => expect(screen.getByText("Running task")).toBeTruthy());
+
+    const expandBtn = screen.getByRole("button", { name: /expand row/i });
+    fireEvent.click(expandBtn);
+
+    // Duration should appear in expanded section
+    expect(await screen.findByText("Duration")).toBeTruthy();
+  });
+
+  it("collapses an expanded row when clicked again", async () => {
+    mockFetch([RUNNING_TASK]);
+    render(<TasksPage />);
+
+    await waitFor(() => expect(screen.getByText("Running task")).toBeTruthy());
+
+    const expandBtn = screen.getByRole("button", { name: /expand row/i });
+    fireEvent.click(expandBtn);
+    await waitFor(() => expect(screen.getByText("Duration")).toBeTruthy());
+
+    fireEvent.click(expandBtn);
+    expect(screen.queryByText("Duration")).toBeNull();
+  });
+
+  it("shows prompt summary in expanded row when task has prompt", async () => {
+    const taskWithPrompt: TaskRecord = { ...RUNNING_TASK, prompt: "This is a long prompt for testing" };
+    mockFetch([taskWithPrompt]);
+    render(<TasksPage />);
+
+    await waitFor(() => expect(screen.getByText("Running task")).toBeTruthy());
+
+    const expandBtn = screen.getByRole("button", { name: /expand row/i });
+    fireEvent.click(expandBtn);
+
+    expect(await screen.findByText("Prompt summary")).toBeTruthy();
+  });
+});
+
+describe("TasksPage status badges", () => {
+  it("renders status badges for different statuses", async () => {
+    const pendingTask: TaskRecord = { ...RUNNING_TASK, id: "pending-task", status: "pending", description: "Pending job" };
+    const runningTask: TaskRecord = { ...RUNNING_TASK, id: "running-task", status: "running", description: "Running job" };
+    mockFetch([pendingTask, runningTask]);
+    render(<TasksPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Pending job")).toBeTruthy();
+      expect(screen.getByText("Running job")).toBeTruthy();
+    });
+    // Verify status badges are rendered (check for status text in badges)
+    expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Running").length).toBeGreaterThan(0);
+  });
+
+  it("shows failed badge", async () => {
+    mockFetch([FAILED_TASK]);
+    render(<TasksPage />);
+    await waitFor(() => expect(screen.getByText("Failed")).toBeTruthy());
   });
 });

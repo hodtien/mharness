@@ -26,6 +26,18 @@ export interface TaskRecord {
   metadata: Record<string, string>;
 }
 
+// ─── Filter/Sort State ────────────────────────────────────────────────────────
+
+export type SortOrder = "newest" | "default";
+
+export interface FilterState {
+  search: string;
+  status: TaskStatus | "all";
+  type: TaskType | "all";
+  reviewStatus: "all" | "reviewed" | "pending_review" | "no_review";
+  sort: SortOrder;
+}
+
 // ─── Status colors ────────────────────────────────────────────────────────────
 
 const STATUS_COLOR: Record<TaskStatus, string> = {
@@ -65,45 +77,61 @@ function StatusBadge({ status }: { status: TaskStatus }) {
 
 // ─── Review status badge ──────────────────────────────────────────────────────
 
-type ReviewStatus = "done" | "in_progress" | "pending" | "failed" | "timeout" | "error" | null;
+export type ReviewStatusValue = "done" | "in_progress" | "pending" | "failed" | "timeout" | "error";
 
-function getReviewStatus(metadata: Record<string, string>): ReviewStatus {
+export const REVIEW_STATUS_LABELS: Record<ReviewStatusValue, string> = {
+  done: "Reviewed",
+  in_progress: "Pending review",
+  pending: "Pending review",
+  failed: "Review failed",
+  timeout: "Review timeout",
+  error: "Review error",
+};
+
+export const REVIEW_STATUS_ICONS: Record<ReviewStatusValue, string> = {
+  done: "✅",
+  in_progress: "⏳",
+  pending: "⏳",
+  failed: "❌",
+  timeout: "⏱️",
+  error: "⚠️",
+};
+
+export const REVIEW_STATUS_COLORS: Record<ReviewStatusValue, string> = {
+  done: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  in_progress: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  pending: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  failed: "bg-red-500/15 text-red-300 border-red-500/30",
+  timeout: "bg-red-500/15 text-red-300 border-red-500/30",
+  error: "bg-red-500/15 text-red-300 border-red-500/30",
+};
+
+function getReviewStatus(metadata: Record<string, string>): ReviewStatusValue | null {
   const v = metadata["review_status"] ?? null;
   if (!v) return null;
-  return v as ReviewStatus;
+  return v as ReviewStatusValue;
 }
 
 function ReviewBadge({
   status,
   onClick,
 }: {
-  status: ReviewStatus;
+  status: ReviewStatusValue | null;
   onClick: (e: React.MouseEvent) => void;
 }) {
-  if (status === "done") {
-    return (
-      <button
-        onClick={onClick}
-        className="rounded-md border border-[var(--status-done-border)] bg-[var(--status-done-bg)] px-2 py-0.5 text-xs font-medium text-[var(--status-done-text)] transition hover:brightness-125 cursor-pointer"
-        aria-label="Reviewed — view review"
-      >
-        ✅ Reviewed
-      </button>
-    );
+  if (status === null) {
+    return <span className="text-sm text-[var(--text-dim)]">No review needed</span>;
   }
-  if (status === "in_progress" || status === "pending") {
-    return (
-      <button
-        onClick={onClick}
-        className="rounded-md border border-[var(--status-pending-border)] bg-[var(--status-pending-bg)] px-2 py-0.5 text-xs font-medium text-[var(--status-pending-text)] transition hover:brightness-125 cursor-pointer"
-        aria-label="Reviewing — view review"
-      >
-        ⏳ Reviewing
-      </button>
-    );
-  }
-  // null / failed / timeout / error → em dash
-  return <span className="text-sm text-[var(--text-dim)]">—</span>;
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium transition hover:brightness-125 cursor-pointer ${REVIEW_STATUS_COLORS[status]}`}
+      aria-label={`${REVIEW_STATUS_LABELS[status]} review`}
+    >
+      <span className="leading-none">{REVIEW_STATUS_ICONS[status]}</span>
+      <span>{REVIEW_STATUS_LABELS[status]}</span>
+    </button>
+  );
 }
 
 // ─── Review Panel (inside detail drawer) ──────────────────────────────────────
@@ -521,19 +549,72 @@ function MetaItem({ label, value, highlight }: { label: string; value: string; h
   );
 }
 
+// ─── Row expansion: log preview button ───────────────────────────────────────
+
+function ButtonFetchLogPreview({ taskId }: { taskId: string }) {
+  const [lines, setLines] = useState<string[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    apiFetch<{ lines: string[] }>(`/api/tasks/${encodeURIComponent(taskId)}/output?tail=50`)
+      .then((data) => {
+        if (!cancelled) {
+          setLines(data.lines ?? []);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(String(err));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [taskId]);
+
+  if (loading) return <span className="text-zinc-500">Loading…</span>;
+  if (error) return <span className="text-red-400">Error</span>;
+  if (!lines || lines.length === 0) return <span className="text-zinc-500">No output</span>;
+  return (
+    <pre className="whitespace-pre-wrap">{lines.join("\n")}</pre>
+  );
+}
+
 // ─── Main Tasks Page ──────────────────────────────────────────────────────────
 
 const ALL_STATUSES: TaskStatus[] = ["pending", "running", "completed", "failed", "killed"];
+const ALL_TYPES: TaskType[] = ["local_bash", "local_agent", "remote_agent", "in_process_teammate"];
+
+const TYPE_LABELS: Record<TaskType, string> = {
+  local_bash: "Local Bash",
+  local_agent: "Local Agent",
+  remote_agent: "Remote Agent",
+  in_process_teammate: "In-Process Teammate",
+};
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<TaskStatus | "all">("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusReview, setFocusReview] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  // Filter/sort state
+  const [filters, setFilters] = useState<FilterState>({
+    search: "",
+    status: "all",
+    type: "all",
+    reviewStatus: "all",
+    sort: "default",
+  });
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -584,7 +665,67 @@ export default function TasksPage() {
     }
   };
 
-  const filtered = filter === "all" ? tasks : tasks.filter((t) => t.status === filter);
+  const toggleRowExpansion = (taskId: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+  };
+
+  // Filter and sort logic
+  const filtered = tasks.filter((task) => {
+    // Search filter
+    if (filters.search) {
+      const search = filters.search.toLowerCase();
+      const matches =
+        task.id.toLowerCase().includes(search) ||
+        task.description.toLowerCase().includes(search) ||
+        (task.command ?? "").toLowerCase().includes(search) ||
+        (task.prompt ?? "").toLowerCase().includes(search);
+      if (!matches) return false;
+    }
+    // Status filter
+    if (filters.status !== "all" && task.status !== filters.status) return false;
+    // Type filter
+    if (filters.type !== "all" && task.type !== filters.type) return false;
+    // Review status filter
+    if (filters.reviewStatus !== "all") {
+      const reviewStatus = getReviewStatus(task.metadata);
+      if (filters.reviewStatus === "reviewed") {
+        if (reviewStatus !== "done") return false;
+      } else if (filters.reviewStatus === "pending_review") {
+        if (reviewStatus !== "in_progress" && reviewStatus !== "pending") return false;
+      } else if (filters.reviewStatus === "no_review") {
+        if (reviewStatus !== null) return false;
+      }
+    }
+    return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (filters.sort === "newest") {
+      return b.created_at - a.created_at;
+    }
+    return 0; // default order
+  });
+
+  const updateFilter = <K extends keyof FilterState>(key: K, value: FilterState[K]) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const clearFilters = () => {
+    setFilters({ search: "", status: "all", type: "all", reviewStatus: "all", sort: "default" });
+  };
+
+  const hasActiveFilters = filters.search !== "" || filters.status !== "all" ||
+    filters.type !== "all" || filters.reviewStatus !== "all";
+
+  const runningCount = tasks.filter((t) => t.status === "running").length;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -593,47 +734,90 @@ export default function TasksPage() {
         title="Background Jobs"
         description="Background CLI processes spawned by the system. Autopilot cards are managed in the Autopilot board."
         metadata={[
-          {
-            label: "Total",
-            value: String(tasks.length),
-          },
+          { label: "Total", value: String(tasks.length) },
           {
             label: "Running",
-            value: String(tasks.filter((t) => t.status === "running").length),
-            accent: tasks.some((t) => t.status === "running") ? "cyan" : "none",
+            value: String(runningCount),
+            accent: runningCount > 0 ? "cyan" : "none",
           },
         ]}
       />
 
       {/* Toolbar */}
-      <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-5 py-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-[var(--text)]">
-            {filter === "all" ? "All jobs" : STATUS_LABEL[filter as TaskStatus]}
-          </span>
-          <span className="rounded-full border border-[var(--border)] bg-[var(--panel-2)] px-2 py-0.5 text-xs text-[var(--text-dim)]">
-            {filtered.length}
-          </span>
-        </div>
+      <div className="flex flex-col gap-3 border-b border-[var(--border)] bg-[var(--panel)] px-5 py-3">
+        {/* Search row */}
         <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-dim)]">
+              🔍
+            </span>
+            <input
+              type="text"
+              value={filters.search}
+              onChange={(e) => updateFilter("search", e.target.value)}
+              placeholder="Search jobs..."
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] py-2 pl-9 pr-4 text-sm text-[var(--text)] placeholder-[var(--text-dim)] focus:border-[var(--accent)]/60 focus:outline-none"
+            />
+          </div>
           <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as TaskStatus | "all")}
+            value={filters.sort}
+            onChange={(e) => updateFilter("sort", e.target.value as SortOrder)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--accent)]/60 focus:outline-none"
+          >
+            <option value="default">Default order</option>
+            <option value="newest">Newest first</option>
+          </select>
+          <button
+            onClick={fetchTasks}
+            className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] transition hover:border-[var(--accent)]/40"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {/* Filters row */}
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={filters.status}
+            onChange={(e) => updateFilter("status", e.target.value as TaskStatus | "all")}
             className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-sm text-[var(--text)] focus:border-[var(--accent)]/60 focus:outline-none"
           >
             <option value="all">All statuses</option>
             {ALL_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABEL[s]}
-              </option>
+              <option key={s} value={s}>{STATUS_LABEL[s]}</option>
             ))}
           </select>
-          <button
-            onClick={fetchTasks}
-            className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-sm text-[var(--text)] transition hover:border-[var(--accent)]/40"
+          <select
+            value={filters.type}
+            onChange={(e) => updateFilter("type", e.target.value as TaskType | "all")}
+            className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-sm text-[var(--text)] focus:border-[var(--accent)]/60 focus:outline-none"
           >
-            Refresh
-          </button>
+            <option value="all">All types</option>
+            {ALL_TYPES.map((t) => (
+              <option key={t} value={t}>{TYPE_LABELS[t]}</option>
+            ))}
+          </select>
+          <select
+            value={filters.reviewStatus}
+            onChange={(e) => updateFilter("reviewStatus", e.target.value as FilterState["reviewStatus"])}
+            className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-sm text-[var(--text)] focus:border-[var(--accent)]/60 focus:outline-none"
+          >
+            <option value="all">All reviews</option>
+            <option value="reviewed">Reviewed</option>
+            <option value="pending_review">Pending review</option>
+            <option value="no_review">No review needed</option>
+          </select>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-sm text-[var(--text-dim)] transition hover:border-red-500/40 hover:text-red-300"
+            >
+              Clear filters
+            </button>
+          )}
+          <span className="ml-auto rounded-full border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1 text-xs text-[var(--text-dim)]">
+            {sorted.length} jobs
+          </span>
         </div>
       </div>
 
@@ -649,54 +833,122 @@ export default function TasksPage() {
               {fetchError}
             </div>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : sorted.length === 0 ? (
           <div className="flex flex-1 items-center justify-center py-20">
             <div className="text-sm text-[var(--text-dim)]">
-              {filter === "all" ? "No jobs found." : `No ${STATUS_LABEL[filter as TaskStatus].toLowerCase()} jobs.`}
+              {hasActiveFilters ? "No jobs match your filters." : "No jobs found."}
             </div>
           </div>
         ) : (
           <table className="w-full border-collapse text-sm">
             <thead className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--panel-2)]">
               <tr>
+                <th className="w-8 px-2 py-2"></th>
                 <th className="px-4 py-2 text-left font-medium text-[var(--text-dim)]">ID</th>
                 <th className="px-4 py-2 text-left font-medium text-[var(--text-dim)]">Type</th>
                 <th className="px-4 py-2 text-left font-medium text-[var(--text-dim)]">Status</th>
-                <th className="px-4 py-2 text-left font-medium text-[var(--text-dim)]">Review status</th>
+                <th className="px-4 py-2 text-left font-medium text-[var(--text-dim)]">Review</th>
                 <th className="px-4 py-2 text-left font-medium text-[var(--text-dim)]">Description</th>
                 <th className="px-4 py-2 text-left font-medium text-[var(--text-dim)]">Created</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((task) => (
-                <tr
-                  key={task.id}
-                  onClick={() => { setFocusReview(false); setSelectedId(task.id); }}
-                  className="cursor-pointer border-b border-[var(--border)] transition-colors hover:bg-[var(--panel-2)]/50"
-                >
-                  <td className="px-4 py-3 font-mono text-xs text-[var(--text-dim)]">
-                    {truncateId(task.id)}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-[var(--text)]">
-                    {task.type}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={task.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <ReviewBadge
-                      status={getReviewStatus(task.metadata)}
-                      onClick={(e) => { e.stopPropagation(); setFocusReview(true); setSelectedId(task.id); }}
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-[var(--text)]">
-                    <span className="truncate max-w-xs block">{task.description || <span className="text-[var(--text-dim)]">—</span>}</span>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-[var(--text-dim)]">
-                    {formatTime(task.created_at)}
-                  </td>
-                </tr>
-              ))}
+              {sorted.map((task) => {
+                const isExpanded = expandedRows.has(task.id);
+                const duration = task.ended_at && task.started_at
+                  ? `${Math.round((task.ended_at - task.started_at))}s`
+                  : task.started_at ? "running" : "—";
+                const model = task.metadata["model"] ?? null;
+                const provider = task.metadata["provider"] ?? null;
+                return (
+                  <React.Fragment key={task.id}>
+                    <tr
+                      onClick={() => { setFocusReview(false); setSelectedId(task.id); }}
+                      className="cursor-pointer border-b border-[var(--border)] transition-colors hover:bg-[var(--panel-2)]/50"
+                    >
+                      <td className="px-2 py-3 text-center">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleRowExpansion(task.id); }}
+                          className="rounded-md p-1 text-[var(--text-dim)] transition hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
+                          aria-label={isExpanded ? "Collapse row" : "Expand row"}
+                        >
+                          {isExpanded ? "▼" : "▶"}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-[var(--text-dim)]">
+                        {truncateId(task.id)}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-[var(--text)]">
+                        {TYPE_LABELS[task.type] ?? task.type}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={task.status} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <ReviewBadge
+                          status={getReviewStatus(task.metadata)}
+                          onClick={(e) => { e.stopPropagation(); setFocusReview(true); setSelectedId(task.id); }}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-[var(--text)]">
+                        <span className="truncate max-w-xs block">{task.description || <span className="text-[var(--text-dim)]">—</span>}</span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-[var(--text-dim)]">
+                        {formatTime(task.created_at)}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="border-b border-[var(--border)] bg-[var(--panel-2)]/30">
+                        <td colSpan={7} className="px-6 py-4">
+                          <div className="grid grid-cols-2 gap-4 text-xs">
+                            {/* Duration */}
+                            <div>
+                              <div className="mb-1 font-medium text-[var(--text-dim)]">Duration</div>
+                              <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 font-mono">
+                                {duration}
+                              </div>
+                            </div>
+                            {/* Model */}
+                            {model && (
+                              <div>
+                                <div className="mb-1 font-medium text-[var(--text-dim)]">Model</div>
+                                <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 font-mono">
+                                  {model}
+                                </div>
+                              </div>
+                            )}
+                            {/* Provider */}
+                            {provider && (
+                              <div>
+                                <div className="mb-1 font-medium text-[var(--text-dim)]">Provider</div>
+                                <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 font-mono">
+                                  {provider}
+                                </div>
+                              </div>
+                            )}
+                            {/* Prompt summary */}
+                            {task.prompt && (
+                              <div className="col-span-2">
+                                <div className="mb-1 font-medium text-[var(--text-dim)]">Prompt summary</div>
+                                <div className="truncate rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 font-mono text-[var(--text)]">
+                                  {task.prompt.slice(0, 200)}{task.prompt.length > 200 ? "…" : ""}
+                                </div>
+                              </div>
+                            )}
+                            {/* Log preview */}
+                            <div className="col-span-2">
+                              <div className="mb-1 font-medium text-[var(--text-dim)]">Log preview</div>
+                              <div className="max-h-32 overflow-auto rounded-lg border border-[var(--border)] bg-zinc-900 px-3 py-2 font-mono text-zinc-400">
+                                <ButtonFetchLogPreview taskId={task.id} />
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}
