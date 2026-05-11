@@ -6,6 +6,60 @@ import { formatRelativeTime, type HistorySession } from "./HistoryPanel";
 
 type PermissionMode = "default" | "plan" | "full_auto";
 
+// Connection status badge colors
+const CONNECTION_COLORS: Record<string, string> = {
+  open: "bg-emerald-400",
+  connecting: "bg-amber-400",
+  closed: "bg-rose-500",
+};
+
+// Runtime state badge: shows model, provider, job count, busy status
+function RuntimeSummary() {
+  const appState = useSession((s) => s.appState);
+  const tasks = useSession((s) => s.tasks);
+  const busy = useSession((s) => s.busy);
+  const busyLabel = useSession((s) => s.transcript[s.transcript.length - 1]?.tool_name);
+
+  const runningCount = tasks.filter(
+    (t) => t.status === "running" || t.status === "queued",
+  ).length;
+
+  const hasJobs = runningCount > 0;
+
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-[var(--text-dim)]">
+      {/* Model badge */}
+      {appState?.model && (
+        <span className="rounded border border-[var(--border)] bg-[var(--panel-2)] px-1.5 py-0.5 font-medium text-[var(--text)]">
+          {appState.model}
+        </span>
+      )}
+      {/* Provider badge (tablet+) */}
+      {appState?.provider && (
+        <span className="hidden md:inline rounded border border-[var(--border)] bg-[var(--panel-2)] px-1.5 py-0.5">
+          {appState.provider}
+        </span>
+      )}
+      {/* Running jobs badge */}
+      {hasJobs && (
+        <span className="flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-amber-300">
+          <span aria-hidden>⚡</span>
+          <span>{runningCount} job{runningCount !== 1 ? "s" : ""}</span>
+        </span>
+      )}
+      {/* Busy indicator */}
+      {busy && (
+        <span className="flex items-center gap-1 rounded border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-rose-300">
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" />
+          <span className="truncate max-w-[120px]">
+            {busyLabel ? `Running ${busyLabel}` : "Busy"}
+          </span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 const permissionOptions: Array<{ value: PermissionMode; label: string; color: string }> = [
   { value: "default", label: "DEFAULT", color: "bg-[var(--text-dim)]" },
   { value: "plan", label: "PLAN", color: "bg-[var(--accent)]" },
@@ -287,42 +341,22 @@ function SessionsDropdown({ onResumeSession }: Pick<Props, "onResumeSession">) {
   );
 }
 
-/**
- * Truncate path from the left, showing the rightmost segments.
- * Example: /Users/hodtien/harness/my-harness → ...my-harness
- */
-function truncatePathLeft(path: string, maxLength = 30): string {
-  if (path.length <= maxLength) return path;
-  const parts = path.split("/");
-  if (parts.length <= 2) {
-    // Very short path like "/abc" — just ellipsize from left
-    return "..." + path.slice(-(maxLength - 3));
-  }
-  // Show rightmost segment(s) that fit
-  let result = parts[parts.length - 1];
-  for (let i = parts.length - 2; i >= 0; i--) {
-    const candidate = parts[i] + "/" + result;
-    if (candidate.length > maxLength - 3) break;
-    result = candidate;
-  }
-  return "..." + result;
-}
-
 export default function Header({ onToggleSidebar, onInterrupt, onResumeSession }: Props) {
-  const { appState, connectionStatus, busy, errorBanner } = useSession();
-  const dotColor =
-    connectionStatus === "open"
-      ? "bg-emerald-400"
-      : connectionStatus === "connecting"
-        ? "bg-amber-400"
-        : "bg-rose-500";
+  const connectionStatus = useSession((s) => s.connectionStatus);
+  const busy = useSession((s) => s.busy);
+  const errorBanner = useSession((s) => s.errorBanner);
+  const tasks = useSession((s) => s.tasks);
 
-  const fullPath = appState?.cwd || "";
-  const truncatedPath = fullPath ? truncatePathLeft(fullPath) : "";
+  const dotColor = CONNECTION_COLORS[connectionStatus] ?? CONNECTION_COLORS.closed;
+
+  // Running tasks count for interrupt label
+  const runningCount = tasks.filter(
+    (t) => t.status === "running" || t.status === "queued",
+  ).length;
 
   return (
     <div className="flex flex-col border-b border-[var(--border)] bg-[var(--panel)]">
-      <div className="flex items-center gap-3 px-3 py-2 sm:px-5">
+      <div className="flex items-center gap-2 px-3 py-2 sm:px-5">
         <button
           aria-label="Toggle sidebar"
           onClick={onToggleSidebar}
@@ -330,44 +364,38 @@ export default function Header({ onToggleSidebar, onInterrupt, onResumeSession }
         >
           ☰
         </button>
-        <div className="flex flex-1 items-center gap-2 min-w-0">
+
+        {/* Connection dot + brand */}
+        <div className="flex items-center gap-1.5">
           <span className={`inline-block h-2 w-2 rounded-full ${dotColor}`} />
-          <span className="truncate text-sm font-semibold tracking-wide">
-            OpenHarness
-          </span>
-          <SessionsDropdown onResumeSession={onResumeSession} />
-          <PermissionModeChip />
-          {/* Model badge (priority display) */}
-          {appState?.model && (
-            <span className="shrink-0 text-xs text-[var(--text-dim)]">
-              · {appState.model}
-            </span>
-          )}
-          {/* Provider badge (visible on tablet+) */}
-          {appState?.provider && (
-            <span className="hidden shrink-0 text-xs text-[var(--text-dim)] md:inline">
-              · {appState.provider}
-            </span>
-          )}
-          {/* Path with left truncation + tooltip (desktop only) */}
-          {fullPath && (
-            <span
-              className="hidden truncate text-xs text-[var(--text-dim)] lg:inline"
-              title={fullPath}
-            >
-              · {truncatedPath}
-            </span>
-          )}
+          <span className="truncate text-sm font-semibold tracking-wide">OpenHarness</span>
         </div>
+
+        {/* Sessions dropdown */}
+        <SessionsDropdown onResumeSession={onResumeSession} />
+
+        {/* Permission mode chip */}
+        <PermissionModeChip />
+
+        {/* Runtime summary: model, provider, jobs, busy */}
+        <RuntimeSummary />
+
+        <div className="flex-1" />
+
+        {/* Busy: primary interrupt action with running count label */}
         {busy && (
           <button
             onClick={onInterrupt}
-            className="rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/20"
+            aria-label={runningCount > 0 ? `Stop ${runningCount} running job(s)` : "Stop current task"}
+            className="flex items-center gap-1.5 rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/20"
           >
-            Stop
+            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" />
+            <span>Stop{runningCount > 0 ? ` (${runningCount})` : ""}</span>
           </button>
         )}
       </div>
+
+      {/* Error banner */}
       {errorBanner && (
         <div className="bg-rose-500/15 px-3 py-1 text-xs text-rose-300 sm:px-5">
           {errorBanner}
