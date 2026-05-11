@@ -66,15 +66,14 @@ export function ModelPicker() {
     };
   }, [open]);
 
-  // Flatten + filter models
+  // Only allow models for the active provider; PATCH /api/modes updates model only.
   const query = search.trim().toLowerCase();
-  const flatItems = Object.entries(models).flatMap(([provider, items]) =>
-    items.map((m) => ({ ...m, provider })),
-  );
+  const activeProvider = appState?.provider ?? "";
+  const providerItems = activeProvider ? models[activeProvider] ?? [] : [];
   const filtered = query
-    ? flatItems.filter((m) => `${m.id} ${m.label} ${m.provider}`.toLowerCase().includes(query))
-    : flatItems;
-  const totalModels = Object.values(models).flat().length;
+    ? providerItems.filter((m) => `${m.id} ${m.label}`.toLowerCase().includes(query))
+    : providerItems;
+  const totalModels = providerItems.length;
 
   const selectModel = useCallback(
     async (modelId: string) => {
@@ -146,7 +145,7 @@ export function ModelPicker() {
                 const label = m.label && m.label !== m.id ? `${m.label} (${m.id})` : m.id;
                 return (
                   <button
-                    key={`${m.provider}:${m.id}`}
+                    key={m.id}
                     type="button"
                     role="option"
                     aria-selected={active}

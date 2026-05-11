@@ -97,12 +97,14 @@ def modes(
 
 
 def _apply_to_app_states(manager: SessionManager, updates: dict[str, object]) -> AppState | None:
-    """Apply updates to every active session's AppStateStore; return one snapshot."""
+    """Apply updates to every active session bundle; return one snapshot."""
     snapshot: AppState | None = None
     for entry in manager.entries():
         bundle = getattr(entry.host, "_bundle", None)
         if bundle is None:
             continue
+        if "model" in updates:
+            bundle.engine.set_model(str(updates["model"]))
         snapshot = bundle.app_state.set(**updates)
     return snapshot
 
