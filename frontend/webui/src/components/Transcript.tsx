@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import { useSession, type DisplayItem } from "../store/session";
+import ToolCard from "./ToolCard";
 
 interface TranscriptProps {
   hideWelcome?: boolean;
@@ -41,35 +42,15 @@ function Bubble({ item }: { item: DisplayItem }) {
   const { role, text } = item;
   const tone = roleStyle(role);
 
-  if (role === "tool") {
+  if (role === "tool" || role === "tool_result") {
     return (
-      <div className="rounded-lg border border-amber-400/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
-        <div className="mb-1 font-mono text-[11px] uppercase tracking-wider text-amber-300/80">
-          tool · {item.tool_name || "?"}
-        </div>
-        <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed">
-          {prettyToolInput(item.tool_input) || text}
-        </pre>
-      </div>
-    );
-  }
-
-  if (role === "tool_result") {
-    return (
-      <div
-        className={`rounded-lg border px-3 py-2 text-xs ${
-          item.is_error
-            ? "border-rose-500/40 bg-rose-500/5 text-rose-200"
-            : "border-emerald-500/30 bg-emerald-500/5 text-emerald-200"
-        }`}
-      >
-        <div className="mb-1 font-mono text-[11px] uppercase tracking-wider opacity-70">
-          {item.is_error ? "tool error" : "tool result"} · {item.tool_name || "?"}
-        </div>
-        <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed">
-          {truncate(text, 4000)}
-        </pre>
-      </div>
+      <ToolCard
+        role={role}
+        tool_name={item.tool_name}
+        is_error={item.is_error}
+        text={text}
+        tool_input={item.tool_input}
+      />
     );
   }
 
@@ -108,18 +89,4 @@ function roleStyle(role: DisplayItem["role"]): string {
     default:
       return "border-[var(--border)] bg-[var(--panel)] text-[var(--text-dim)]";
   }
-}
-
-function prettyToolInput(input: Record<string, unknown> | null | undefined): string {
-  if (!input) return "";
-  try {
-    return JSON.stringify(input, null, 2);
-  } catch {
-    return String(input);
-  }
-}
-
-function truncate(s: string, n: number): string {
-  if (s.length <= n) return s;
-  return s.slice(0, n) + `\n… [+${s.length - n} chars truncated]`;
 }
