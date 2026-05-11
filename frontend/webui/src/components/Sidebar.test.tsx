@@ -21,14 +21,23 @@ function mockLocalStorage() {
 }
 
 function stubFetchEmpty() {
-  const fetchMock = vi.fn(() =>
-    Promise.resolve({
+  const fetchMock = vi.fn((url: string) => {
+    // Return valid projects response for listProjects calls
+    if (typeof url === "string" && url.includes("/projects")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: () => Promise.resolve({ projects: [], active_project_id: null }),
+      });
+    }
+    return Promise.resolve({
       ok: true,
       status: 200,
       headers: { get: () => null },
       json: () => Promise.resolve({ jobs: [] }),
-    }),
-  );
+    });
+  });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
@@ -122,5 +131,80 @@ describe("Sidebar", () => {
     const desktop = screen.getByTestId("sidebar-desktop");
     expect(desktop.className).toContain("hidden");
     expect(desktop.className).not.toContain("sm:block");
+  });
+
+  it("collapses and expands the System Status section", () => {
+    renderSidebar({ open: false, collapsed: false });
+
+    // Expand status section is visible by default
+    expect(screen.getByText("Access")).toBeTruthy();
+
+    // Collapse
+    fireEvent.click(screen.getByRole("button", { name: /collapse system status section/i }));
+    expect(screen.queryByText("Access")).toBeNull();
+    expect(screen.getByRole("button", { name: /expand system status section/i })).toBeTruthy();
+    expect(window.localStorage.getItem("oh:sidebar:status-collapsed")).toBe("true");
+
+    // Expand
+    fireEvent.click(screen.getByRole("button", { name: /expand system status section/i }));
+    expect(screen.getByText("Access")).toBeTruthy();
+    expect(window.localStorage.getItem("oh:sidebar:status-collapsed")).toBe("false");
+  });
+
+  it("shows top 3 jobs with View all link when more than 3 jobs exist", () => {
+    const manyTasks: Array<{ id: string; status: string; type: string; description: string; metadata: Record<string, string> }> = Array.from({ length: 7 }, (_, i) => ({
+      id: `task-${i}`,
+      status: "running",
+      type: `Task ${i}`,
+      description: `Description for task ${i}`,
+      metadata: {},
+    }));
+    useSession.setState({ tasks: manyTasks });
+
+    renderSidebar({ open: false, collapsed: false });
+
+    // Should show only 3 jobs
+    const jobBadges = screen.getAllByText("running");
+    expect(jobBadges).toHaveLength(3);
+
+    // Should show View all link
+    expect(screen.getByRole("link", { name: /view all \(7\)/i })).toBeTruthy();
+  });
+
+  it("shows all jobs without View all link when 3 or fewer jobs exist", () => {
+    const fewTasks: Array<{ id: string; status: string; type: string; description: string; metadata: Record<string, string> }> = [
+      { id: "task-1", status: "done", type: "Task 1", description: "", metadata: {} },
+      { id: "task-2", status: "running", type: "Task 2", description: "", metadata: {} },
+      { id: "task-3", status: "failed", type: "Task 3", description: "", metadata: {} },
+    ];
+    useSession.setState({ tasks: fewTasks });
+
+    renderSidebar({ open: false, collapsed: false });
+
+    const jobBadges = screen.getAllByText(/done|running|failed/);
+    expect(jobBadges).toHaveLength(3);
+    expect(screen.queryByRole("link", { name: /view all/i })).toBeNull();
+  });
+
+  it("highlights active route in primary navigation", async () => {
+    useSession.setState({ tasks: [], appState: null });
+
+    render(
+      <MemoryRouter initialEntries={["/autopilot"]}>
+        <Sidebar open={false} collapsed={false} onClose={() => {}} />
+      </MemoryRouter>,
+    );
+
+    // Navigation links should be visible immediately
+    const autopilotLink = await screen.findByRole("link", { name: /autopilot/i });
+    expect(autopilotLink.className).toContain("bg-[var(--accent-bg)]");
+  });
+
+  it("restores status collapsed state from localStorage", () => {
+    window.localStorage.setItem("oh:sidebar:status-collapsed", "true");
+    renderSidebar({ open: false, collapsed: false });
+
+    expect(screen.queryByText("Access")).toBeNull();
+    expect(screen.getByRole("button", { name: /expand system status section/i })).toBeTruthy();
   });
 });
