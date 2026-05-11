@@ -91,6 +91,24 @@ describe("ProjectsPage rendering", () => {
     expect(cliCard?.textContent).toContain("active");
   });
 
+  it("pinned the active project first in the grid", async () => {
+    mockFetch();
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+    const headings = screen.getAllByRole("heading", { level: 2 });
+    // CLI Tool is the active project and should appear first (pinned)
+    expect(headings[0].textContent).toBe("CLI Tool");
+    expect(headings[1].textContent).toBe("My App");
+  });
+
+  it("shows pin emoji on active project card", async () => {
+    mockFetch();
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+    const cliCard = projectHeading("CLI Tool")!.closest(".group");
+    expect(cliCard?.textContent).toContain("📌");
+  });
+
   it("shows New Project CTA in empty state", async () => {
     mockFetch({ projects: [], active_project_id: null });
     render(<ProjectsPage />);
@@ -151,7 +169,8 @@ describe("ProjectsPage path truncation & copy", () => {
     });
     render(<ProjectsPage />);
     await waitForProjects(1);
-    expect(screen.getByTitle("/tmp/abc")).toBeTruthy();
+    // Both the CopyButton and the <p> carry title={path} — ensure at least one is present
+    expect(screen.getAllByTitle("/tmp/abc").length).toBeGreaterThan(0);
   });
 
   it("has a copy path button next to each project path", async () => {
@@ -169,7 +188,7 @@ describe("ProjectsPage path truncation & copy", () => {
 
     render(<ProjectsPage />);
     await waitForProjects(3);
-    const copyBtn = screen.getByRole("button", { name: /Copy path \/Users\/hodtien\/projects\/my-app/ });
+    const copyBtn = screen.getByRole("button", { name: /Copy path \/workspace\/my-app/ });
     fireEvent.click(copyBtn);
 
     await waitFor(() => {
@@ -287,7 +306,7 @@ describe("shortenPath utility", () => {
     mockFetch({ projects: [makeProject({ id: "p1", name: "X", path: "/tmp/x" })], active_project_id: null });
     render(<ProjectsPage />);
     await waitForProjects(1);
-    expect(screen.getByTitle("/tmp/x")).toBeTruthy();
+    expect(screen.getAllByTitle("/tmp/x").length).toBeGreaterThan(0);
   });
 
   it("truncates long paths", async () => {
@@ -295,7 +314,10 @@ describe("shortenPath utility", () => {
     mockFetch({ projects: [makeProject({ id: "p1", name: "Y", path: longPath })], active_project_id: null });
     render(<ProjectsPage />);
     await waitForProjects(1);
-    const pathEl = screen.getByTitle(longPath);
-    expect(pathEl.textContent).toContain("…");
+    // The <p> element with truncated text also carries title=longPath
+    const pathEls = screen.getAllByTitle(longPath);
+    const pathPara = pathEls.find((el) => el.tagName === "P");
+    expect(pathPara).toBeTruthy();
+    expect(pathPara!.textContent).toContain("…");
   });
 });

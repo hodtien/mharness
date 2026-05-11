@@ -33,7 +33,7 @@ function CopyButton({ text, className = "" }: { text: string; className?: string
           () => toast.error("Copy failed.")
         );
       }}
-      title={`Copy: ${text}`}
+      title={text}
       className={`shrink-0 rounded border border-[var(--border)] bg-[var(--panel-2)] p-1 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)] ${className}`}
     >
       📋
@@ -192,9 +192,16 @@ export default function ProjectsPage() {
 
   // Client-side search filter
   const lowerQ = searchQuery.trim().toLowerCase();
-  const filteredProjects = data?.projects.filter((p) =>
+  const projects = data?.projects ?? [];
+  const filteredProjects = projects.filter((p) =>
     lowerQ ? p.name.toLowerCase().includes(lowerQ) || p.path.toLowerCase().includes(lowerQ) : true
-  ) ?? [];
+  );
+  const activeProjectId = data?.active_project_id ?? null;
+  const orderedProjects = [...filteredProjects].sort((a, b) => {
+    if (a.id === activeProjectId) return -1;
+    if (b.id === activeProjectId) return 1;
+    return 0;
+  });
 
   if (loading) {
     return (
@@ -241,164 +248,166 @@ export default function ProjectsPage() {
 
       <div className="flex flex-1 flex-col overflow-y-auto p-6">
         <div className="w-full max-w-5xl space-y-6">
-        {error && (
-          <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
-            {error}
-          </div>
-        )}
+          {error && (
+            <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
+              {error}
+            </div>
+          )}
 
-        {data?.projects.length === 0 && (
-          <div className="flex flex-col items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-10 text-center">
-            <p className="text-sm text-[var(--text-dim)]">No projects yet.</p>
-            <button
-              type="button"
-              onClick={() => setShowNewModal(true)}
-              className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400"
-            >
-              + New Project
-            </button>
-          </div>
-        )}
-
-        {/* Search bar */}
-        {!!data?.projects.length && (
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Search by name or path…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
-            />
-            {searchQuery && (
-              <span className="shrink-0 text-xs text-[var(--text-dim)]">
-                {filteredProjects.length} / {data.projects.length}
-              </span>
-            )}
-          </div>
-        )}
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          {filteredProjects.map((project) => {
-            const isEditing = editing === project.id;
-            const isActive = data?.active_project_id === project.id;
-            const isDeleting = deleting === project.id;
-            const isActivating = activating === project.id;
-            const displayPath = shortenPath(project.path);
-            return (
-              <div
-                key={project.id}
-                className={`group rounded-xl border bg-[var(--panel)] shadow-lg transition ${
-                  isActive
-                    ? "order-first border-cyan-400/50 shadow-cyan-400/10 ring-1 ring-cyan-400/20"
-                    : "border-[var(--border)]"
-                }`}
+          {projects.length === 0 && (
+            <div className="flex flex-col items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-10 text-center">
+              <p className="text-sm text-[var(--text-dim)]">No projects yet.</p>
+              <button
+                type="button"
+                onClick={() => setShowNewModal(true)}
+                className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400"
               >
-                <div className="p-5">
-                  {/* Header row */}
-                  {!isEditing ? (
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <h2 className="truncate text-base font-semibold text-[var(--text)]">
-                            {project.name}
-                          </h2>
-                          {isActive && (
-                            <span className="shrink-0 rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-[11px] font-medium text-cyan-200">
-                              active
-                            </span>
+                + New Project
+              </button>
+            </div>
+          )}
+
+          {!!projects.length && (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Search by name or path…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
+              />
+              {searchQuery && (
+                <span className="shrink-0 text-xs text-[var(--text-dim)]">
+                  {filteredProjects.length} / {projects.length}
+                </span>
+              )}
+            </div>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {orderedProjects.map((project) => {
+              const isEditing = editing === project.id;
+              const isActive = activeProjectId === project.id;
+              const isDeleting = deleting === project.id;
+              const isActivating = activating === project.id;
+              const displayPath = shortenPath(project.path);
+              return (
+                <div
+                  key={project.id}
+                  className={`group rounded-xl border bg-[var(--panel)] shadow-lg transition ${
+                    isActive
+                      ? "border-cyan-400/50 shadow-cyan-400/10 ring-1 ring-cyan-400/20"
+                      : "border-[var(--border)]"
+                  }`}
+                >
+                  <div className="p-5">
+                    {/* Header row */}
+                    {!isEditing ? (
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            {isActive && (
+                              <span aria-hidden className="shrink-0 text-[10px] text-cyan-400">📌</span>
+                            )}
+                            <h2 className="truncate text-base font-semibold text-[var(--text)]">
+                              {project.name}
+                            </h2>
+                            {isActive && (
+                              <span className="shrink-0 rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-[11px] font-medium text-cyan-200">
+                                active
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex items-center gap-1">
+                            <CopyButton text={project.path} />
+                            <p
+                              className="truncate font-mono text-xs text-[var(--text-dim)]"
+                              title={project.path}
+                            >
+                              {displayPath}
+                            </p>
+                          </div>
+                          {project.description && (
+                            <p className="mt-1 text-xs text-[var(--text-dim)]">
+                              {project.description}
+                            </p>
                           )}
                         </div>
-                        <div className="mt-1 flex items-center gap-1">
-                          <CopyButton text={project.path} />
-                          <p
-                            className="truncate font-mono text-xs text-[var(--text-dim)]"
-                            title={project.path}
-                          >
-                            {displayPath}
-                          </p>
-                        </div>
-                        {project.description && (
-                          <p className="mt-1 text-xs text-[var(--text-dim)]">
-                            {project.description}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 flex-col gap-1.5">
-                        {!isActive && (
+                        <div className="flex shrink-0 flex-col gap-1.5">
+                          {!isActive && (
+                            <button
+                              type="button"
+                              onClick={() => handleActivate(project.id)}
+                              disabled={isActivating}
+                              className="shrink-0 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-300 hover:border-cyan-400/60 hover:bg-cyan-500/20 disabled:opacity-60"
+                            >
+                              {isActivating ? "Activating…" : "Activate"}
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => handleActivate(project.id)}
-                            disabled={isActivating}
-                            className="shrink-0 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-300 hover:border-cyan-400/60 hover:bg-cyan-500/20 disabled:opacity-60"
+                            onClick={() => startEdit(project)}
+                            className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)]"
                           >
-                            {isActivating ? "Activating…" : "Activate"}
+                            Edit
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => startEdit(project)}
-                          className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)]"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Delete project ${project.name}`}
-                          onClick={() => { setConfirmDeleteId(project.id); setConfirmDeleteName(project.name); }}
-                          disabled={isDeleting}
-                          className="shrink-0 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-300 hover:border-red-400/60 hover:bg-red-500/20 disabled:opacity-60"
-                        >
-                          {isDeleting ? "Deleting…" : "Delete"}
-                        </button>
+                          <button
+                            type="button"
+                            aria-label={`Delete project ${project.name}`}
+                            onClick={() => { setConfirmDeleteId(project.id); setConfirmDeleteName(project.name); }}
+                            disabled={isDeleting}
+                            className="shrink-0 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-300 hover:border-red-400/60 hover:bg-red-500/20 disabled:opacity-60"
+                          >
+                            {isDeleting ? "Deleting…" : "Delete"}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-[var(--text-dim)]">Name</span>
-                        <input
-                          type="text"
-                          value={draft.name}
-                          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-[var(--text-dim)]">Description</span>
-                        <textarea
-                          value={draft.description}
-                          onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-                          rows={2}
-                          className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
-                        />
-                      </label>
-                      <div className="flex justify-end gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={cancelEdit}
-                          disabled={saving}
-                          className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text-dim)] hover:border-[var(--border)] hover:text-[var(--text)] disabled:opacity-60"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={saveEdit}
-                          disabled={saving}
-                          className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-60"
-                        >
-                          {saving ? "Saving…" : "Save"}
-                        </button>
+                    ) : (
+                      <div className="space-y-3">
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-medium text-[var(--text-dim)]">Name</span>
+                          <input
+                            type="text"
+                            value={draft.name}
+                            onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-medium text-[var(--text-dim)]">Description</span>
+                          <textarea
+                            value={draft.description}
+                            onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+                            rows={2}
+                            className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
+                          />
+                        </label>
+                        <div className="flex justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            disabled={saving}
+                            className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text-dim)] hover:border-[var(--border)] hover:text-[var(--text)] disabled:opacity-60"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={saveEdit}
+                            disabled={saving}
+                            className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-60"
+                          >
+                            {saving ? "Saving…" : "Save"}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
       </div>
 
       {/* New Project Modal */}
