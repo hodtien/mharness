@@ -5,6 +5,7 @@ import ProjectSelector from "./ProjectSelector";
 import { useSession } from "../store/session";
 
 const SETTINGS_COLLAPSED_KEY = "oh:sidebar:settings-collapsed";
+const STATUS_COLLAPSED_KEY = "oh:sidebar:status-collapsed";
 
 interface Props {
   open: boolean;
@@ -28,12 +29,29 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
       return false;
     }
   });
+  const [statusCollapsed, setStatusCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(STATUS_COLLAPSED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
 
   const toggleSettings = () => {
     const next = !settingsCollapsed;
     setSettingsCollapsed(next);
     try {
       localStorage.setItem(SETTINGS_COLLAPSED_KEY, String(next));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const toggleStatus = () => {
+    const next = !statusCollapsed;
+    setStatusCollapsed(next);
+    try {
+      localStorage.setItem(STATUS_COLLAPSED_KEY, String(next));
     } catch {
       // ignore storage errors
     }
@@ -134,19 +152,35 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
         )}
       </Section>
 
-      <Section title="Status">
-        <div className="sidebar-status-group">
-          <StatusField label="Model" value={appState?.model} />
-          <StatusField label="Provider" value={appState?.provider} />
-          <StatusField label="Permission" value={planMode || appState?.permission_mode} tone={planMode === "full_auto" ? "danger" : "success"} />
-          <StatusField label="Effort" value={appState?.effort} />
-        </div>
+      <Section
+        title={
+          <button
+            onClick={toggleStatus}
+            className="flex w-full items-center justify-between gap-2 text-left focus:outline-none focus:ring-1 focus:ring-[var(--border)]"
+            aria-expanded={!statusCollapsed}
+            aria-label={statusCollapsed ? "Expand System Status section" : "Collapse System Status section"}
+          >
+            <span>System Status</span>
+            <span aria-hidden="true" className="text-[10px]">{statusCollapsed ? "▼" : "▲"}</span>
+          </button>
+        }
+      >
+        {!statusCollapsed && (
+          <div className="sidebar-status-section">
+            <div className="sidebar-status-group">
+              <StatusField label="Model" value={appState?.model} />
+              <StatusField label="Provider" value={appState?.provider} />
+              <StatusField label="Permission" value={planMode || appState?.permission_mode} tone={planMode === "full_auto" ? "danger" : "success"} />
+              <StatusField label="Effort" value={appState?.effort} />
+            </div>
 
-        <div className="sidebar-status-subsection">
-          <div className="sidebar-section-title">Access</div>
-          <StatusField label="Auth" value={appState?.auth_status} tone={appState?.auth_status === "ok" ? "success" : "danger"} />
-          <StatusField label="MCP" value={`${appState?.mcp_connected ?? 0} ok / ${appState?.mcp_failed ?? 0} fail`} tone={(appState?.mcp_failed ?? 0) > 0 ? "danger" : "success"} />
-        </div>
+            <div className="sidebar-status-subsection">
+              <div className="sidebar-section-title">Access</div>
+              <StatusField label="Auth" value={appState?.auth_status} tone={appState?.auth_status === "ok" ? "success" : "danger"} />
+              <StatusField label="MCP" value={`${appState?.mcp_connected ?? 0} ok / ${appState?.mcp_failed ?? 0} fail`} tone={(appState?.mcp_failed ?? 0) > 0 ? "danger" : "success"} />
+            </div>
+          </div>
+        )}
       </Section>
 
       {compact && (
@@ -203,7 +237,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
           {tasks.length === 0 && (
             <div className="text-xs text-[var(--text-dim)]">No background jobs.</div>
           )}
-          {tasks.slice(0, 12).map((t) => (
+          {tasks.slice(0, 3).map((t) => (
             <div
               key={t.id}
               className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1.5 text-[11px]"
@@ -215,6 +249,15 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
               <div className="truncate text-[12px]">{t.description || t.type}</div>
             </div>
           ))}
+          {tasks.length > 3 && (
+            <NavLink
+              to="/tasks"
+              className="text-xs text-[var(--accent)] hover:underline"
+              onClick={onClose}
+            >
+              View all ({tasks.length})
+            </NavLink>
+          )}
         </Section>
       </div>
 
