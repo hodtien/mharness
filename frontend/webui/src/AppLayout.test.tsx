@@ -67,7 +67,7 @@ function setMatchMedia(matches: boolean) {
 function renderLayout() {
   return render(
     <MemoryRouter>
-      <AppLayout onInterrupt={() => {}} onResumeSession={async () => {}} />
+      <AppLayout onInterrupt={() => {}} />
     </MemoryRouter>,
   );
 }
