@@ -80,7 +80,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
             <NavLink
               to="/settings/modes"
               className={({ isActive }) =>
-                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)]"}`
+                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
               }
               onClick={onClose}
             >
@@ -89,7 +89,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
             <NavLink
               to="/settings/provider"
               className={({ isActive }) =>
-                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)]"}`
+                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
               }
               onClick={onClose}
             >
@@ -98,7 +98,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
             <NavLink
               to="/settings/models"
               className={({ isActive }) =>
-                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)]"}`
+                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
               }
               onClick={onClose}
             >
@@ -107,7 +107,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
             <NavLink
               to="/settings/agents"
               className={({ isActive }) =>
-                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)]"}`
+                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
               }
               onClick={onClose}
             >
@@ -116,7 +116,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
             <NavLink
               to="/settings/cron"
               className={({ isActive }) =>
-                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)]"}`
+                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
               }
               onClick={onClose}
             >
@@ -151,7 +151,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
 
       {compact && (
         <Section title="Compaction">
-          <div className="rounded-md border border-amber-400/30 bg-amber-500/5 px-2 py-1.5 text-[11px] text-amber-200">
+          <div className="rounded-md border border-[var(--status-pending-border)] bg-[var(--status-pending-bg)] px-2 py-1.5 text-[11px] text-[var(--status-pending-text)]">
             <div className="flex justify-between">
               <span className="font-medium">{compact.phase}</span>
               {compact.attempt ? (
@@ -302,7 +302,7 @@ function NavItem({
       className={({ isActive }) =>
         `sidebar-nav-link flex items-center gap-1.5 rounded-md border px-2 text-[13px] transition ${
           isActive
-            ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+            ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]"
             : "border-transparent text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
         }`
       }

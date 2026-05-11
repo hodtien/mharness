@@ -28,11 +28,11 @@ export interface TaskRecord {
 // ─── Status colors ────────────────────────────────────────────────────────────
 
 const STATUS_COLOR: Record<TaskStatus, string> = {
-  pending: "bg-yellow-500/20 text-yellow-300",
-  running: "bg-blue-500/20 text-blue-300",
-  completed: "bg-emerald-500/20 text-emerald-300",
-  failed: "bg-red-500/20 text-red-300",
-  killed: "bg-gray-500/20 text-gray-400",
+  pending: "bg-[var(--status-pending-bg)] text-[var(--status-pending-text)] border-[var(--status-pending-border)]",
+  running: "bg-[var(--status-running-bg)] text-[var(--status-running-text)] border-[var(--status-running-border)]",
+  completed: "bg-[var(--status-done-bg)] text-[var(--status-done-text)] border-[var(--status-done-border)]",
+  failed: "bg-[var(--status-failed-bg)] text-[var(--status-failed-text)] border-[var(--status-failed-border)]",
+  killed: "bg-[var(--status-rejected-bg)] text-[var(--status-rejected-text)] border-[var(--status-rejected-border)]",
 };
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -83,7 +83,7 @@ function ReviewBadge({
     return (
       <button
         onClick={onClick}
-        className="rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/25 cursor-pointer"
+        className="rounded-md border border-[var(--status-done-border)] bg-[var(--status-done-bg)] px-2 py-0.5 text-xs font-medium text-[var(--status-done-text)] transition hover:brightness-125 cursor-pointer"
         aria-label="Reviewed — view review"
       >
         ✅ Reviewed
@@ -94,7 +94,7 @@ function ReviewBadge({
     return (
       <button
         onClick={onClick}
-        className="rounded-md border border-yellow-500/40 bg-yellow-500/15 px-2 py-0.5 text-xs font-medium text-yellow-300 transition hover:bg-yellow-500/25 cursor-pointer"
+        className="rounded-md border border-[var(--status-pending-border)] bg-[var(--status-pending-bg)] px-2 py-0.5 text-xs font-medium text-[var(--status-pending-text)] transition hover:brightness-125 cursor-pointer"
         aria-label="Reviewing — view review"
       >
         ⏳ Reviewing
