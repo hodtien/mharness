@@ -362,58 +362,79 @@ test.describe("1. Navigation & Page Headers", () => {
 test.describe("2. Chat Tool Card Collapse/Expand", () => {
   test.beforeEach(async ({ page }) => {
     await stubAppShell(page);
+    await page.addInitScript(({ readyEvent }) => {
+      class MockWebSocket {
+        static CONNECTING = 0;
+        static OPEN = 1;
+        static CLOSING = 2;
+        static CLOSED = 3;
+        url: string;
+        readyState = MockWebSocket.CONNECTING;
+        onopen: ((event: Event) => void) | null = null;
+        onmessage: ((event: MessageEvent) => void) | null = null;
+        onclose: ((event: CloseEvent) => void) | null = null;
+        onerror: ((event: Event) => void) | null = null;
+        constructor(url: string) {
+          this.url = url;
+          setTimeout(() => {
+            this.readyState = MockWebSocket.OPEN;
+            this.onopen?.(new Event("open"));
+            this.onmessage?.(new MessageEvent("message", { data: readyEvent }));
+            this.onmessage?.(
+              new MessageEvent("message", {
+                data: JSON.stringify({
+                  type: "tool_completed",
+                  tool_name: "bash_ide",
+                  output: "x".repeat(300),
+                  is_error: false,
+                }),
+              }),
+            );
+          }, 0);
+        }
+        send() {}
+        close() {
+          this.readyState = MockWebSocket.CLOSED;
+          this.onclose?.(new CloseEvent("close", { code: 1000 }));
+        }
+        addEventListener() {}
+        removeEventListener() {}
+        dispatchEvent() { return true; }
+      }
+      Object.defineProperty(window, "WebSocket", {
+        configurable: true,
+        writable: true,
+        value: MockWebSocket,
+      });
+    }, { readyEvent: READY_EVENT });
   });
 
-  test("tool card with medium content collapses and expands on click", async ({ page }) => {
-    // We inject a tool card via sessionStorage so ToolCard renders without WS.
-    await page.addInitScript(() => {
-      // Override the session store initialization to pre-populate a tool transcript item.
-      (window as any).__e2e_inject_transcript = [
-        {
-          id: "t1",
-          role: "tool",
-          text: "a".repeat(300), // medium size (>200 chars, <=1500)
-          tool_name: "bash_ide",
-          tool_input: { command: "ls -la" },
-        },
-      ];
-    });
-
-    // Navigate and wait for the shell to render
+  test("tool result card expands to show output on click", async ({ page }) => {
     await page.goto("/chat");
     await expect(page.locator('[aria-label="Primary"]')).toBeVisible({ timeout: 10_000 });
 
-    // If there are no tool cards (session store can't be seeded in E2E), just verify
-    // the ToolCard component structure as found in the page.  In a real running
-    // app, WS events would populate the transcript.
-    const toolCardHeader = page.locator("button[class*='cursor-pointer']").first();
-    const count = await toolCardHeader.count();
-    if (count === 0) {
-      // No cards rendered without WS — acceptable fallback
-      return;
-    }
+    const toggle = page.locator("button:has-text('result · bash_ide')").first();
+    await expect(toggle).toBeVisible({ timeout: 10_000 });
+    await expect(toggle.locator("text=▶")).toBeVisible();
 
-    // Click to expand
-    await toolCardHeader.click();
-    // Some content (pre or div) should appear inside the parent card
-    const card = toolCardHeader.locator("xpath=ancestor::div[contains(@class,'rounded-lg')][1]");
-    await expect(card.locator("pre").first()).toBeVisible({ timeout: 5_000 });
+    await toggle.click();
+    await expect(toggle.locator("text=▼")).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator("text=Output").first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator("pre").filter({ hasText: /^x{50,}/ }).first()).toBeVisible({ timeout: 5_000 });
   });
 
-  test("ToolCard expand/collapse toggle button text changes state", async ({ page }) => {
+  test("tool result card collapses again after a second click", async ({ page }) => {
     await page.goto("/chat");
     await expect(page.locator('[aria-label="Primary"]')).toBeVisible({ timeout: 10_000 });
 
-    // Look for any card that has a collapse indicator (▼ / ▶)
-    const collapseHints = page.locator("text=▶");
-    const hintCount = await collapseHints.count();
-    if (hintCount === 0) return; // No collapsed cards rendered
+    const toggle = page.locator("button:has-text('result · bash_ide')").first();
+    await expect(toggle).toBeVisible({ timeout: 10_000 });
 
-    // Click the parent button to expand
-    const btn = page.locator("button:has-text('▶')").first();
-    await btn.click();
-    // Now the indicator should flip to ▼
-    await expect(page.locator("button:has-text('▼')").first()).toBeVisible({ timeout: 3_000 });
+    await toggle.click();
+    await expect(toggle.locator("text=▼")).toBeVisible({ timeout: 5_000 });
+    await toggle.click();
+    await expect(toggle.locator("text=▶")).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator("text=Output")).toHaveCount(0);
   });
 });
 
@@ -517,13 +538,14 @@ test.describe("4. Semantic Log Feed Filtering", () => {
 
     // Click the Logs tab
     const logsTab = page.locator('[role="tab"]:has-text("Logs")');
-    if (await logsTab.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await logsTab.click();
-      const pills = page.locator('[aria-label="Filter log segments"] button');
-      await expect(pills.first()).toBeVisible({ timeout: 5_000 });
-      const count = await pills.count();
-      expect(count).toBeGreaterThan(0);
-    }
+    await expect(logsTab).toBeVisible({ timeout: 5_000 });
+    await logsTab.click();
+
+    // Filter pills must be present — they are rendered from LOG_FILTERS without SSE data.
+    const pills = page.locator('[aria-label="Filter log segments"] button');
+    await expect(pills.first()).toBeVisible({ timeout: 5_000 });
+    const count = await pills.count();
+    expect(count).toBeGreaterThan(0);
   });
 
   test("log filter pills toggle aria-pressed attribute", async ({ page }) => {
@@ -532,21 +554,20 @@ test.describe("4. Semantic Log Feed Filtering", () => {
 
     await page.locator("text=Fix auth bug").first().click();
     const logsTab = page.locator('[role="tab"]:has-text("Logs")');
-    if (await logsTab.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await logsTab.click();
+    await expect(logsTab).toBeVisible({ timeout: 5_000 });
+    await logsTab.click();
 
-      const pills = page.locator('[aria-label="Filter log segments"] button');
-      const count = await pills.count();
-      if (count < 2) return;
+    const pills = page.locator('[aria-label="Filter log segments"] button');
+    const count = await pills.count();
+    expect(count).toBeGreaterThanOrEqual(2);
 
-      // Click a different pill (not first)
-      const secondPill = pills.nth(1);
-      await secondPill.click();
-      await expect(secondPill).toHaveAttribute("aria-pressed", "true");
+    // Click a different pill (not first)
+    const secondPill = pills.nth(1);
+    await secondPill.click();
+    await expect(secondPill).toHaveAttribute("aria-pressed", "true");
 
-      // First pill should no longer be active
-      await expect(pills.nth(0)).toHaveAttribute("aria-pressed", "false");
-    }
+    // First pill should no longer be active
+    await expect(pills.nth(0)).toHaveAttribute("aria-pressed", "false");
   });
 });
 

@@ -19,3 +19,6 @@ export default defineConfig({
     },
   ],
 });
+
+// This suite targets the already-running WebUI served at http://127.0.0.1:8765.
+// API traffic is stubbed in-spec, so verification depends on the app host being up.
