@@ -203,3 +203,73 @@ def test_patch_modes_vim_enabled_false(tmp_path) -> None:
 
     settings = load_settings()
     assert settings.vim_mode is False
+
+
+def test_patch_modes_model_updates_state(tmp_path) -> None:
+    """PATCH model= updates the returned state with the new model."""
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/modes",
+        json={"model": "claude-opus-4-6"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    assert response.json()["model"] == "claude-opus-4-6"
+
+
+def test_patch_modes_model_persists_to_settings(tmp_path) -> None:
+    """PATCH model=... persists to settings.json and survives a reload."""
+    from openharness.config.settings import load_settings
+
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/modes",
+        json={"model": "gpt-5.4"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+
+    # Persisted to settings
+    settings = load_settings()
+    assert settings.model == "gpt-5.4"
+
+    # Subsequent GET reflects the persisted value
+    get_response = client.get("/api/modes", headers={"Authorization": "Bearer test-token"})
+    assert get_response.json()["model"] == "gpt-5.4"
+
+
+def test_patch_modes_model_plus_other_fields(tmp_path) -> None:
+    """PATCH model= can be combined with other mode fields in one request."""
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/modes",
+        json={
+            "model": "sonnet",
+            "effort": "high",
+            "fast_mode": True,
+        },
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model"] == "sonnet"
+    assert body["effort"] == "high"
+    assert body["fast_mode"] is True
+
+
+def test_patch_modes_model_returns_updated_model(tmp_path) -> None:
+    """PATCH response includes the updated model value."""
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/modes",
+        json={"model": "haiku"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    # The response body must contain the model field
+    assert "model" in response.json()
+    assert response.json()["model"] == "haiku"
