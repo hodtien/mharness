@@ -4,6 +4,7 @@ import LoadingSkeleton from "../components/LoadingSkeleton";
 import ErrorBanner from "../components/ErrorBanner";
 import { toast } from "../store/toast";
 import { FeedbackBadge, useFormFeedback } from "../hooks/useSettingsForm";
+import PageHeader from "../components/PageHeader";
 
 type PermissionMode = "default" | "plan" | "full_auto";
 type Effort = "low" | "medium" | "high";
@@ -108,14 +109,24 @@ export default function ModesSettingsPage() {
   }
 
   return (
-    <div className="flex flex-1 overflow-y-auto p-6">
-      <div className="w-full max-w-3xl space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--text)]">Modes</h1>
-          <p className="mt-1 text-sm text-[var(--text-dim)]">
-            Configure runtime behavior for OpenHarness sessions.
-          </p>
-        </div>
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <PageHeader
+        title="Modes"
+        description="Configure runtime behavior for OpenHarness sessions."
+        metadata={[
+          {
+            label: "Permission Mode",
+            value: modes.permission_mode,
+          },
+          {
+            label: "Effort",
+            value: modes.effort,
+          },
+        ]}
+      />
+
+      <div className="flex flex-1 flex-col overflow-y-auto p-6">
+        <div className="w-full max-w-3xl space-y-6">
 
         {error && (
           <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
@@ -287,6 +298,7 @@ export default function ModesSettingsPage() {
           <FeedbackBadge feedback={feedback} />
           <span>{saving ? "Saving…" : "Changes save automatically."}</span>
         </div>
+      </div>
       </div>
     </div>
   );

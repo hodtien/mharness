@@ -3,6 +3,7 @@ import { api, type Project, type ProjectsResponse } from "../api/client";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import { toast } from "../store/toast";
 import { useSession } from "../store/session";
+import PageHeader from "../components/PageHeader";
 
 export default function ProjectsPage() {
   const { setActiveProjectId } = useSession();
@@ -160,16 +161,11 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="flex flex-1 overflow-y-auto p-6">
-      <div className="w-full max-w-5xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-[var(--text)]">Projects</h1>
-            <p className="mt-1 text-sm text-[var(--text-dim)]">
-              Manage your registered project directories.
-            </p>
-          </div>
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <PageHeader
+        title="Projects"
+        description="Manage your registered project directories."
+        primaryAction={
           <button
             type="button"
             onClick={() => setShowNewModal(true)}
@@ -177,8 +173,28 @@ export default function ProjectsPage() {
           >
             + New Project
           </button>
-        </div>
+        }
+        metadata={[
+          {
+            label: "Projects",
+            value: String(data?.projects.length ?? 0),
+          },
+          ...(data?.active_project_id
+            ? [
+                {
+                  label: "Active",
+                  value:
+                    data.projects.find((p) => p.id === data.active_project_id)?.name ??
+                    data.active_project_id,
+                  accent: "cyan" as const,
+                },
+              ]
+            : []),
+        ]}
+      />
 
+      <div className="flex flex-1 flex-col overflow-y-auto p-6">
+        <div className="w-full max-w-5xl space-y-6">
         {error && (
           <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
             {error}
@@ -303,6 +319,7 @@ export default function ProjectsPage() {
             );
           })}
         </div>
+      </div>
       </div>
 
       {/* New Project Modal */}

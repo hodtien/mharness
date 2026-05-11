@@ -3,6 +3,7 @@ import { api, type ProviderProfile, type ProviderVerifyResponse } from "../api/c
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import ErrorBanner from "../components/ErrorBanner";
 import EmptyState from "../components/EmptyState";
+import PageHeader from "../components/PageHeader";
 
 interface VerifyResult extends ProviderVerifyResponse {
   verifiedAt?: string;
@@ -149,16 +150,12 @@ export default function ProviderSettingsPage() {
   }
 
   return (
-    <div className="flex flex-1 overflow-y-auto p-6">
-      <div className="w-full max-w-5xl space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-[var(--text)]">Providers</h1>
-            <p className="mt-1 text-sm text-[var(--text-dim)]">
-              Configure API credentials and activate the provider used by new sessions.
-            </p>
-          </div>
-          {configuredProviders.length > 0 && (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <PageHeader
+        title="Providers"
+        description="Configure API credentials and activate the provider used by new sessions."
+        primaryAction={
+          configuredProviders.length > 0 ? (
             <button
               type="button"
               onClick={verifyAll}
@@ -168,8 +165,18 @@ export default function ProviderSettingsPage() {
             >
               {batchVerifying ? "Verifying…" : "Verify all"}
             </button>
-          )}
-        </div>
+          ) : undefined
+        }
+        metadata={[
+          { label: "Providers", value: String(providers.length) },
+          ...(providers.some((p) => p.is_active)
+            ? [{ label: "Active", value: providers.find((p) => p.is_active)?.label ?? "—", accent: "cyan" as const }]
+            : []),
+        ]}
+      />
+
+      <div className="flex flex-1 flex-col overflow-y-auto p-6">
+        <div className="w-full max-w-5xl space-y-6">
 
         {error && <ErrorBanner message={error} />}
 
@@ -212,6 +219,7 @@ export default function ProviderSettingsPage() {
         {providers.length === 0 && (
           <EmptyState message="No providers returned." description="Add or sync a provider to get started." />
         )}
+      </div>
       </div>
 
       {selected && !batchVerifying && (
