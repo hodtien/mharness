@@ -137,17 +137,14 @@ describe("TasksPage drawer", () => {
     });
   });
 
-  it("shows a spinner while the detail request is in flight", async () => {
+  it("shows a skeleton while the detail request is in flight", async () => {
     mockFetch([RUNNING_TASK], { detailDelay: 50 });
     render(<TasksPage />);
     await waitFor(() => expect(screen.getByText("Running task")).toBeTruthy());
 
     fireEvent.click(screen.getByText("Running task"));
 
-    expect(await screen.findByText(/Loading task detail/i)).toBeTruthy();
-    await waitFor(() => expect(screen.queryByText(/Loading task detail/i)).toBeNull(), {
-      timeout: 1000,
-    });
+    expect(await screen.findByLabelText(/Loading content/i)).toBeTruthy();
   });
 
   it("renders a retry button for failed tasks and posts to /retry", async () => {
@@ -188,7 +185,8 @@ describe("TasksPage drawer", () => {
 
     fireEvent.click(screen.getByText("Running task"));
 
-    await waitFor(() => expect(screen.getByText(/500/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Failed to load task detail/i)).toBeTruthy());
+    expect(screen.getByText(/500/)).toBeTruthy();
   });
 });
 

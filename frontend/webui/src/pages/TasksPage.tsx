@@ -4,6 +4,8 @@ import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { apiFetch } from "../api/client";
 import PageHeader from "../components/PageHeader";
+import LoadingSkeleton from "../components/LoadingSkeleton";
+import ErrorBanner from "../components/ErrorBanner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -416,8 +418,8 @@ function DetailDrawer({ taskId, onClose, onStop, onRetry, stopping, retrying, fo
       <>
         <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} aria-hidden="true" />
         <div className="fixed right-0 top-0 z-50 flex h-full w-full max-w-lg flex-col border-l border-[var(--border)] bg-[var(--panel)] shadow-2xl">
-          <div className="flex flex-1 items-center justify-center">
-            <span className="text-sm text-[var(--text-dim)]">Loading task detail…</span>
+          <div className="flex flex-1 items-center justify-center p-5">
+            <LoadingSkeleton rows={3} className="w-full" />
           </div>
         </div>
       </>
@@ -452,9 +454,7 @@ function DetailDrawer({ taskId, onClose, onStop, onRetry, stopping, retrying, fo
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5">
           {fetchError ? (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
-              {fetchError}
-            </div>
+            <ErrorBanner message={`Failed to load task detail${fetchError ? `: ${fetchError}` : "."}`} />
           ) : currentTask ? (
             <div className="space-y-5">
               {/* Description */}
