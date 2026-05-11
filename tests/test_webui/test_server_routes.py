@@ -1082,6 +1082,66 @@ def test_pipeline_retry_now_accepts_failed_card_and_spawns_task(tmp_path, monkey
     assert card["metadata"]["retry_by"] == "user"
 
 
+def test_pipeline_retry_now_accepts_paused_card(tmp_path, monkeypatch) -> None:
+    registry = {
+        "version": 1,
+        "updated_at": 1000.0,
+        "cards": [
+            {
+                "id": "ap-paused-retry",
+                "title": "Paused retry",
+                "body": "",
+                "status": "paused",
+                "source_kind": "manual_idea",
+                "source_ref": "",
+                "fingerprint": "manual_idea:paused-retry",
+                "score": 5,
+                "score_reasons": [],
+                "labels": [],
+                "metadata": {"paused_by": "user", "attempt_count": 2},
+                "created_at": 600.0,
+                "updated_at": 700.0,
+            },
+        ],
+    }
+    reg_dir = tmp_path / ".openharness" / "autopilot"
+    reg_dir.mkdir(parents=True)
+    (reg_dir / "registry.json").write_text(json.dumps(registry))
+
+    created_tasks: list[dict[str, object]] = []
+
+    async def fake_create_shell_task(*, command, description, cwd, task_type):
+        created_tasks.append(
+            {
+                "command": command,
+                "description": description,
+                "cwd": cwd,
+                "task_type": task_type,
+            }
+        )
+        return SimpleNamespace(id="task-paused-retry")
+
+    monkeypatch.setattr(get_task_manager(), "create_shell_task", fake_create_shell_task)
+
+    client = _client(tmp_path)
+    response = client.post(
+        "/api/pipeline/cards/ap-paused-retry/retry-now",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["task_id"] == "task-paused-retry"
+    assert created_tasks
+    assert "run-next" in created_tasks[0]["command"]
+    assert "--card-id ap-paused-retry" in created_tasks[0]["command"]
+    saved = json.loads((reg_dir / "registry.json").read_text())
+    card = next(card for card in saved["cards"] if card["id"] == "ap-paused-retry")
+    assert card["status"] == "queued"
+    assert card["metadata"]["attempt_count"] == 3
+    assert card["metadata"]["retry_requested"] is True
+    assert card["metadata"]["retry_by"] == "user"
+
+
 def test_pipeline_retry_now_accepts_pending_card(tmp_path, monkeypatch) -> None:
     registry = {
         "version": 1,

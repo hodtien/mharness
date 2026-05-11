@@ -1021,7 +1021,7 @@ async def retry_card_now(
 ) -> dict:
     """Retry a card immediately by queueing a targeted background run.
 
-    The card must be in ``failed``, ``killed``, ``rejected``, or ``pending`` status.
+    The card must be in ``failed``, ``killed``, ``rejected``, ``paused``, or ``pending`` status.
     The spawned runner claims the specific card so UI status only becomes active
     when the worker actually starts processing it.
     """
@@ -1033,14 +1033,14 @@ async def retry_card_now(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "card_not_found", "card_id": card_id},
         )
-    if card.status not in {"failed", "killed", "rejected", "pending"}:
+    if card.status not in {"failed", "killed", "rejected", "paused", "pending"}:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "error": "invalid_status_for_retry",
                 "card_id": card_id,
                 "status": card.status,
-                "message": f"Can only retry failed/killed/rejected/pending cards, got: {card.status}",
+                "message": f"Can only retry failed/killed/rejected/paused/pending cards, got: {card.status}",
             },
         )
     current_attempt = int(card.metadata.get("attempt_count", 0) or 0)

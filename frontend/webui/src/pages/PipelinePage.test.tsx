@@ -370,13 +370,16 @@ describe("PipelinePage", () => {
     expect(screen.getByRole("link", { name: /^Merge manually$/i }).getAttribute("href")).toBe("https://example.test/pr/123");
   });
 
-  it("posts to retry-now when Retry Now is clicked for a failed card", async () => {
+  it.each([
+    ["failed", "card-failed-1"],
+    ["paused", "card-paused-1"],
+  ])("posts to retry-now when Retry Now is clicked for a %s card", async (cardStatus, cardId) => {
     const blockedCards = [
       {
         ...sampleCards[0],
-        id: "card-failed-1",
+        id: cardId,
         title: "Fix flaky CI",
-        status: "failed",
+        status: cardStatus,
         metadata: {
           last_note: "Tests failed after retry",
         },
@@ -389,8 +392,8 @@ describe("PipelinePage", () => {
       if (url.startsWith("/api/pipeline/journal")) {
         return Promise.resolve(jsonResponse({ entries: [] }));
       }
-      if (url === "/api/pipeline/cards/card-failed-1/retry-now" && init?.method === "POST") {
-        return Promise.resolve({ ...jsonResponse({ task_id: "task-1", card_id: "card-failed-1", status: "accepted", attempt: 1 }), status: 202 });
+      if (url === `/api/pipeline/cards/${cardId}/retry-now` && init?.method === "POST") {
+        return Promise.resolve({ ...jsonResponse({ task_id: "task-1", card_id: cardId, status: "accepted", attempt: 1 }), status: 202 });
       }
       return Promise.reject(new Error(`unexpected url ${url}`));
     });
@@ -407,7 +410,7 @@ describe("PipelinePage", () => {
 
     await waitFor(() => {
       const retryNowCalls = fetchMock.mock.calls.filter(
-        (c) => String(c[0]) === "/api/pipeline/cards/card-failed-1/retry-now" && (c[1] as RequestInit | undefined)?.method === "POST",
+        (c) => String(c[0]) === `/api/pipeline/cards/${cardId}/retry-now` && (c[1] as RequestInit | undefined)?.method === "POST",
       );
       expect(retryNowCalls.length).toBe(1);
     });
