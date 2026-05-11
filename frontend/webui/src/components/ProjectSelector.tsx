@@ -5,7 +5,7 @@ import { toast } from "../store/toast";
 import { useSession } from "../store/session";
 
 /** Truncates a path string for display: shows leading ~ or first segment + trailing segment. */
-function truncatePath(path: string, maxLen = 36): string {
+export function truncatePath(path: string, maxLen = 36): string {
   if (!path) return "";
   if (path.length <= maxLen) return path;
   // Try: ~/.../<last-segment>
