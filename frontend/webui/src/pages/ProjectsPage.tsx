@@ -8,8 +8,8 @@ import PageHeader from "../components/PageHeader";
 // Truncate path for display: ~/.../<last-segment> pattern
 function shortenPath(path: string, maxLen = 48): string {
   if (!path) return "";
-  const home = typeof process !== "undefined" ? process.env?.HOME : undefined;
-  const display = home && path.startsWith(home) ? `~${path.slice(home.length)}` : path;
+  const pathSegments = path.split("/").filter(Boolean);
+  const display = pathSegments.length >= 3 && pathSegments[0] === "Users" ? `~/${pathSegments.slice(2).join("/")}` : path;
   if (display.length <= maxLen) return display;
   const segs = display.split("/").filter(Boolean);
   if (segs.length <= 1) return display.slice(0, maxLen);
