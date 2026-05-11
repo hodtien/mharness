@@ -494,27 +494,72 @@ function Card({ card, onClick }: { card: PipelineCard; onClick: () => void }) {
   const sourceColor = SOURCE_COLOR[card.source_kind] ?? "bg-gray-500/20 text-gray-300 border-gray-500/40";
   const pendingReason = card.status === "pending" ? card.metadata?.pending_reason : null;
   const nextRetryAt = card.status === "pending" ? card.metadata?.next_retry_at : null;
+  const isActive = ACTIVE_STATUSES.includes(card.status);
+  const isCompleted = card.status === "completed" || card.status === "merged";
+
+  // Status badge colors
+  const statusBadgeMap: Record<string, string> = {
+    queued: "bg-[var(--status-queue-bg)] text-[var(--status-queue-text)]",
+    accepted: "bg-[var(--status-queue-bg)] text-[var(--status-queue-text)]",
+    pending: "bg-[var(--status-pending-bg)] text-[var(--status-pending-text)]",
+    preparing: "bg-[var(--status-running-bg)] text-[var(--status-running-text)]",
+    running: "bg-[var(--status-running-bg)] text-[var(--status-running-text)]",
+    verifying: "bg-[var(--status-review-bg)] text-[var(--status-review-text)]",
+    repairing: "bg-red-500/20 text-red-300",
+    pr_open: "bg-[var(--status-review-bg)] text-[var(--status-review-text)]",
+    waiting_ci: "bg-[var(--status-review-bg)] text-[var(--status-review-text)]",
+    completed: "bg-[var(--status-done-bg)] text-[var(--status-done-text)]",
+    merged: "bg-[var(--status-done-bg)] text-[var(--status-done-text)]",
+    failed: "bg-[var(--status-failed-bg)] text-[var(--status-failed-text)]",
+    rejected: "bg-[var(--status-rejected-bg)] text-[var(--status-rejected-text)]",
+    killed: "bg-[var(--status-rejected-bg)] text-[var(--status-rejected-text)]",
+    paused: "bg-[var(--status-rejected-bg)] text-[var(--status-rejected-text)]",
+  };
+  const statusBadge = statusBadgeMap[card.status] ?? "bg-gray-500/20 text-gray-300";
 
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-3 text-left text-sm shadow-sm transition hover:border-[var(--accent)]/40 hover:bg-[var(--panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+      className={`w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-4 text-left text-sm shadow-sm transition hover:border-[var(--accent)]/40 hover:bg-[var(--panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+        isCompleted ? "opacity-70 hover:opacity-100" : ""
+      }${isActive ? "border-l-2 border-l-[var(--status-running-border)]" : ""}`}
     >
-      <div className="mb-1.5 font-medium leading-snug text-[var(--text)]">{card.title}</div>
+      {/* Title with hierarchy */}
+      <div className="mb-3 text-sm font-medium leading-relaxed text-[var(--text)] line-clamp-2">{card.title}</div>
+
+      {/* Pending info */}
       {card.status === "pending" && (
-        <div className="mb-2 rounded-md border border-[var(--status-pending-border)] bg-[var(--status-pending-bg)] px-2 py-1 text-[11px] text-[var(--status-pending-text)]">
+        <div className="mb-3 rounded-md border border-[var(--status-pending-border)] bg-[var(--status-pending-bg)] px-2.5 py-1.5 text-[11px] text-[var(--status-pending-text)]">
           <div className="font-medium">Pending</div>
           {pendingReason && <div className="mt-0.5 break-words opacity-90">{pendingReason}</div>}
           {nextRetryAt && <div className="mt-0.5 opacity-80">Next retry {formatRelativeTime(nextRetryAt)}</div>}
         </div>
       )}
-      <div className="flex items-center justify-between gap-2">
-        <span
-          className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${sourceColor}`}
-        >
-          {sourceLabel}
-        </span>
+
+      {/* Metadata row: badges + age/score */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Status badge */}
+          <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${statusBadge}`}>
+            {card.status}
+          </span>
+          {/* Source badge */}
+          <span
+            className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${sourceColor}`}
+          >
+            {sourceLabel}
+          </span>
+          {/* Model badge if available */}
+          {card.model && (
+            <span className="shrink-0 rounded border border-[var(--border)] bg-[var(--panel)] px-1.5 py-0.5 text-[9px] text-[var(--text-dim)]">
+              {card.model.split("/").pop()?.slice(0, 12)}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
+          {isActive && (
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" aria-label="Active" />
+          )}
           <span className="text-[11px] font-mono text-[var(--text-dim)]">{card.score}</span>
           <span className="text-[11px] text-[var(--text-dim)]">{relativeAge(card.created_at)}</span>
         </div>
@@ -2151,13 +2196,16 @@ export default function PipelinePage() {
         <div className="flex flex-1 overflow-x-auto overflow-y-hidden p-4 gap-4">
           {COLUMNS.map((col) => {
             const colCards = cards.filter((c) => col.statuses.includes(c.status));
+            const isCompletedColumn = col.id === "completed";
             return (
               <div
                 key={col.id}
-                className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]"
+                className={`flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] ${
+                  isCompletedColumn ? "opacity-60 hover:opacity-100 transition-opacity" : ""
+                }`}
               >
-                {/* Column header */}
-                <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
+                {/* Sticky column header */}
+                <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-3 py-2.5">
                   <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">
                     {col.label}
                   </span>
