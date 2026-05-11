@@ -59,12 +59,14 @@ describe("ProviderSettingsPage", () => {
     render(<BrowserRouter><ProviderSettingsPage /></BrowserRouter>);
 
     await waitFor(() => {
-      expect(screen.getByText("OpenAI")).toBeTruthy();
+      expect(screen.getAllByText("OpenAI").length).toBeGreaterThan(0);
     });
-    expect(screen.getByText("Anthropic")).toBeTruthy();
-    expect(screen.getByText("Active")).toBeTruthy();
-    expect(screen.getByText("Not configured")).toBeTruthy();
-    expect(screen.getByText("gpt-4o-mini")).toBeTruthy();
+    expect(screen.getAllByText("Anthropic").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Not configured").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0);
+    expect(screen.getByText(/currently used for new sessions/i)).toBeTruthy();
+    expect(screen.getByText(/latency and .*last verified/i)).toBeTruthy();
   });
 
   it("renders Verify all button when providers with credentials exist", async () => {

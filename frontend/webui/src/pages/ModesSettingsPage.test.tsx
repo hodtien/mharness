@@ -40,7 +40,7 @@ describe("ModesSettingsPage", () => {
 
     expect(screen.getByLabelText("Loading content")).toBeTruthy();
     await waitFor(() => {
-      expect(screen.getByText("Permission Mode")).toBeTruthy();
+      expect(screen.getAllByText("Permission Mode").length).toBeGreaterThan(0);
     });
     await waitFor(() => {
       expect(screen.getByText("Default")).toBeTruthy();
@@ -54,15 +54,21 @@ describe("ModesSettingsPage", () => {
     render(<BrowserRouter><ModesSettingsPage /></BrowserRouter>);
 
     await waitFor(() => {
-      expect(screen.getByText("Permission Mode")).toBeTruthy();
+      expect(screen.getAllByText("Permission Mode").length).toBeGreaterThan(0);
     });
-    expect(screen.getByText("Effort")).toBeTruthy();
+    expect(screen.getAllByText("Effort").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Passes")).toBeTruthy();
     expect(screen.getByText("Fast Mode")).toBeTruthy();
     expect(screen.getByText("Vim keybindings")).toBeTruthy();
     expect(screen.getByText("Output Style")).toBeTruthy();
     expect(screen.getByText("Theme")).toBeTruthy();
     expect(screen.getByText("Auto-compact")).toBeTruthy();
+    // help text microcopy
+    expect(screen.getByText(/best balance/i)).toBeTruthy();
+    expect(screen.getByText(/pause after planning/i)).toBeTruthy();
+    expect(screen.getByText(/minimize interruptions/i)).toBeTruthy();
+    expect(screen.getByText(/lower effort.*faster/i)).toBeTruthy();
+    expect(screen.getByText(/more passes.*improve quality/i)).toBeTruthy();
   });
 
   it("calls PATCH when fast mode toggle changes", async () => {

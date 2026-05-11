@@ -10,9 +10,21 @@ type PermissionMode = "default" | "plan" | "full_auto";
 type Effort = "low" | "medium" | "high";
 
 const permissionOptions: Array<{ value: PermissionMode; label: string; description: string }> = [
-  { value: "default", label: "Default", description: "Ask before risky actions; balanced control." },
-  { value: "plan", label: "Plan", description: "Review a plan before code or tool changes." },
-  { value: "full_auto", label: "Full Auto", description: "Run safe tasks with minimal interruption." },
+  {
+    value: "default",
+    label: "Default",
+    description: "Best balance: ask before risky actions, but keep routine work moving.",
+  },
+  {
+    value: "plan",
+    label: "Plan",
+    description: "Pause after planning so you can review the approach before changes run.",
+  },
+  {
+    value: "full_auto",
+    label: "Full Auto",
+    description: "Minimize interruptions and let OpenHarness proceed with trusted tasks.",
+  },
 ];
 
 const compactOptions = [
@@ -161,7 +173,10 @@ export default function ModesSettingsPage() {
           </div>
         </Section>
 
-        <Section title="Effort">
+        <Section
+          title="Effort"
+          description="Lower effort is faster; higher effort spends more time for better reasoning and polish."
+        >
           <div className="inline-flex overflow-hidden rounded-lg border border-[var(--border)]">
             {(["low", "medium", "high"] as Effort[]).map((effort) => (
               <button
@@ -180,7 +195,10 @@ export default function ModesSettingsPage() {
           </div>
         </Section>
 
-        <Section title="Passes" description="Number of agent passes, from 1 to 5.">
+        <Section
+          title="Passes"
+          description="More passes usually improve quality, but they take longer and use more tokens."
+        >
           <div className="flex items-center gap-4">
             <div className="inline-flex items-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-2)]">
               <button

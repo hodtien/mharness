@@ -188,7 +188,7 @@ export default function AgentsSettingsPage() {
     <div className="flex flex-1 flex-col overflow-hidden">
       <PageHeader
         title="Agents"
-        description="Configure each agent's model, effort level, and permission mode."
+        description="Configure each agent's model, effort level, and permission mode. Use View details to preview the prompt and tools, Clone to create an editable copy, and Validate to test the current draft before saving."
         metadata={[{ label: "Agents", value: String(agents.length) }]}
       />
       <div className="flex flex-1 flex-col overflow-y-auto p-6">
@@ -244,6 +244,7 @@ export default function AgentsSettingsPage() {
                         <button
                           type="button"
                           onClick={() => openDetail(agent.name)}
+                          title="Preview the system prompt, tools, and full configuration for this agent"
                           className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)]"
                         >
                           View details

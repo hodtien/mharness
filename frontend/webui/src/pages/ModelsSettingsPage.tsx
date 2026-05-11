@@ -234,7 +234,7 @@ export default function ModelsSettingsPage() {
     <div className="flex flex-1 flex-col overflow-hidden">
       <PageHeader
         title="Models"
-        description="Browse the built-in catalog and manage custom models per provider profile."
+        description="Browse the built-in catalog and manage custom models per provider profile. Search by model id or label to find capabilities quickly, then use each provider section to inspect built-in vs. custom entries."
         primaryAction={
           <button
             type="button"
@@ -264,7 +264,8 @@ export default function ModelsSettingsPage() {
               type="search"
               value={search}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
-              placeholder="Filter models by id or label…"
+              placeholder="Filter by model id or label…"
+              aria-label="Filter models"
               className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] py-2 pl-10 pr-4 text-sm text-[var(--text)] placeholder-[var(--text-dim)] outline-none focus:border-cyan-400/50"
             />
           </div>

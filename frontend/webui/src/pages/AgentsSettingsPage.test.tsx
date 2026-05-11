@@ -168,6 +168,10 @@ describe("AgentsSettingsPage", () => {
     await renderAgentsPage();
 
     expect(screen.getAllByRole("button", { name: /view details/i })).toHaveLength(2);
+    // help microcopy from page header
+    expect(screen.getByText(/preview the prompt and tools/i)).toBeTruthy();
+    expect(screen.getByText(/clone.*create an editable copy/i)).toBeTruthy();
+    expect(screen.getByText(/validate.*test the current draft/i)).toBeTruthy();
   });
 
   it("opens the details modal when clicking View details", async () => {
