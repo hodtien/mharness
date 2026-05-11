@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { api, type ModelProfile } from "../api/client";
 import { useSession } from "../store/session";
 
 type PermissionMode = "default" | "plan" | "full_auto";
@@ -13,6 +13,158 @@ const CONNECTION_COLORS: Record<string, string> = {
 };
 
 // Runtime state badge: shows model, provider, job count, busy status
+export function ModelPicker() {
+  const [open, setOpen] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [models, setModels] = useState<Record<string, ModelProfile[]>>({});
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const appState = useSession((s) => s.appState);
+  const { ingest } = useSession();
+
+  const current = appState?.model ?? "";
+
+  // Fetch models when dropdown opens
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    api
+      .listModels()
+      .then(setModels)
+      .finally(() => setLoading(false));
+  }, [open]);
+
+  // Focus search input when dropdown opens
+  useEffect(() => {
+    if (open && searchRef.current) {
+      setTimeout(() => searchRef.current?.focus(), 50);
+    }
+  }, [open]);
+
+  // Close on outside click / Escape
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!dropdownRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+        setSearch("");
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        setSearch("");
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  // Only allow models for the active provider; PATCH /api/modes updates model only.
+  const query = search.trim().toLowerCase();
+  const activeProvider = appState?.provider ?? "";
+  const providerItems = activeProvider ? models[activeProvider] ?? [] : [];
+  const filtered = query
+    ? providerItems.filter((m) => `${m.id} ${m.label}`.toLowerCase().includes(query))
+    : providerItems;
+  const totalModels = providerItems.length;
+
+  const selectModel = useCallback(
+    async (modelId: string) => {
+      if (updating || modelId === current) {
+        setOpen(false);
+        setSearch("");
+        return;
+      }
+      setUpdating(true);
+      ingest({ type: "state_snapshot", state: { ...appState, model: modelId } });
+      setOpen(false);
+      setSearch("");
+      try {
+        await api.patchModes({ model: modelId });
+      } catch {
+        ingest({ type: "state_snapshot", state: { ...appState, model: current } });
+      } finally {
+        setUpdating(false);
+      }
+    },
+    [updating, current, appState, ingest],
+  );
+
+  if (!current) return null;
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => !updating && setOpen((v) => !v)}
+        className={`inline-flex items-center gap-1.5 rounded border border-[var(--border)] bg-[var(--panel-2)] px-1.5 py-0.5 text-xs font-medium text-[var(--text)] hover:brightness-125 ${updating ? "opacity-60" : ""}`}
+      >
+        {current}
+        <span className="text-[10px] opacity-60">▾</span>
+      </button>
+
+      {open ? (
+        <div className="absolute left-0 top-full z-30 mt-1.5 w-72 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel)] shadow-xl">
+          {/* Search */}
+          <div className="border-b border-[var(--border)] p-2">
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-[var(--text-dim)]">
+                🔍
+              </span>
+              <input
+                ref={searchRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={`Search ${totalModels} models…`}
+                className="w-full rounded-md border border-[var(--border)] bg-[var(--panel-2)] py-1.5 pl-8 pr-3 text-xs text-[var(--text)] placeholder-[var(--text-dim)] outline-none focus:border-cyan-400/50"
+              />
+            </div>
+          </div>
+
+          {/* List */}
+          <div className="max-h-56 overflow-y-auto py-1">
+            {loading ? (
+              <div className="px-3 py-4 text-center text-xs text-[var(--text-dim)]">Loading…</div>
+            ) : filtered.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-[var(--text-dim)]">
+                {query ? `No models match "${query}"` : "No models available"}
+              </div>
+            ) : (
+              filtered.map((m) => {
+                const active = m.id === current;
+                const label = m.label && m.label !== m.id ? `${m.label} (${m.id})` : m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    onClick={() => selectModel(m.id)}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition ${active ? "bg-cyan-400/10 text-cyan-200" : "hover:bg-[var(--panel-2)] text-[var(--text)]"}`}
+                  >
+                    <span className="flex-1 truncate">{label}</span>
+                    {active ? <span className="text-[10px] opacity-60">✓</span> : null}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function RuntimeSummary() {
   const appState = useSession((s) => s.appState);
   const tasks = useSession((s) => s.tasks);
@@ -27,12 +179,8 @@ function RuntimeSummary() {
 
   return (
     <div className="flex items-center gap-1.5 text-xs text-[var(--text-dim)]">
-      {/* Model badge */}
-      {appState?.model && (
-        <span className="rounded border border-[var(--border)] bg-[var(--panel-2)] px-1.5 py-0.5 font-medium text-[var(--text)]">
-          {appState.model}
-        </span>
-      )}
+      {/* Model badge — now clickable dropdown picker */}
+      {appState?.model && <ModelPicker />}
       {/* Provider badge (tablet+) */}
       {appState?.provider && (
         <span className="hidden md:inline rounded border border-[var(--border)] bg-[var(--panel-2)] px-1.5 py-0.5">

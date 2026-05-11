@@ -60,6 +60,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
 export interface ModesPayload {
   permission_mode: string;
+  model?: string;
   fast_mode: boolean;
   vim_enabled: boolean;
   notifications_enabled?: boolean;
@@ -72,6 +73,7 @@ export interface ModesPayload {
 
 export interface ModesPatch {
   permission_mode?: string;
+  model?: string;
   effort?: string;
   passes?: number;
   fast_mode?: boolean;
