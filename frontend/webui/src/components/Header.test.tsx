@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { PermissionModeChip } from "./Header";
 import Header from "./Header";
 import { useSession } from "../store/session";
+import { ModelPicker } from "./Header";
 
 function mockLocalStorage() {
   let store: Record<string, string> = {};
@@ -125,6 +126,142 @@ describe("PermissionModeChip", () => {
   });
 });
 
+describe("ModelPicker", () => {
+  beforeEach(() => {
+    mockLocalStorage();
+    useSession.setState({
+      appState: {
+        model: "claude-3-5-sonnet",
+        provider: "anthropic",
+        cwd: "/tmp",
+        permission_mode: "default",
+      },
+      connectionStatus: "open",
+      transcript: [],
+      tasks: [],
+      busy: false,
+      errorBanner: null,
+      pendingPermission: null,
+      pendingQuestion: null,
+      pendingSelect: null,
+      compact: null,
+      todoMarkdown: null,
+      planMode: null,
+      swarm: null,
+      resumedFrom: null,
+    });
+  });
+
+  it("fetches models and shows active model with checkmark", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/models" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              anthropic: [
+                { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", is_default: true, is_custom: false },
+                { id: "claude-3-5-haiku", label: "Claude 3.5 Haiku", is_default: false, is_custom: false },
+              ],
+            }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected: ${url} ${init?.method || "GET"}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ModelPicker />);
+    fireEvent.click(screen.getByRole("button", { name: /claude-3-5-sonnet/i }));
+
+    await screen.findByDisplayValue("");
+    expect(await screen.findByText(/Claude 3.5 Sonnet \(claude-3-5-sonnet\)/)).toBeTruthy();
+    expect(screen.getByText("✓")).toBeTruthy();
+  });
+
+  it("PATCHes /api/modes with model and applies optimistic update on selection", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/models" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              anthropic: [
+                { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", is_default: true, is_custom: false },
+                { id: "claude-3-5-haiku", label: "Claude 3.5 Haiku", is_default: false, is_custom: false },
+              ],
+            }),
+        });
+      }
+      if (url === "/api/modes" && init?.method === "PATCH") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            permission_mode: "default",
+            model: "claude-3-5-haiku",
+            fast_mode: false,
+            vim_enabled: false,
+            effort: "medium",
+            passes: 1,
+            output_style: "default",
+            theme: "default",
+          }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected: ${url} ${init?.method || "GET"}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ModelPicker />);
+    fireEvent.click(screen.getByRole("button", { name: /claude-3-5-sonnet/i }));
+
+    const option = await screen.findByText(/Claude 3.5 Haiku \(claude-3-5-haiku\)/);
+    fireEvent.click(option);
+
+    expect(useSession.getState().appState?.model).toBe("claude-3-5-haiku");
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/modes",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ model: "claude-3-5-haiku" }),
+        }),
+      );
+    });
+  });
+
+  it("filters models by search", async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url === "/api/models") {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              anthropic: [
+                { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", is_default: true, is_custom: false },
+                { id: "claude-3-5-haiku", label: "Claude 3.5 Haiku", is_default: false, is_custom: false },
+              ],
+              openai: [
+                { id: "gpt-4o", label: "GPT-4o", is_default: true, is_custom: false },
+              ],
+            }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected: ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ModelPicker />);
+    fireEvent.click(screen.getByRole("button", { name: /claude-3-5-sonnet/i }));
+
+    const input = await screen.findByPlaceholderText(/Search 3 models/i);
+    fireEvent.change(input, { target: { value: "gpt" } });
+
+    expect(await screen.findByText(/GPT-4o/)).toBeTruthy();
+    expect(screen.queryByText(/Claude 3.5 Haiku/)).toBeNull();
+  });
+});
+
 describe("Header runtime summary badges", () => {
   beforeEach(() => {
     mockLocalStorage();
@@ -146,7 +283,7 @@ describe("Header runtime summary badges", () => {
     });
   });
 
-  it("renders model and provider badges", () => {
+  it("renders model picker button and provider badge", () => {
     useSession.setState({
       appState: {
         model: "claude-3-5-sonnet",

@@ -32,6 +32,7 @@ class ModesPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     permission_mode: str | None = Field(default=None, pattern="^(default|plan|full_auto)$")
+    model: str | None = None
     effort: str | None = Field(default=None, pattern="^(low|medium|high)$")
     passes: int | None = Field(default=None, ge=1, le=5)
     fast_mode: bool | None = None
@@ -45,6 +46,7 @@ class ModesPatch(BaseModel):
 def _modes_payload(state: AppState) -> dict[str, object]:
     return {
         "permission_mode": state.permission_mode,
+        "model": state.model,
         "fast_mode": state.fast_mode,
         "vim_enabled": state.vim_enabled,
         "notifications_enabled": state.notifications_enabled,
@@ -70,6 +72,7 @@ def _settings_payload(state: WebUIState) -> dict[str, object]:
     settings = load_settings()
     return {
         "permission_mode": state.permission_mode or settings.permission.mode.value,
+        "model": settings.model,
         "fast_mode": settings.fast_mode,
         "vim_enabled": settings.vim_mode,
         "notifications_enabled": settings.notifications_enabled,
@@ -112,7 +115,7 @@ def _apply_to_settings(updates: dict[str, object]) -> AppState:
         settings_updates["permission"] = settings.permission.model_copy(
             update={"mode": PermissionMode(updates["permission_mode"])}
         )
-    for key in ("effort", "passes", "fast_mode", "output_style", "theme", "notifications_enabled", "auto_compact_threshold_tokens"):
+    for key in ("model", "effort", "passes", "fast_mode", "output_style", "theme", "notifications_enabled", "auto_compact_threshold_tokens"):
         if key in updates:
             settings_updates[key] = updates[key]
     if "vim_enabled" in updates:
