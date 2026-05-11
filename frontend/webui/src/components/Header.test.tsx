@@ -125,7 +125,7 @@ describe("PermissionModeChip", () => {
   });
 });
 
-describe("Header breadcrumb", () => {
+describe("Header runtime summary badges", () => {
   beforeEach(() => {
     mockLocalStorage();
     useSession.setState({
@@ -146,7 +146,7 @@ describe("Header breadcrumb", () => {
     });
   });
 
-  it("renders model badge, provider badge, and truncated path with tooltip", () => {
+  it("renders model and provider badges", () => {
     useSession.setState({
       appState: {
         model: "claude-3-5-sonnet",
@@ -168,14 +168,129 @@ describe("Header breadcrumb", () => {
 
     // Model badge should be visible
     expect(screen.getByText(/claude-3-5-sonnet/)).toBeTruthy();
-
     // Provider badge should be rendered (visible on md+ breakpoint)
     expect(screen.getByText(/anthropic/)).toBeTruthy();
+  });
 
-    // Path should be rendered with truncation (visible on lg+ breakpoint)
-    const pathSpan = screen.getByTitle("/Users/hodtien/harness/my-harness");
-    expect(pathSpan).toBeTruthy();
-    expect(pathSpan.textContent).toMatch(/\.\.\./); // should show "...my-harness"
+  it("shows running jobs badge when tasks are running", () => {
+    useSession.setState({
+      appState: { model: "test", permission_mode: "default" },
+      tasks: [
+        { id: "1", type: "job", status: "running", description: "task 1", metadata: {} },
+        { id: "2", type: "job", status: "queued", description: "task 2", metadata: {} },
+        { id: "3", type: "job", status: "done", description: "task 3", metadata: {} },
+      ],
+    });
+
+    render(
+      <BrowserRouter>
+        <Header
+          onToggleSidebar={() => {}}
+          onInterrupt={() => {}}
+          onResumeSession={() => Promise.resolve()}
+        />
+      </BrowserRouter>,
+    );
+
+    // Should show "2 jobs" badge (running + queued)
+    expect(screen.getByText(/2 jobs/)).toBeTruthy();
+  });
+
+  it("shows busy indicator with tool name when busy", () => {
+    useSession.setState({
+      appState: { model: "test", permission_mode: "default" },
+      busy: true,
+      transcript: [
+        { id: "1", role: "user", text: "hello" },
+        { id: "2", role: "assistant", text: "working", tool_name: "bash" },
+      ],
+    });
+
+    render(
+      <BrowserRouter>
+        <Header
+          onToggleSidebar={() => {}}
+          onInterrupt={() => {}}
+          onResumeSession={() => Promise.resolve()}
+        />
+      </BrowserRouter>,
+    );
+
+    // Should show busy indicator with tool name
+    expect(screen.getByText(/Running bash/)).toBeTruthy();
+  });
+
+  it("shows Stop button with running count when busy with jobs", () => {
+    const onInterrupt = vi.fn();
+    useSession.setState({
+      appState: { model: "test", permission_mode: "default" },
+      busy: true,
+      tasks: [
+        { id: "1", type: "job", status: "running", description: "task 1", metadata: {} },
+      ],
+    });
+
+    render(
+      <BrowserRouter>
+        <Header
+          onToggleSidebar={() => {}}
+          onInterrupt={onInterrupt}
+          onResumeSession={() => Promise.resolve()}
+        />
+      </BrowserRouter>,
+    );
+
+    // Stop button has aria-label including running count
+    const stopBtn = screen.getByRole("button", { name: /Stop 1 running job\(s\)/ });
+    expect(stopBtn).toBeTruthy();
+    fireEvent.click(stopBtn);
+    expect(onInterrupt).toHaveBeenCalled();
+  });
+
+  it("shows simple Stop button when busy without jobs", () => {
+    const onInterrupt = vi.fn();
+    useSession.setState({
+      appState: { model: "test", permission_mode: "default" },
+      busy: true,
+      tasks: [],
+    });
+
+    render(
+      <BrowserRouter>
+        <Header
+          onToggleSidebar={() => {}}
+          onInterrupt={onInterrupt}
+          onResumeSession={() => Promise.resolve()}
+        />
+      </BrowserRouter>,
+    );
+
+    // Stop button has aria-label for simple stop
+    const stopBtn = screen.getByRole("button", { name: /Stop current task/ });
+    expect(stopBtn).toBeTruthy();
+    fireEvent.click(stopBtn);
+    expect(onInterrupt).toHaveBeenCalled();
+  });
+
+  it("shows connection status dot (green for open)", () => {
+    useSession.setState({
+      connectionStatus: "open",
+      appState: { permission_mode: "default" },
+    });
+
+    render(
+      <BrowserRouter>
+        <Header
+          onToggleSidebar={() => {}}
+          onInterrupt={() => {}}
+          onResumeSession={() => Promise.resolve()}
+        />
+      </BrowserRouter>,
+    );
+
+    // Should show green dot for open connection
+    const dot = document.querySelector(".bg-emerald-400");
+    expect(dot).toBeTruthy();
   });
 
   it("handles missing appState gracefully", () => {
