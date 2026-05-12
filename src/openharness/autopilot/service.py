@@ -78,6 +78,7 @@ _SOURCE_BASE_SCORES: dict[RepoTaskSource, int] = {
 }
 _BUG_HINTS = ("bug", "fix", "failure", "broken", "regression", "crash", "error", "issue")
 _URGENT_HINTS = ("urgent", "p0", "p1", "high", "critical", "blocker")
+_DEPENDENCY_SYNC_PATHS: frozenset[str] = frozenset({"pyproject.toml", "uv.lock", "setup.py", "setup.cfg"})
 
 _LIST_STATUS_PRIORITY = {
     "queued": 0,
@@ -247,6 +248,11 @@ def _safe_text(value: object) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _is_dependency_sync_path(path: str) -> bool:
+    normalized = path.strip().lstrip("./")
+    return normalized in _DEPENDENCY_SYNC_PATHS or normalized.startswith("openharness.egg-info/")
 
 
 def _json_default(value: object) -> object:
@@ -3150,7 +3156,20 @@ class RepoAutopilotStore:
 
     def _install_editable(self, *, cwd: Path | None = None) -> None:
         target = cwd or self._cwd
-        self._run_command(["uv", "pip", "install", "-e", "."], cwd=target, timeout=120, check=True)
+        if not self._dependency_files_changed(target):
+            return
+        self._run_command(["uv", "sync"], cwd=target, timeout=120, check=True)
+
+    def _dependency_files_changed(self, cwd: Path) -> bool:
+        completed = self._run_command(
+            ["git", "diff", "--name-only", "HEAD@{1}", "HEAD"],
+            cwd=cwd,
+            timeout=30,
+        )
+        if completed.returncode != 0:
+            return False
+        changed_paths = (completed.stdout or "").splitlines()
+        return any(_is_dependency_sync_path(path) for path in changed_paths)
 
     def _journal_base_advanced_for_active_cards(self, *, base_branch: str, merged_card_id: str) -> None:
         registry = self._load_registry()

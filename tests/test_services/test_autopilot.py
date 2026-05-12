@@ -3498,13 +3498,17 @@ def test_base_advance_journals_notification(tmp_path: Path, monkeypatch) -> None
     assert matches[0].metadata == {"base_branch": "main", "status": "running", "merged_card_id": merged.id}
 
 
-def test_install_editable_runs_uv_pip_install(tmp_path: Path, monkeypatch) -> None:
+def test_install_editable_runs_uv_sync_when_dependency_files_changed(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
     calls = []
 
     def fake_run_command(command, *, cwd=None, timeout=None, shell=False, check=False):
+        if command == ["git", "diff", "--name-only", "HEAD@{1}", "HEAD"]:
+            assert cwd == repo
+            assert timeout == 30
+            return subprocess.CompletedProcess(command, 0, stdout="pyproject.toml\n", stderr="")
         calls.append((command, cwd, timeout, check))
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
@@ -3512,7 +3516,30 @@ def test_install_editable_runs_uv_pip_install(tmp_path: Path, monkeypatch) -> No
 
     store._install_editable()
 
-    assert calls == [(["uv", "pip", "install", "-e", "."], repo, 120, True)]
+    assert calls == [(["uv", "sync"], repo, 120, True)]
+
+
+def test_install_editable_skips_uv_sync_when_dependency_files_unchanged(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    calls = []
+
+    def fake_run_command(command, *, cwd=None, timeout=None, shell=False, check=False):
+        if command == ["git", "diff", "--name-only", "HEAD@{1}", "HEAD"]:
+            assert cwd == repo
+            assert timeout == 30
+            return subprocess.CompletedProcess(
+                command, 0, stdout="src/openharness/autopilot/service.py\n", stderr=""
+            )
+        calls.append((command, cwd, timeout, check))
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(store, "_run_command", fake_run_command)
+
+    store._install_editable()
+
+    assert calls == []
 
 
 # ----------------------------------------------------------------------

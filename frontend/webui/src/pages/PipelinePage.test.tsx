@@ -802,6 +802,47 @@ describe("PipelinePage", () => {
     vi.useRealTimers();
   });
 
+  it("shows terminal cards in separate outcome columns by default", async () => {
+    const terminalCards = [
+      { id: "card-completed", title: "Completed task", status: "completed", source_kind: "manual_idea", score: 60, labels: [], created_at: 1, updated_at: 1 },
+      { id: "card-merged", title: "Merged task", status: "merged", source_kind: "github_issue", score: 90, labels: [], created_at: 1, updated_at: 1 },
+      { id: "card-failed", title: "Failed task", status: "failed", source_kind: "manual_idea", score: 40, labels: [], created_at: 1, updated_at: 1 },
+      { id: "card-paused", title: "Paused task", status: "paused", source_kind: "manual_idea", score: 30, labels: [], created_at: 1, updated_at: 1 },
+      { id: "card-rejected", title: "Rejected task", status: "rejected", source_kind: "manual_idea", score: 20, labels: [], created_at: 1, updated_at: 1 },
+      { id: "card-superseded", title: "Superseded task", status: "superseded", source_kind: "manual_idea", score: 10, labels: [], created_at: 1, updated_at: 1 },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards: terminalCards, updated_at: 0 }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: [] }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    expect(await screen.findByText(/^Completed$/)).toBeTruthy();
+    expect(screen.getByText(/^Failed$/)).toBeTruthy();
+    expect(screen.getByText(/^Rejected$/)).toBeTruthy();
+    expect(screen.getByText("Completed task")).toBeTruthy();
+    expect(screen.getByText("Merged task")).toBeTruthy();
+    expect(screen.getByText("Failed task")).toBeTruthy();
+    expect(screen.getByText("Paused task")).toBeTruthy();
+    expect(screen.getByText("Rejected task")).toBeTruthy();
+    expect(screen.getByText("Superseded task")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Terminal history/i })).toBeNull();
+  });
+
   it("Activity tab: shows filter pills and filters entries by kind", async () => {
     const sampleEntries = [
       { timestamp: 1002, kind: "ci_failure", summary: "CI failed", task_id: "card-queued-1", metadata: {} },

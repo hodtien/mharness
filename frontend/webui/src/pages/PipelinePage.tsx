@@ -29,6 +29,7 @@ export type RepoTaskStatus =
   | "failed"
   | "rejected"
   | "killed"
+  | "superseded"
   | "paused";
 
 export type RepoTaskSource =
@@ -368,13 +369,14 @@ const ACTIVE_STATUSES: RepoTaskStatus[] = [
   "waiting_ci",
 ];
 
-/** Statuses that represent a terminal outcome — collapsed behind "Terminal history" by default. */
+/** Statuses that represent a terminal outcome. */
 export const TERMINAL_STATUSES: RepoTaskStatus[] = [
   "completed",
   "merged",
   "failed",
   "rejected",
   "killed",
+  "superseded",
   "paused",
 ];
 
@@ -430,7 +432,6 @@ interface ColumnDef {
   statuses: RepoTaskStatus[];
   badgeColor: string;
   pulseWhenActive?: boolean;
-  isTerminal?: boolean;
 }
 
 const COLUMNS: ColumnDef[] = [
@@ -464,21 +465,18 @@ const COLUMNS: ColumnDef[] = [
     label: "Completed",
     statuses: ["completed", "merged"],
     badgeColor: "bg-[var(--status-done-bg)] text-[var(--status-done-text)] border-[var(--status-done-border)]",
-    isTerminal: true,
   },
   {
     id: "failed",
     label: "Failed",
     statuses: ["failed"],
     badgeColor: "bg-[var(--status-failed-bg)] text-[var(--status-failed-text)] border-[var(--status-failed-border)]",
-    isTerminal: true,
   },
   {
     id: "rejected",
     label: "Rejected",
-    statuses: ["rejected", "killed", "paused"],
+    statuses: ["rejected", "killed", "paused", "superseded"],
     badgeColor: "bg-[var(--status-rejected-bg)] text-[var(--status-rejected-text)] border-[var(--status-rejected-border)]",
-    isTerminal: true,
   },
 ];
 
@@ -556,6 +554,7 @@ function Card({ card, onClick }: { card: PipelineCard; onClick: () => void }) {
     failed: "bg-[var(--status-failed-bg)] text-[var(--status-failed-text)]",
     rejected: "bg-[var(--status-rejected-bg)] text-[var(--status-rejected-text)]",
     killed: "bg-[var(--status-rejected-bg)] text-[var(--status-rejected-text)]",
+    superseded: "bg-[var(--status-rejected-bg)] text-[var(--status-rejected-text)]",
     paused: "bg-[var(--status-rejected-bg)] text-[var(--status-rejected-text)]",
   };
   const statusBadge = statusBadgeMap[card.status] ?? "bg-gray-500/20 text-gray-300";
@@ -1702,7 +1701,6 @@ export default function PipelinePage() {
   const [runNextError, setRunNextError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("board");
   const [boardFilter, setBoardFilter] = useState<BoardFilter>("all");
-  const [terminalCollapsed, setTerminalCollapsed] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [policyDefaultModel, setPolicyDefaultModel] = useState<string | null>(null);
@@ -2021,7 +2019,7 @@ export default function PipelinePage() {
             </div>
           </div>
           <div className="flex flex-1 overflow-x-auto overflow-y-hidden p-4 gap-4">
-            {COLUMNS.filter((col) => !col.isTerminal).map((col) => {
+            {COLUMNS.map((col) => {
               const colCards = cards.filter((c) => col.statuses.includes(c.status) && matchesBoardFilter(c.status, boardFilter));
               return (
                 <div key={col.id} className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
@@ -2030,18 +2028,11 @@ export default function PipelinePage() {
                     <span className={`flex h-5 min-w-5 items-center justify-center rounded-full border px-1.5 text-[10px] font-medium ${col.badgeColor}${col.pulseWhenActive && colCards.length > 0 ? " animate-pulse-subtle" : ""}`}>{colCards.length}</span>
                   </div>
                   <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                    {colCards.length === 0 ? <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--text-dim)]">No active cards. Try Run Next, New idea, or Terminal history.</div> : colCards.map((card) => <Card key={card.id} card={card} onClick={() => setSelectedCard(card)} />)}
+                    {colCards.length === 0 ? <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--text-dim)]">No cards for this filter.</div> : colCards.map((card) => <Card key={card.id} card={card} onClick={() => setSelectedCard(card)} />)}
                   </div>
                 </div>
               );
             })}
-            <div className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
-              <button onClick={() => setTerminalCollapsed((v) => !v)} className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2.5 text-left">
-                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">Terminal history</span>
-                <span className="text-xs text-[var(--text-dim)]">{terminalCollapsed ? "Show" : "Hide"}</span>
-              </button>
-              {!terminalCollapsed && <div className="flex-1 overflow-y-auto p-2 space-y-2">{cards.filter((c) => TERMINAL_STATUSES.includes(c.status) && matchesBoardFilter(c.status, boardFilter)).map((card) => <Card key={card.id} card={card} onClick={() => setSelectedCard(card)} />)}</div>}
-            </div>
           </div>
         </>
       )}
