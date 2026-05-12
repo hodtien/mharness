@@ -7,17 +7,28 @@ import { useSession } from "../store/session";
 const SETTINGS_COLLAPSED_KEY = "oh:sidebar:settings-collapsed";
 const STATUS_COLLAPSED_KEY = "oh:sidebar:status-collapsed";
 
+type IconName =
+  | "chat"
+  | "history"
+  | "autopilot"
+  | "jobs"
+  | "projects"
+  | "modes"
+  | "provider"
+  | "models"
+  | "agents"
+  | "schedule"
+  | "docs"
+  | "caretDown"
+  | "caretUp";
+
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** When true, hide the persistent desktop sidebar. Mobile drawer is unaffected. */
   collapsed?: boolean;
 }
 
 export default function Sidebar({ open, onClose, collapsed = false }: Props) {
-  const [searchParams] = useSearchParams();
-  const projectId = searchParams.get("project");
-  const projectQ = projectId ? `project=${encodeURIComponent(projectId)}` : "";
   const tasks = useSession((s) => s.tasks);
   const appState = useSession((s) => s.appState);
   const todoMarkdown = useSession((s) => s.todoMarkdown);
@@ -40,26 +51,6 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
     }
   });
 
-  const toggleSettings = () => {
-    const next = !settingsCollapsed;
-    setSettingsCollapsed(next);
-    try {
-      localStorage.setItem(SETTINGS_COLLAPSED_KEY, String(next));
-    } catch {
-      // ignore storage errors
-    }
-  };
-
-  const toggleStatus = () => {
-    const next = !statusCollapsed;
-    setStatusCollapsed(next);
-    try {
-      localStorage.setItem(STATUS_COLLAPSED_KEY, String(next));
-    } catch {
-      // ignore storage errors
-    }
-  };
-
   useEffect(() => {
     api
       .listCron()
@@ -67,331 +58,145 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
       .catch(() => setCron([]));
   }, [tasks.length]);
 
+  const runningJobs = tasks.filter((t) => ["running", "active", "in_progress"].includes(t.status)).length;
+  const failedJobs = tasks.filter((t) => ["failed", "error"].includes(t.status)).length;
+  const enabledCron = cron.filter((j) => Boolean(j.enabled)).length;
+  const mcpFailed = appState?.mcp_failed ?? 0;
+
   const content = (
     <div className="flex h-full w-72 flex-col gap-3 overflow-y-auto border-r border-[var(--border)] bg-[var(--panel)] p-3">
-      <ProjectSelector />
+      <Section title="Project">
+        <ProjectSelector />
+      </Section>
 
-      <nav aria-label="Primary" className="flex flex-col gap-2">
-        <NavItem to="/chat" label="Chat" icon="💬" onClose={onClose} />
-        <NavItem to="/history" label="History" icon="🕘" onClose={onClose} />
-        <NavItem to="/autopilot" label="Autopilot" icon="🤖" onClose={onClose} />
-        <NavItem to="/tasks" label="Jobs" icon="⚙️" onClose={onClose} />
-        <NavItem to="/projects" label="Projects" icon="📁" onClose={onClose} />
-      </nav>
+      <Section title="Navigate">
+        <nav aria-label="Primary" className="flex flex-col gap-2">
+          <NavItem to="/chat" label="Chat" icon="chat" onClose={onClose} />
+          <NavItem to="/history" label="History" icon="history" onClose={onClose} />
+          <NavItem to="/autopilot" label="Autopilot" icon="autopilot" onClose={onClose} />
+          <NavItem to="/tasks" label="Jobs" icon="jobs" onClose={onClose} />
+          <NavItem to="/projects" label="Projects" icon="projects" onClose={onClose} />
+        </nav>
+      </Section>
 
       <Section
         title={
-          <button
-            onClick={toggleSettings}
-            className="flex w-full items-center justify-between gap-2 text-left focus:outline-none focus:ring-1 focus:ring-[var(--border)]"
-            aria-expanded={!settingsCollapsed}
-            aria-label={settingsCollapsed ? "Expand Settings section" : "Collapse Settings section"}
-          >
+          <button onClick={() => setSettingsCollapsed((v) => {
+            const next = !v;
+            try { localStorage.setItem(SETTINGS_COLLAPSED_KEY, String(next)); } catch {}
+            return next;
+          })} className="flex w-full items-center justify-between gap-2 text-left" aria-expanded={!settingsCollapsed} aria-label={settingsCollapsed ? "Expand settings navigation" : "Collapse settings navigation"}>
             <span>Settings</span>
-            {settingsCollapsed ? (
-              <span aria-hidden="true" className="text-[11px]">⚙️</span>
-            ) : (
-              <span aria-hidden="true" className="text-[10px]">▲</span>
-            )}
+            <Icon name={settingsCollapsed ? "caretDown" : "caretUp"} />
           </button>
         }
       >
-        {settingsCollapsed ? (
-          <div className="sidebar-settings-grid">
-            <NavLink
-              to={projectQ ? `/settings/modes?${projectQ}` : "/settings/modes"}
-              className={({ isActive }) =>
-                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
-              }
-              onClick={onClose}
-            >
-              <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>🎚️</span>
-            </NavLink>
-            <NavLink
-              to={projectQ ? `/settings/provider?${projectQ}` : "/settings/provider"}
-              className={({ isActive }) =>
-                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
-              }
-              onClick={onClose}
-            >
-              <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>🔌</span>
-            </NavLink>
-            <NavLink
-              to={projectQ ? `/settings/models?${projectQ}` : "/settings/models"}
-              className={({ isActive }) =>
-                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
-              }
-              onClick={onClose}
-            >
-              <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>🧠</span>
-            </NavLink>
-            <NavLink
-              to={projectQ ? `/settings/agents?${projectQ}` : "/settings/agents"}
-              className={({ isActive }) =>
-                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
-              }
-              onClick={onClose}
-            >
-              <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>🤖</span>
-            </NavLink>
-            <NavLink
-              to={projectQ ? `/settings/cron?${projectQ}` : "/settings/cron"}
-              className={({ isActive }) =>
-                `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
-              }
-              onClick={onClose}
-            >
-              <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>⏰</span>
-            </NavLink>
-          </div>
-        ) : (
+        {!settingsCollapsed && (
           <nav aria-label="Settings" className="flex flex-col gap-1">
-            <NavItem to="/settings/modes" label="Modes" icon="🎚️" onClose={onClose} />
-            <NavItem to="/settings/provider" label="Provider" icon="🔌" onClose={onClose} />
-            <NavItem to="/settings/models" label="Models" icon="🧠" onClose={onClose} />
-            <NavItem to="/settings/agents" label="Agents" icon="🤖" onClose={onClose} />
-            <NavItem to="/settings/cron" label="Schedule" icon="⏰" onClose={onClose} />
+            <NavItem to="/settings/modes" label="Modes" icon="modes" onClose={onClose} />
+            <NavItem to="/settings/provider" label="Provider" icon="provider" onClose={onClose} />
+            <NavItem to="/settings/models" label="Models" icon="models" onClose={onClose} />
+            <NavItem to="/settings/agents" label="Agents" icon="agents" onClose={onClose} />
+            <NavItem to="/settings/cron" label="Schedule" icon="schedule" onClose={onClose} />
           </nav>
         )}
       </Section>
 
+      <Section title="Status">
+        <div className="flex flex-wrap gap-1">
+          <StatusBadge label="Model" value={String(appState?.model ?? "—")} />
+          <StatusBadge label="Provider" value={String(appState?.provider ?? "—")} />
+          <StatusBadge label="Jobs" value={String(tasks.length)} tone={runningJobs > 0 ? "warning" : "neutral"} />
+          <StatusBadge label="Cron" value={`${enabledCron}/${cron.length}`} tone={enabledCron > 0 ? "success" : "neutral"} />
+          <StatusBadge label="MCP" value={mcpFailed > 0 ? "degraded" : "ok"} tone={mcpFailed > 0 ? "danger" : "success"} />
+        </div>
+      </Section>
+
       <Section
         title={
-          <button
-            onClick={toggleStatus}
-            className="flex w-full items-center justify-between gap-2 text-left focus:outline-none focus:ring-1 focus:ring-[var(--border)]"
-            aria-expanded={!statusCollapsed}
-            aria-label={statusCollapsed ? "Expand System Status section" : "Collapse System Status section"}
-          >
-            <span>System Status</span>
-            <span aria-hidden="true" className="text-[10px]">{statusCollapsed ? "▼" : "▲"}</span>
+          <button onClick={() => setStatusCollapsed((v) => {
+            const next = !v;
+            try { localStorage.setItem(STATUS_COLLAPSED_KEY, String(next)); } catch {}
+            return next;
+          })} className="flex w-full items-center justify-between gap-2 text-left" aria-expanded={!statusCollapsed} aria-label={statusCollapsed ? "Expand system details" : "Collapse system details"}>
+            <span>Details</span>
+            <Icon name={statusCollapsed ? "caretDown" : "caretUp"} />
           </button>
         }
       >
         {!statusCollapsed && (
-          <div className="sidebar-status-section">
+          <>
             <div className="sidebar-status-group">
-              <StatusField label="Model" value={appState?.model} />
-              <StatusField label="Provider" value={appState?.provider} />
               <StatusField label="Permission" value={planMode || appState?.permission_mode} tone={planMode === "full_auto" ? "danger" : "success"} />
-              <StatusField label="Effort" value={appState?.effort} />
-            </div>
-
-            <div className="sidebar-status-subsection">
-              <div className="sidebar-section-title">Access</div>
               <StatusField label="Auth" value={appState?.auth_status} tone={appState?.auth_status === "ok" ? "success" : "danger"} />
               <StatusField label="MCP" value={`${appState?.mcp_connected ?? 0} ok / ${appState?.mcp_failed ?? 0} fail`} tone={(appState?.mcp_failed ?? 0) > 0 ? "danger" : "success"} />
+              <StatusField label="Failed Jobs" value={failedJobs} tone={failedJobs > 0 ? "danger" : "success"} />
             </div>
-          </div>
+            <Section title={`Jobs (${tasks.length})`}>
+              {tasks.slice(0, 3).map((t) => (
+                <div key={t.id} className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1.5 text-[11px]">
+                  <div className="flex justify-between gap-2">
+                    <span className="font-mono text-[var(--text-dim)]">{t.id.slice(0, 8)}</span>
+                    <span className={`job-badge ${jobBadgeClass(t.status)}`}>{t.status}</span>
+                  </div>
+                  <div className="truncate text-[12px]">{t.description || t.type}</div>
+                </div>
+              ))}
+            </Section>
+            <Section title={`Cron Jobs (${cron.length})`}>
+              {cron.slice(0, 4).map((j, idx) => (
+                <div key={idx} className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1.5 text-[11px]">
+                  <div className="flex justify-between gap-2">
+                    <span className="truncate font-medium">{String(j.name ?? "?")}</span>
+                    <span className={`job-badge ${j.enabled ? "job-badge-success" : "job-badge-neutral"}`}>{j.enabled ? "on" : "off"}</span>
+                  </div>
+                </div>
+              ))}
+            </Section>
+          </>
         )}
       </Section>
 
-      {compact && (
-        <Section title="Compaction">
-          <div className="rounded-md border border-[var(--status-pending-border)] bg-[var(--status-pending-bg)] px-2 py-1.5 text-[11px] text-[var(--status-pending-text)]">
-            <div className="flex justify-between">
-              <span className="font-medium">{compact.phase}</span>
-              {compact.attempt ? (
-                <span className="text-[var(--text-dim)]">#{compact.attempt}</span>
-              ) : null}
-            </div>
-            {compact.message && (
-              <div className="mt-1 truncate text-[var(--text-dim)]">
-                {compact.message}
-              </div>
-            )}
-          </div>
-        </Section>
-      )}
+      {compact && <Section title="Compaction"><div className="text-xs">{compact.phase}</div></Section>}
+      {todoMarkdown && <Section title="Todos"><pre className="whitespace-pre-wrap rounded-md border border-[var(--border)] bg-[var(--panel-2)] p-2 font-mono text-[11px]">{todoMarkdown}</pre></Section>}
+      {swarm && (swarm.teammates.length > 0 || swarm.notifications.length > 0) && <Section title={`Swarm (${swarm.teammates.length})`}><div className="text-xs text-[var(--text-dim)]">{swarm.notifications.length} notification(s)</div></Section>}
 
-      {todoMarkdown && (
-        <Section title="Todos">
-          <pre className="whitespace-pre-wrap rounded-md border border-[var(--border)] bg-[var(--panel-2)] p-2 font-mono text-[11px] leading-relaxed text-[var(--text)]">
-            {todoMarkdown}
-          </pre>
-        </Section>
-      )}
-
-      {swarm && (swarm.teammates.length > 0 || swarm.notifications.length > 0) && (
-        <Section title={`Swarm (${swarm.teammates.length})`}>
-          {swarm.teammates.slice(0, 6).map((t, idx) => (
-            <div
-              key={idx}
-              className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1.5 text-[11px]"
-            >
-              <div className="font-medium">
-                {String(t.name ?? t.agent_id ?? `agent-${idx}`)}
-              </div>
-              {t.status ? (
-                <div className="text-[var(--text-dim)]">{String(t.status)}</div>
-              ) : null}
-            </div>
-          ))}
-          {swarm.notifications.length > 0 && (
-            <div className="text-[10px] text-[var(--text-dim)]">
-              {swarm.notifications.length} notification(s)
-            </div>
-          )}
-        </Section>
-      )}
-
-      <div className="sidebar-jobs-section">
-        <Section title={`Jobs (${tasks.length})`}>
-          {tasks.length === 0 && (
-            <div className="text-xs text-[var(--text-dim)]">No background jobs.</div>
-          )}
-          {tasks.slice(0, 3).map((t) => (
-            <div
-              key={t.id}
-              className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1.5 text-[11px]"
-            >
-              <div className="flex justify-between gap-2">
-                <span className="font-mono text-[var(--text-dim)]">{t.id.slice(0, 8)}</span>
-                <span className={`job-badge ${jobBadgeClass(t.status)}`}>{t.status}</span>
-              </div>
-              <div className="truncate text-[12px]">{t.description || t.type}</div>
-            </div>
-          ))}
-          {tasks.length > 3 && (
-            <NavLink
-              to="/tasks"
-              className="text-xs text-[var(--accent)] hover:underline"
-              onClick={onClose}
-            >
-              View all ({tasks.length})
-            </NavLink>
-          )}
-        </Section>
-      </div>
-
-      <div className="sidebar-cron-section">
-        <Section title={`Cron Jobs (${cron.length})`}>
-          {cron.length === 0 && (
-            <div className="text-xs text-[var(--text-dim)]">No cron jobs.</div>
-          )}
-          {cron.slice(0, 8).map((j, idx) => (
-            <div
-              key={idx}
-              className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1.5 text-[11px]"
-            >
-              <div className="flex justify-between gap-2">
-                <span className="truncate font-medium">{String(j.name ?? "?")}</span>
-                <span className={`job-badge ${j.enabled ? "job-badge-success" : "job-badge-neutral"}`}>
-                  {j.enabled ? "on" : "off"}
-                </span>
-              </div>
-              <div className="font-mono text-[11px] text-[var(--text-dim)]">
-                {String(j.schedule ?? "")}
-              </div>
-            </div>
-          ))}
-        </Section>
-      </div>
-
-      <a
-        href="https://github.com/hodtien/openharness/tree/main/docs"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] text-[var(--text-dim)] transition hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
-        style={{ textDecoration: "none", borderWidth: "1px", borderStyle: "solid", borderColor: "transparent" }}
-      >
-        <span>📖</span>
+      <a href="https://github.com/hodtien/openharness/tree/main/docs" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] text-[var(--text-dim)] transition hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]" style={{ textDecoration: "none", borderWidth: "1px", borderStyle: "solid", borderColor: "transparent" }} aria-label="Open documentation">
+        <Icon name="docs" />
         <span>Docs</span>
       </a>
-
-      <div className="mt-auto text-[10px] text-[var(--text-dim)]">
-        OpenHarness Web UI · v0.1
-      </div>
     </div>
   );
 
-  return (
-    <>
-      {/* Desktop: persistent, can be collapsed via Header toggle */}
-      <div
-        data-testid="sidebar-desktop"
-        className={`${collapsed ? "hidden" : "hidden sm:block"} h-full`}
-      >
-        {content}
-      </div>
-      {/* Mobile: drawer */}
-      {open && (
-        <div data-testid="sidebar-mobile" className="fixed inset-0 z-30 flex sm:hidden">
-          {content}
-          <div
-            data-testid="sidebar-mobile-backdrop"
-            className="flex-1 bg-black/40"
-            onClick={onClose}
-          />
-        </div>
-      )}
-    </>
-  );
+  return <>
+    <div data-testid="sidebar-desktop" className={`${collapsed ? "hidden" : "hidden sm:block"} h-full`}>{content}</div>
+    {open && <div data-testid="sidebar-mobile" className="fixed inset-0 z-30 flex sm:hidden">{content}<div data-testid="sidebar-mobile-backdrop" className="flex-1 bg-black/40" onClick={onClose} /></div>}
+  </>;
 }
 
-function NavItem({
-  to,
-  label,
-  icon,
-  onClose,
-}: {
-  to: string;
-  label: string;
-  icon: string;
-  onClose: () => void;
-}) {
-  // Preserve ?project= param when navigating between pages.
+function NavItem({ to, label, icon, onClose }: { to: string; label: string; icon: IconName; onClose: () => void }) {
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("project");
   const target = projectId ? `${to}?project=${encodeURIComponent(projectId)}` : to;
-
-  return (
-    <NavLink
-      to={target}
-      end
-      onClick={onClose}
-      className={({ isActive }) =>
-        `sidebar-nav-link flex items-center gap-1.5 rounded-md border px-2 text-[13px] transition ${
-          isActive
-            ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]"
-            : "border-transparent text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
-        }`
-      }
-    >
-      <span aria-hidden="true" className="sidebar-nav-icon">{icon}</span>
-      <span>{label}</span>
-    </NavLink>
-  );
+  return <NavLink to={target} end onClick={onClose} className={({ isActive }) => `sidebar-nav-link flex items-center gap-1.5 rounded-md border px-2 text-[13px] transition ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-transparent text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"}`} aria-label={label} title={label}><span aria-hidden="true" className="sidebar-nav-icon"><Icon name={icon} /></span><span>{label}</span></NavLink>;
 }
 
-function Section({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="sidebar-section-title">
-        {title}
-      </div>
-      <div className="flex flex-col gap-2">{children}</div>
-    </div>
-  );
+function Icon({ name }: { name: IconName }) {
+  const glyph: Record<IconName, string> = { chat: "◉", history: "◷", autopilot: "⬢", jobs: "◍", projects: "▣", modes: "☰", provider: "◎", models: "◌", agents: "◈", schedule: "◴", docs: "◧", caretDown: "▾", caretUp: "▴" };
+  return <span aria-hidden="true">{glyph[name]}</span>;
 }
+
+function Section({ title, children }: { title: React.ReactNode; children: React.ReactNode }) { return <div><div className="sidebar-section-title">{title}</div><div className="flex flex-col gap-2">{children}</div></div>; }
 
 type Tone = "success" | "danger" | "warning" | "neutral";
-
 function StatusField({ label, value, tone = "neutral" }: { label: string; value?: string | number; tone?: Tone }) {
-  const pillClass = tone === "success"
-    ? "status-pill status-pill-success"
-    : tone === "danger"
-    ? "status-pill status-pill-danger"
-    : tone === "warning"
-    ? "status-pill status-pill-warning"
-    : "status-pill";
+  const pillClass = tone === "success" ? "status-pill status-pill-success" : tone === "danger" ? "status-pill status-pill-danger" : tone === "warning" ? "status-pill status-pill-warning" : "status-pill";
+  return <div className="flex items-center justify-between text-xs"><span className="text-[var(--text-dim)]">{label}</span><span className={pillClass}>{value ?? "—"}</span></div>;
+}
 
-  return (
-    <div className="flex items-center justify-between text-xs">
-      <span className="text-[var(--text-dim)]">{label}</span>
-      <span className={pillClass}>{value ?? "—"}</span>
-    </div>
-  );
+function StatusBadge({ label, value, tone = "neutral" }: { label: string; value: string; tone?: Tone }) {
+  const toneClass = tone === "success" ? "status-pill-success" : tone === "danger" ? "status-pill-danger" : tone === "warning" ? "status-pill-warning" : "";
+  return <span className={`status-pill ${toneClass}`} title={`${label}: ${value}`} aria-label={`${label}: ${value}`}>{label}: {value}</span>;
 }
 
 function jobBadgeClass(status: string): string {
