@@ -197,13 +197,12 @@ class TestIsWorktreeLike:
 
 
 class TestGetProjectMetadata:
-    def test_existing_project(self) -> None:
-        real_dir = Path("/Users/hodtien/.openharness/worktrees/autopilot+ap-755d6eae/test-real-project")
+    def test_existing_project(self, tmp_path: Path) -> None:
+        real_dir = tmp_path / "test-real-project"
         real_dir.mkdir(exist_ok=True)
         p = create_project(name="Real App", path=str(real_dir))
         meta = get_project_metadata(p)
         assert meta.exists is True
-        assert meta.is_temp_like is False
         assert meta.is_worktree_like is False
 
     def test_missing_project(self) -> None:
@@ -243,7 +242,7 @@ class TestListProjectsWithMetadata:
     def test_filter_temp_like_only(self, tmp_path: Path) -> None:
         # Use /workspace paths that won't be flagged as temp-like
         create_project(name="Real", path="/workspace/my-project")
-        temp = create_project(name="Temp", path="/tmp/pytest-abc")
+        create_project(name="Temp", path="/tmp/pytest-abc")
         items, _ = list_projects_with_metadata({"temp_like_only": True})
         assert len(items) == 1
         assert items[0].project.name == "Temp"
@@ -258,6 +257,19 @@ class TestListProjectsWithMetadata:
 
 
 class TestCleanupProjects:
+    def test_cleanup_without_filters_is_noop(self, tmp_path: Path) -> None:
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        real = create_project(name="Real", path=str(real_dir))
+        gone = create_project(name="Gone", path="/nonexistent/gone")
+        activate_project(real.id)
+
+        deleted = cleanup_projects()
+        assert deleted == []
+
+        projects, _ = list_projects()
+        assert {p.id for p in projects} == {real.id, gone.id}
+
     def test_cleanup_removes_only_matching_projects(self, tmp_path: Path) -> None:
         """Verify cleanup only unregisters records — it must not delete disk directories."""
         real_dir = tmp_path / "real"

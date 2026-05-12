@@ -68,7 +68,7 @@ export default function ProjectsPage() {
   const [confirmDeleteName, setConfirmDeleteName] = useState<string>("");
 
   // View filter (default: hide temp-like projects)
-  const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
+  const [viewFilter, setViewFilter] = useState<ViewFilter>("active");
 
   // Client-side search filter
   const [searchQuery, setSearchQuery] = useState("");
@@ -212,15 +212,16 @@ export default function ProjectsPage() {
     }
   };
 
-  const handleCleanupPreview = async () => {
+  const handleCleanupPreview = async (filter?: ViewFilter) => {
+    const selectedFilter = filter ?? cleanupFilter;
     setCleanupLoading(true);
     setCleanupPreview(null);
     try {
-      const filter: Record<string, boolean> = {};
-      if (cleanupFilter === "missing") filter.missing_only = true;
-      else if (cleanupFilter === "temp") filter.temp_like_only = true;
-      else if (cleanupFilter === "worktree") filter.worktree_like_only = true;
-      const result = await api.cleanupProjects(filter);
+      const apiFilter: Record<string, boolean> = {};
+      if (selectedFilter === "missing") apiFilter.missing_only = true;
+      else if (selectedFilter === "temp") apiFilter.temp_like_only = true;
+      else if (selectedFilter === "worktree") apiFilter.worktree_like_only = true;
+      const result = await api.cleanupProjects(apiFilter);
       setCleanupPreview(result.preview_count ?? 0);
     } catch (err) {
       toast.error(String(err));
@@ -384,9 +385,10 @@ export default function ProjectsPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setCleanupFilter(missingCount > 0 ? "missing" : "temp");
+                      const targetFilter: ViewFilter = missingCount > 0 ? "missing" : "temp";
                       setShowCleanupModal(true);
-                      handleCleanupPreview();
+                      setCleanupFilter(targetFilter);
+                      handleCleanupPreview(targetFilter);
                     }}
                     className="shrink-0 rounded-lg border border-orange-400/30 bg-orange-500/10 px-3 py-1.5 text-xs text-orange-300 hover:border-orange-400/60 hover:bg-orange-500/20"
                   >
@@ -676,7 +678,10 @@ export default function ProjectsPage() {
                   name="cleanupFilter"
                   value="temp"
                   checked={cleanupFilter === "temp"}
-                  onChange={() => setCleanupFilter("temp")}
+                  onChange={() => {
+                    setCleanupFilter("temp");
+                    handleCleanupPreview("temp");
+                  }}
                 />
                 Temp / Test projects
                 {tempCount > 0 && <span className="ml-1 text-xs text-orange-400">({tempCount})</span>}
@@ -687,7 +692,10 @@ export default function ProjectsPage() {
                   name="cleanupFilter"
                   value="missing"
                   checked={cleanupFilter === "missing"}
-                  onChange={() => setCleanupFilter("missing")}
+                  onChange={() => {
+                    setCleanupFilter("missing");
+                    handleCleanupPreview("missing");
+                  }}
                 />
                 Missing projects
                 {missingCount > 0 && <span className="ml-1 text-xs text-red-400">({missingCount})</span>}

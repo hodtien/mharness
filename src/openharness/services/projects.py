@@ -376,6 +376,9 @@ def cleanup_projects(
         active_id = raw.get("active_project_id")
         projects = _load_projects()
 
+        if not (missing_only or temp_like_only or worktree_like_only):
+            return []
+
         to_delete: list[Project] = []
         for p in projects:
             if p.id == active_id:

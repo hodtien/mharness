@@ -94,6 +94,12 @@ class ProjectCleanupRequest(BaseModel):
 
 @router.post("/cleanup")
 def cleanup_projects_endpoint(body: ProjectCleanupRequest) -> dict[str, object]:
+    has_filter = body.missing_only or body.temp_like_only or body.worktree_like_only
+    if not has_filter:
+        if not body.confirmed:
+            return {"ok": True, "preview_count": 0}
+        return {"ok": True, "deleted_count": 0, "deleted_ids": []}
+
     projects, _ = list_projects_with_metadata(
         {
             "missing_only": body.missing_only,
