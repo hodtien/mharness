@@ -47,6 +47,8 @@ def _modes_payload(state: AppState) -> dict[str, object]:
     return {
         "permission_mode": state.permission_mode,
         "model": state.model,
+        "provider": state.provider,
+        "active_profile": state.active_profile,
         "fast_mode": state.fast_mode,
         "vim_enabled": state.vim_enabled,
         "notifications_enabled": state.notifications_enabled,
@@ -131,6 +133,7 @@ def _apply_to_settings(updates: dict[str, object]) -> AppState:
         theme=settings.theme,
         cwd=str(settings_updates.get("cwd", ".")),
         provider=settings.provider or "unknown",
+        active_profile=settings.active_profile,
         fast_mode=settings.fast_mode,
         effort=settings.effort,
         passes=settings.passes,

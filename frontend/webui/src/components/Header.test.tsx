@@ -131,8 +131,9 @@ describe("ModelPicker", () => {
     mockLocalStorage();
     useSession.setState({
       appState: {
-        model: "claude-3-5-sonnet",
+        model: "cc/claude-sonnet-4-6",
         provider: "anthropic",
+        active_profile: "claude-router",
         cwd: "/tmp",
         permission_mode: "default",
       },
@@ -152,18 +153,22 @@ describe("ModelPicker", () => {
     });
   });
 
-  it("fetches models and shows active model with checkmark", async () => {
+  // Helper: /api/models returns models keyed by profile id "claude-router"
+  function makeClaudeRouterModels() {
+    return {
+      "claude-router": [
+        { id: "cc/claude-sonnet-4-6", label: "Claude Sonnet 4.6", is_default: true, is_custom: false },
+        { id: "cc/claude-haiku-4", label: "Claude Haiku 4", is_default: false, is_custom: false },
+      ],
+    };
+  }
+
+  it("fetches models keyed by active_profile and shows active model with checkmark", async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === "/api/models" && (!init?.method || init.method === "GET")) {
         return Promise.resolve({
           ok: true,
-          json: () =>
-            Promise.resolve({
-              anthropic: [
-                { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", is_default: true, is_custom: false },
-                { id: "claude-3-5-haiku", label: "Claude 3.5 Haiku", is_default: false, is_custom: false },
-              ],
-            }),
+          json: () => Promise.resolve(makeClaudeRouterModels()),
         });
       }
       return Promise.reject(new Error(`unexpected: ${url} ${init?.method || "GET"}`));
@@ -171,25 +176,19 @@ describe("ModelPicker", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ModelPicker />);
-    fireEvent.click(screen.getByRole("button", { name: /claude-3-5-sonnet/i }));
+    fireEvent.click(screen.getByRole("button", { name: /cc\/claude-sonnet-4-6/i }));
 
     await screen.findByDisplayValue("");
-    expect(await screen.findByText(/Claude 3.5 Sonnet \(claude-3-5-sonnet\)/)).toBeTruthy();
+    expect(await screen.findByText(/Claude Sonnet 4\.6 \(cc\/claude-sonnet-4-6\)/)).toBeTruthy();
     expect(screen.getByText("✓")).toBeTruthy();
   });
 
-  it("PATCHes /api/modes with model and applies optimistic update on selection", async () => {
+  it("PATCHes /api/modes with { model } only and applies optimistic update on selection", async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === "/api/models" && (!init?.method || init.method === "GET")) {
         return Promise.resolve({
           ok: true,
-          json: () =>
-            Promise.resolve({
-              anthropic: [
-                { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", is_default: true, is_custom: false },
-                { id: "claude-3-5-haiku", label: "Claude 3.5 Haiku", is_default: false, is_custom: false },
-              ],
-            }),
+          json: () => Promise.resolve(makeClaudeRouterModels()),
         });
       }
       if (url === "/api/modes" && init?.method === "PATCH") {
@@ -197,7 +196,7 @@ describe("ModelPicker", () => {
           ok: true,
           json: () => Promise.resolve({
             permission_mode: "default",
-            model: "claude-3-5-haiku",
+            model: "cc/claude-haiku-4",
             fast_mode: false,
             vim_enabled: false,
             effort: "medium",
@@ -212,19 +211,19 @@ describe("ModelPicker", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ModelPicker />);
-    fireEvent.click(screen.getByRole("button", { name: /claude-3-5-sonnet/i }));
+    fireEvent.click(screen.getByRole("button", { name: /cc\/claude-sonnet-4-6/i }));
 
-    const option = await screen.findByText(/Claude 3.5 Haiku \(claude-3-5-haiku\)/);
+    const option = await screen.findByText(/Claude Haiku 4 \(cc\/claude-haiku-4\)/);
     fireEvent.click(option);
 
-    expect(useSession.getState().appState?.model).toBe("claude-3-5-haiku");
+    expect(useSession.getState().appState?.model).toBe("cc/claude-haiku-4");
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/modes",
         expect.objectContaining({
           method: "PATCH",
-          body: JSON.stringify({ model: "claude-3-5-haiku" }),
+          body: JSON.stringify({ model: "cc/claude-haiku-4" }),
         }),
       );
     });
@@ -237,9 +236,9 @@ describe("ModelPicker", () => {
           ok: true,
           json: () =>
             Promise.resolve({
-              anthropic: [
-                { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", is_default: true, is_custom: false },
-                { id: "claude-3-5-haiku", label: "Claude 3.5 Haiku", is_default: false, is_custom: false },
+              "claude-router": [
+                { id: "cc/claude-sonnet-4-6", label: "Claude Sonnet 4.6", is_default: true, is_custom: false },
+                { id: "cc/claude-haiku-4", label: "Claude Haiku 4", is_default: false, is_custom: false },
               ],
               openai: [
                 { id: "gpt-4o", label: "GPT-4o", is_default: true, is_custom: false },
@@ -252,13 +251,13 @@ describe("ModelPicker", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ModelPicker />);
-    fireEvent.click(screen.getByRole("button", { name: /claude-3-5-sonnet/i }));
+    fireEvent.click(screen.getByRole("button", { name: /cc\/claude-sonnet-4-6/i }));
 
     const input = await screen.findByPlaceholderText(/Search 2 models/i);
     fireEvent.change(input, { target: { value: "haiku" } });
 
-    expect(await screen.findByText(/Claude 3.5 Haiku/)).toBeTruthy();
-    expect(screen.queryByText(/Claude 3.5 Sonnet/)).toBeNull();
+    expect(await screen.findByText(/Claude Haiku 4/)).toBeTruthy();
+    expect(screen.queryByText(/Claude Sonnet 4\.6/)).toBeNull();
     expect(screen.queryByText(/GPT-4o/)).toBeNull();
   });
 });

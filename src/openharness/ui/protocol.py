@@ -186,6 +186,7 @@ def _state_payload(state: AppState) -> dict[str, Any]:
         "model": state.model,
         "cwd": state.cwd,
         "provider": state.provider,
+        "active_profile": getattr(state, "active_profile", ""),
         "auth_status": state.auth_status,
         "base_url": state.base_url,
         "permission_mode": _format_permission_mode(state.permission_mode),
