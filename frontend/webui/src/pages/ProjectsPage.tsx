@@ -43,6 +43,17 @@ function CopyButton({ text, className = "" }: { text: string; className?: string
   );
 }
 
+type ViewFilter = "all" | "active" | "existing" | "missing" | "temp" | "worktree";
+
+const FILTER_LABELS: Record<ViewFilter, string> = {
+  all: "All",
+  active: "Active",
+  existing: "Existing",
+  missing: "Missing",
+  temp: "Temp / Test",
+  worktree: "Worktrees",
+};
+
 export default function ProjectsPage() {
   const { setActiveProjectId } = useSession();
   const [data, setData] = useState<ProjectsResponse | null>(null);
@@ -56,6 +67,9 @@ export default function ProjectsPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmDeleteName, setConfirmDeleteName] = useState<string>("");
 
+  // View filter (default: hide temp-like projects)
+  const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
+
   // Client-side search filter
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -68,6 +82,12 @@ export default function ProjectsPage() {
   const [newDesc, setNewDesc] = useState("");
   const [creating, setCreating] = useState(false);
   const [newError, setNewError] = useState<string | null>(null);
+
+  // Cleanup modal
+  const [showCleanupModal, setShowCleanupModal] = useState(false);
+  const [cleanupFilter, setCleanupFilter] = useState<ViewFilter>("temp");
+  const [cleanupPreview, setCleanupPreview] = useState<number | null>(null);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
 
   useEffect(() => {
     loadProjects();
@@ -192,12 +212,76 @@ export default function ProjectsPage() {
     }
   };
 
-  // Client-side search filter
+  const handleCleanupPreview = async () => {
+    setCleanupLoading(true);
+    setCleanupPreview(null);
+    try {
+      const filter: Record<string, boolean> = {};
+      if (cleanupFilter === "missing") filter.missing_only = true;
+      else if (cleanupFilter === "temp") filter.temp_like_only = true;
+      else if (cleanupFilter === "worktree") filter.worktree_like_only = true;
+      const result = await api.cleanupProjects(filter);
+      setCleanupPreview(result.preview_count ?? 0);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
+  const handleCleanupConfirm = async () => {
+    setCleanupLoading(true);
+    try {
+      const filter: Record<string, boolean> = {};
+      if (cleanupFilter === "missing") filter.missing_only = true;
+      else if (cleanupFilter === "temp") filter.temp_like_only = true;
+      else if (cleanupFilter === "worktree") filter.worktree_like_only = true;
+      filter.confirmed = true;
+      const result = await api.cleanupProjects(filter);
+      const count = result.deleted_count ?? 0;
+      setShowCleanupModal(false);
+      setCleanupPreview(null);
+      toast.success(`Removed ${count} project record${count !== 1 ? "s" : ""} from registry.`);
+      loadProjects();
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
+  // Apply view filter and search
   const lowerQ = searchQuery.trim().toLowerCase();
   const projects = data?.projects ?? [];
-  const filteredProjects = projects.filter((p) =>
-    lowerQ ? p.name.toLowerCase().includes(lowerQ) || p.path.toLowerCase().includes(lowerQ) : true
-  );
+  const filteredProjects = projects.filter((p) => {
+    // Search filter
+    if (lowerQ) {
+      if (!p.name.toLowerCase().includes(lowerQ) && !p.path.toLowerCase().includes(lowerQ)) {
+        return false;
+      }
+    }
+    // View filter
+    switch (viewFilter) {
+      case "active":
+        return p.id === data?.active_project_id;
+      case "existing":
+        return p.exists !== false;
+      case "missing":
+        return p.exists === false;
+      case "temp":
+        return p.is_temp_like === true;
+      case "worktree":
+        return p.is_worktree_like === true;
+      case "all":
+      default:
+        return true;
+    }
+  });
+
+  // Count badges for badges
+  const tempCount = projects.filter((p) => p.is_temp_like === true).length;
+  const missingCount = projects.filter((p) => p.exists === false).length;
+
   const activeProjectId = data?.active_project_id ?? null;
   const orderedProjects = [...filteredProjects].sort((a, b) => {
     if (a.id === activeProjectId) return -1;
@@ -261,20 +345,69 @@ export default function ProjectsPage() {
           )}
 
           {!!projects.length && (
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Search by name or path…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
-              />
-              {searchQuery && (
-                <span className="shrink-0 text-xs text-[var(--text-dim)]">
-                  {filteredProjects.length} / {projects.length}
-                </span>
-              )}
-            </div>
+            <>
+              {/* Toolbar: filter tabs + search */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap gap-1" role="tablist" aria-label="Project filter">
+                  {(Object.keys(FILTER_LABELS) as ViewFilter[]).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      role="tab"
+                      aria-selected={viewFilter === f}
+                      onClick={() => setViewFilter(f)}
+                      className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                        viewFilter === f
+                          ? "border-cyan-400/60 bg-cyan-500/20 text-cyan-200"
+                          : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)]"
+                      }`}
+                    >
+                      {FILTER_LABELS[f]}
+                      {f === "temp" && tempCount > 0 && (
+                        <span className="ml-1 rounded-full bg-orange-500/20 px-1.5 py-0.5 text-[10px] text-orange-300">
+                          {tempCount}
+                        </span>
+                      )}
+                      {f === "missing" && missingCount > 0 && (
+                        <span className="ml-1 rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] text-red-300">
+                          {missingCount}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex-1" />
+
+                {/* Cleanup button */}
+                {(tempCount > 0 || missingCount > 0) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCleanupFilter(missingCount > 0 ? "missing" : "temp");
+                      setShowCleanupModal(true);
+                      handleCleanupPreview();
+                    }}
+                    className="shrink-0 rounded-lg border border-orange-400/30 bg-orange-500/10 px-3 py-1.5 text-xs text-orange-300 hover:border-orange-400/60 hover:bg-orange-500/20"
+                  >
+                    🧹 Cleanup
+                  </button>
+                )}
+
+                <input
+                  type="text"
+                  placeholder="Search by name or path…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-56 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
+                />
+                {searchQuery && (
+                  <span className="shrink-0 text-xs text-[var(--text-dim)]">
+                    {filteredProjects.length} / {projects.length}
+                  </span>
+                )}
+              </div>
+            </>
           )}
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -308,6 +441,21 @@ export default function ProjectsPage() {
                             {isActive && (
                               <span className="shrink-0 rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-[11px] font-medium text-cyan-200">
                                 active
+                              </span>
+                            )}
+                            {!isActive && project.is_temp_like && (
+                              <span className="shrink-0 rounded-full border border-orange-400/40 bg-orange-400/10 px-2 py-0.5 text-[11px] font-medium text-orange-200">
+                                temp
+                              </span>
+                            )}
+                            {!isActive && project.exists === false && (
+                              <span className="shrink-0 rounded-full border border-red-400/40 bg-red-400/10 px-2 py-0.5 text-[11px] font-medium text-red-200">
+                                missing
+                              </span>
+                            )}
+                            {!isActive && project.is_worktree_like && (
+                              <span className="shrink-0 rounded-full border border-purple-400/40 bg-purple-400/10 px-2 py-0.5 text-[11px] font-medium text-purple-200">
+                                worktree
                               </span>
                             )}
                           </div>
@@ -400,54 +548,84 @@ export default function ProjectsPage() {
               );
             })}
           </div>
+
+          {/* Empty filter state */}
+          {projects.length > 0 && filteredProjects.length === 0 && (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-8 text-center">
+              <p className="text-sm text-[var(--text-dim)]">
+                No projects match the current filter.
+              </p>
+              <button
+                type="button"
+                onClick={() => { setViewFilter("all"); setSearchQuery(""); }}
+                className="mt-3 text-xs text-cyan-400 hover:underline"
+              >
+                Clear filters
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* New Project Modal */}
-      {showNewModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowNewModal(false); }}
-        >
-          <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--panel)] shadow-2xl">
-            {/* Header */}
-            <div className="sticky top-0 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-6 py-4">
-              <h2 className="text-lg font-semibold text-[var(--text)]">New Project</h2>
+      {/* Delete confirmation dialog */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 shadow-2xl">
+            <h2 className="mb-3 text-base font-semibold text-[var(--text)]">
+              Delete Project
+            </h2>
+            <p className="mb-5 text-sm text-[var(--text-dim)]">
+              Are you sure you want to delete <strong>{confirmDeleteName}</strong>?
+              This only removes the project record from the registry — no directories are deleted.
+            </p>
+            <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowNewModal(false)}
-                className="text-[var(--text-dim)] hover:text-[var(--text)]"
+                onClick={() => setConfirmDeleteId(null)}
+                className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text)] hover:border-[var(--border)]"
               >
-                ✕
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const id = confirmDeleteId;
+                  setConfirmDeleteId(null);
+                  handleDelete(id);
+                }}
+                className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400"
+              >
+                Confirm delete project
               </button>
             </div>
+          </div>
+        </div>
+      )}
 
-            {/* Body */}
-            <div className="p-6 space-y-4">
-              {newError && (
-                <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
-                  {newError}
-                </div>
-              )}
+      {/* New project modal */}
+      {showNewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 shadow-2xl">
+            <h2 className="mb-4 text-base font-semibold text-[var(--text)]">New Project</h2>
+            <div className="space-y-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-[var(--text-dim)]">Project Name</span>
+                <span className="mb-1 block text-xs font-medium text-[var(--text-dim)]">Name</span>
                 <input
                   type="text"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g. My App"
+                  placeholder="My App"
                   className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
-                  autoFocus
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-[var(--text-dim)]">Project Path</span>
+                <span className="mb-1 block text-xs font-medium text-[var(--text-dim)]">Path</span>
                 <input
                   type="text"
                   value={newPath}
                   onChange={(e) => setNewPath(e.target.value)}
-                  placeholder="/absolute/path/to/project"
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 font-mono text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
+                  placeholder="/path/to/project"
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
                 />
               </label>
               <label className="block">
@@ -455,20 +633,17 @@ export default function ProjectsPage() {
                 <textarea
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
-                  rows={3}
-                  placeholder="Brief description of the project…"
+                  rows={2}
                   className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-cyan-400/60"
                 />
               </label>
+              {newError && <p className="text-xs text-red-400">{newError}</p>}
             </div>
-
-            {/* Footer */}
-            <div className="flex justify-end gap-3 border-t border-[var(--border)] px-6 py-4">
+            <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowNewModal(false)}
-                disabled={creating}
-                className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text-dim)] hover:border-[var(--border)] hover:text-[var(--text)] disabled:opacity-60"
+                onClick={() => { setShowNewModal(false); setNewError(null); }}
+                className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text)] hover:border-[var(--border)]"
               >
                 Cancel
               </button>
@@ -478,64 +653,74 @@ export default function ProjectsPage() {
                 disabled={creating}
                 className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-60"
               >
-                {creating ? "Creating…" : "Create Project"}
+                {creating ? "Creating…" : "Create"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {confirmDeleteId && (
-        <DeleteConfirmDialog
-          projectName={confirmDeleteName}
-          onConfirm={() => { handleDelete(confirmDeleteId); setConfirmDeleteId(null); }}
-          onCancel={() => setConfirmDeleteId(null)}
-        />
+      {/* Cleanup confirmation modal */}
+      {showCleanupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 shadow-2xl">
+            <h2 className="mb-3 text-base font-semibold text-[var(--text)]">🧹 Cleanup Projects</h2>
+            <p className="mb-3 text-sm text-[var(--text-dim)]">
+              Remove registered project records for paths that no longer exist or are temporary test directories.
+              <strong> This only unregisters the records — no directories are deleted.</strong>
+            </p>
+            <div className="mb-4 space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text)]">
+                <input
+                  type="radio"
+                  name="cleanupFilter"
+                  value="temp"
+                  checked={cleanupFilter === "temp"}
+                  onChange={() => setCleanupFilter("temp")}
+                />
+                Temp / Test projects
+                {tempCount > 0 && <span className="ml-1 text-xs text-orange-400">({tempCount})</span>}
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text)]">
+                <input
+                  type="radio"
+                  name="cleanupFilter"
+                  value="missing"
+                  checked={cleanupFilter === "missing"}
+                  onChange={() => setCleanupFilter("missing")}
+                />
+                Missing projects
+                {missingCount > 0 && <span className="ml-1 text-xs text-red-400">({missingCount})</span>}
+              </label>
+            </div>
+            {cleanupPreview !== null && (
+              <div className="mb-4 rounded-lg border border-orange-400/30 bg-orange-500/10 p-3 text-sm text-orange-200">
+                This will remove <strong>{cleanupPreview}</strong> project record{cleanupPreview !== 1 ? "s" : ""} from the registry.
+              </div>
+            )}
+            {cleanupPreview === 0 && (
+              <div className="mb-4 text-sm text-[var(--text-dim)]">No matching projects found.</div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowCleanupModal(false); setCleanupPreview(null); }}
+                className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text)] hover:border-[var(--border)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCleanupConfirm}
+                disabled={cleanupLoading || cleanupPreview === 0}
+                className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-400 disabled:opacity-60"
+              >
+                {cleanupLoading ? "Working…" : "Confirm cleanup"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
-    </div>
-  );
-}
-
-// Delete confirmation dialog
-function DeleteConfirmDialog({
-  projectName,
-  onConfirm,
-  onCancel,
-}: {
-  projectName: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-    >
-      <div className="w-full max-w-sm rounded-2xl border border-red-400/30 bg-[var(--panel)] shadow-2xl">
-        <div className="p-6">
-          <h3 className="text-base font-semibold text-[var(--text)]">Delete Project?</h3>
-          <p className="mt-2 text-sm text-[var(--text-dim)]">
-            Are you sure you want to delete <strong>{projectName}</strong>? This cannot be undone.
-          </p>
-        </div>
-        <div className="flex justify-end gap-3 border-t border-[var(--border)] px-6 py-4">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text-dim)] hover:border-[var(--border)] hover:text-[var(--text)]"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            aria-label="Confirm delete project"
-            onClick={onConfirm}
-            className="rounded-lg border border-red-400/50 bg-red-500/20 px-4 py-2 text-sm font-medium text-red-200 hover:border-red-400 hover:bg-red-500/30"
-          >
-            Delete
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

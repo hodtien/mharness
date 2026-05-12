@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ProjectsPage from "./ProjectsPage";
 import type { ProjectsResponse, Project } from "../api/client";
 
-const makeProject = (overrides: Partial<Project>): Project => ({
+const makeProject = (overrides: Partial<Project> & { id?: string; name?: string; path?: string }): Project => ({
   id: "proj-001",
   name: "My App",
   path: "/workspace/my-app",
@@ -11,6 +11,10 @@ const makeProject = (overrides: Partial<Project>): Project => ({
   created_at: null,
   updated_at: null,
   is_active: false,
+  exists: true,
+  is_temp_like: false,
+  is_worktree_like: false,
+  last_seen_at: null,
   ...overrides,
 });
 
@@ -35,6 +39,9 @@ function mockFetch(response: any = MOCK_PROJECTS_RESPONSE) {
       }
       if (url === `/api/projects/${response.active_project_id}/activate`) {
         return Promise.resolve({ ok: true, status: 204 });
+      }
+      if (url === "/api/projects/cleanup") {
+        return Promise.resolve({ ok: true, json: async () => ({ ok: true, preview_count: 0 }) });
       }
       return Promise.reject(new Error(`unexpected url: ${url}`));
     })
@@ -115,6 +122,255 @@ describe("ProjectsPage rendering", () => {
     await waitFor(() => expect(screen.getByText("No projects yet.")).toBeTruthy());
     expect(screen.getByText("Create your first project to get started.")).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /^\+ New Project$/ }).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ── View Filters ─────────────────────────────────────────────────────────────
+
+describe("ProjectsPage view filters", () => {
+  beforeEach(async () => {
+    mockFetch();
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+  });
+
+  it("shows All filter tab by default", async () => {
+    const allTab = screen.getByRole("tab", { name: /^All$/ });
+    expect(allTab).toBeTruthy();
+  });
+
+  it("shows filter tabs: All, Active, Existing, Missing, Temp / Test, Worktrees", async () => {
+    const filters = ["All", "Active", "Existing", "Missing", "Temp / Test", "Worktrees"];
+    for (const f of filters) {
+      expect(screen.getByRole("tab", { name: new RegExp(`^${f}`) })).toBeTruthy();
+    }
+  });
+
+  it('hides temp-like projects when switching to "Existing" filter', async () => {
+    const tempProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p1", name: "Real App", path: "/workspace/real-app", is_temp_like: false }),
+        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+      ],
+      active_project_id: "p1",
+    };
+    mockFetch(tempProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(2);
+
+    // Switch to Existing filter
+    fireEvent.click(screen.getByRole("tab", { name: /^Existing$/ }));
+    await waitForProjects(1);
+    expect(projectHeading("Real App")).toBeTruthy();
+    expect(screen.queryByRole("heading", { level: 2, name: "Pytest Temp" })).toBeNull();
+  });
+
+  it('shows temp-like projects when switching to "Temp / Test" filter', async () => {
+    const tempProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p1", name: "Real App", path: "/workspace/real-app", is_temp_like: false }),
+        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+      ],
+      active_project_id: "p1",
+    };
+    mockFetch(tempProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(2);
+
+    // Switch to Temp / Test filter
+    fireEvent.click(screen.getByRole("tab", { name: /^Temp \/ Test/ }));
+    await waitForProjects(1);
+    expect(projectHeading("Pytest Temp")).toBeTruthy();
+    expect(screen.queryByRole("heading", { level: 2, name: "Real App" })).toBeNull();
+  });
+
+  it("shows temp badge on temp-like project cards", async () => {
+    const tempProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p1", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+      ],
+      active_project_id: null,
+    };
+    mockFetch(tempProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(1);
+    expect(screen.getByText("temp")).toBeTruthy();
+  });
+
+  it("shows missing badge on missing project cards", async () => {
+    const missingProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p1", name: "Gone", path: "/nonexistent/gone", exists: false }),
+      ],
+      active_project_id: null,
+    };
+    mockFetch(missingProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(1);
+    expect(screen.getByText("missing")).toBeTruthy();
+  });
+
+  it("shows worktree badge on worktree-like project cards", async () => {
+    const wtProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p1", name: "WT Feature", path: "/repo/.git/worktrees/feature", is_worktree_like: true }),
+      ],
+      active_project_id: null,
+    };
+    mockFetch(wtProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(1);
+    expect(screen.getByText("worktree")).toBeTruthy();
+  });
+
+  it('shows "No projects match" empty state when filter hides all', async () => {
+    const missingProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p1", name: "Gone", path: "/nonexistent/gone", exists: false }),
+      ],
+      active_project_id: null,
+    };
+    mockFetch(missingProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(1);
+
+    // Switch to Active filter (no active projects in mock)
+    fireEvent.click(screen.getByRole("tab", { name: /^Active$/ }));
+    await waitFor(() => expect(screen.getByText("No projects match the current filter.")).toBeTruthy());
+  });
+
+  it("has a 'Clear filters' button when filter state hides all projects", async () => {
+    const missingProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p1", name: "Gone", path: "/nonexistent/gone", exists: false }),
+      ],
+      active_project_id: null,
+    };
+    mockFetch(missingProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(1);
+
+    fireEvent.click(screen.getByRole("tab", { name: /^Active$/ }));
+    await waitFor(() => expect(screen.getByText("No projects match the current filter.")).toBeTruthy());
+    expect(screen.getByText("Clear filters")).toBeTruthy();
+  });
+
+  it("restores all projects after clearing filters", async () => {
+    const tempProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p1", name: "Real App", path: "/workspace/real-app", is_temp_like: false }),
+        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+      ],
+      active_project_id: null,
+    };
+    mockFetch(tempProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(2);
+
+    fireEvent.click(screen.getByRole("tab", { name: /^Temp \/ Test/ }));
+    await waitForProjects(1);
+    expect(projectHeading("Pytest Temp")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Clear filters"));
+    await waitForProjects(2);
+    expect(projectHeading("Real App")).toBeTruthy();
+    expect(projectHeading("Pytest Temp")).toBeTruthy();
+  });
+});
+
+// ── Cleanup Modal ─────────────────────────────────────────────────────────────
+
+describe("ProjectsPage cleanup modal", () => {
+  it("does not show cleanup button when no temp or missing projects exist", async () => {
+    mockFetch(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+    expect(screen.queryByText("🧹 Cleanup")).toBeNull();
+  });
+
+  it("shows cleanup button when temp projects are present", async () => {
+    const tempProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p1", name: "Real App", path: "/workspace/real-app", is_temp_like: false }),
+        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+      ],
+      active_project_id: null,
+    };
+    mockFetch(tempProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(2);
+    expect(screen.getByText("🧹 Cleanup")).toBeTruthy();
+  });
+
+  it("shows cleanup button when missing projects are present", async () => {
+    const missingProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p1", name: "Gone", path: "/nonexistent/gone", exists: false }),
+      ],
+      active_project_id: null,
+    };
+    mockFetch(missingProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(1);
+    expect(screen.getByText("🧹 Cleanup")).toBeTruthy();
+  });
+
+  it("opens cleanup modal when cleanup button is clicked", async () => {
+    const tempProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+      ],
+      active_project_id: null,
+    };
+    mockFetch(tempProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(1);
+    fireEvent.click(screen.getByText("🧹 Cleanup"));
+    await waitFor(() => expect(screen.getByText("Cleanup Projects")).toBeTruthy());
+    expect(screen.getByText("This will remove")).toBeTruthy();
+  });
+
+  it("shows preview count after opening cleanup modal", async () => {
+    const tempProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+      ],
+      active_project_id: null,
+    };
+    mockFetch(tempProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(1);
+    fireEvent.click(screen.getByText("🧹 Cleanup"));
+    await waitFor(() => expect(screen.getByText(/This will remove.*1.*project.*registry/)).toBeTruthy());
+  });
+
+  it("closes cleanup modal on Cancel", async () => {
+    const tempProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+      ],
+      active_project_id: null,
+    };
+    mockFetch(tempProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(1);
+    fireEvent.click(screen.getByText("🧹 Cleanup"));
+    await waitFor(() => expect(screen.getByText("Cleanup Projects")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /Cancel/ }));
+    await waitFor(() => expect(screen.queryByText("Cleanup Projects")).toBeNull());
+  });
+
+  it("shows 'No matching projects found' when preview count is 0", async () => {
+    const emptyProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p1", name: "Real App", path: "/workspace/real-app", is_temp_like: false }),
+      ],
+      active_project_id: null,
+    };
+    mockFetch(emptyProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(1);
+    expect(screen.queryByText("🧹 Cleanup")).toBeNull();
   });
 });
 

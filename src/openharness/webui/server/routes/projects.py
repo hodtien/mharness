@@ -32,9 +32,10 @@ from pydantic import BaseModel
 
 from openharness.services.projects import (
     activate_project,
+    cleanup_projects,
     create_project,
     delete_project,
-    list_projects,
+    list_projects_with_metadata,
     update_project,
 )
 from openharness.ui.protocol import BackendEvent
@@ -67,14 +68,49 @@ class ProjectUpdateRequest(BaseModel):
 
 @router.get("")
 def list_projects_endpoint() -> dict[str, object]:
-    """List all registered projects and the active project ID.
+    """List registered projects with runtime metadata."""
+    projects, active_project_id = list_projects_with_metadata()
+    return {
+        "projects": [
+            {
+                **asdict(item.project),
+                "exists": item.exists,
+                "is_temp_like": item.is_temp_like,
+                "is_worktree_like": item.is_worktree_like,
+                "last_seen_at": item.last_seen_at,
+            }
+            for item in projects
+        ],
+        "active_project_id": active_project_id,
+    }
 
-    Returns
-    -------
-    {"projects": [...], "active_project_id": "<id>" | null}
-    """
-    projects, active_project_id = list_projects()
-    return {"projects": [asdict(project) for project in projects], "active_project_id": active_project_id}
+
+class ProjectCleanupRequest(BaseModel):
+    missing_only: bool = False
+    temp_like_only: bool = False
+    worktree_like_only: bool = False
+    confirmed: bool = False
+
+
+@router.post("/cleanup")
+def cleanup_projects_endpoint(body: ProjectCleanupRequest) -> dict[str, object]:
+    projects, _ = list_projects_with_metadata(
+        {
+            "missing_only": body.missing_only,
+            "temp_like_only": body.temp_like_only,
+            "worktree_like_only": body.worktree_like_only,
+            "exclude_active": True,
+        }
+    )
+    count = len(projects)
+    if not body.confirmed:
+        return {"ok": True, "preview_count": count}
+    deleted = cleanup_projects(
+        missing_only=body.missing_only,
+        temp_like_only=body.temp_like_only,
+        worktree_like_only=body.worktree_like_only,
+    )
+    return {"ok": True, "deleted_count": len(deleted), "deleted_ids": deleted}
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
