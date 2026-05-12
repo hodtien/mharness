@@ -36,6 +36,7 @@ def _entry_payload(entry) -> dict[str, object]:
         "created_at": entry.created_at,
         "active": entry.task is not None and not entry.task.done(),
         "resumed_from": entry.resumed_from,
+        "project_id": entry.project_id,
     }
 
 
@@ -67,6 +68,7 @@ def create_session(
     """
     # Resolve the cwd: prefer the per-request project_id over the global state.
     cwd = str(state.cwd)
+    resolved_project_id = project_id
     if project_id:
         project = get_project(project_id)
         if project is None:
@@ -75,6 +77,7 @@ def create_session(
                 detail="Project not found",
             )
         cwd = project.path
+        resolved_project_id = project_id
 
     restore_messages: list[dict] | None = None
     restore_tool_metadata: dict[str, object] | None = None
@@ -100,6 +103,7 @@ def create_session(
         restore_tool_metadata=restore_tool_metadata,
         resumed_from=resumed_from,
         cwd=cwd,
+        project_id=resolved_project_id,
     )
     return _entry_payload(entry)
 

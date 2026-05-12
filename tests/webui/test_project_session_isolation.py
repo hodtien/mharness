@@ -372,3 +372,80 @@ def test_multiple_sessions_per_project(tmp_path, monkeypatch) -> None:
     ids = {s["session_id"] for s in sessions}
     for i in range(5):
         assert f"multi-{i:03d}" in ids
+
+
+def test_two_sessions_with_different_project_id_have_isolated_state(tmp_path, monkeypatch) -> None:
+    """Two sessions created with different project_id values use separate project contexts.
+
+    This is the core regression test for P16.3a: per-tab project isolation via
+    ``?project_id=`` query parameter. Sessions must not share a global active
+    project — each session carries its own project context.
+    """
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+
+    project_a = tmp_path / "project_a"
+    project_b = tmp_path / "project_b"
+    project_a.mkdir()
+    project_b.mkdir()
+
+    # Create the app with a separate global cwd so project_a/project_b are explicit projects.
+    global_cwd = tmp_path / "global"
+    global_cwd.mkdir()
+    client = TestClient(create_app(token="test-token", cwd=str(global_cwd), model="sonnet"))
+    auth = {"Authorization": "Bearer test-token"}
+
+    # Register both projects so they are available via project_id
+    resp_a = client.post("/api/projects", json={"name": "Project A", "path": str(project_a)}, headers=auth)
+    assert resp_a.status_code == 201
+    project_a_id = resp_a.json()["id"]
+
+    resp_b = client.post("/api/projects", json={"name": "Project B", "path": str(project_b)}, headers=auth)
+    assert resp_b.status_code == 201
+    project_b_id = resp_b.json()["id"]
+
+    # Create session 1 with ?project_id=project_a_id
+    r1 = client.post(f"/api/sessions?project_id={project_a_id}", headers=auth)
+    assert r1.status_code == 200
+    session1 = r1.json()
+    assert session1["project_id"] == project_a_id
+
+    # Create session 2 with ?project_id=project_b_id
+    r2 = client.post(f"/api/sessions?project_id={project_b_id}", headers=auth)
+    assert r2.status_code == 200
+    session2 = r2.json()
+    assert session2["project_id"] == project_b_id
+
+    # Verify both sessions are distinct
+    assert session1["session_id"] != session2["session_id"]
+
+    # Retrieve the session entries and check their cwd / project isolation
+    manager = client.app.state.webui_session_manager
+
+    entry1 = manager.get(session1["session_id"])
+    assert entry1 is not None
+    assert entry1.project_id == project_a_id
+    assert entry1.host._config.cwd == str(project_a.resolve())
+
+    entry2 = manager.get(session2["session_id"])
+    assert entry2 is not None
+    assert entry2.project_id == project_b_id
+    assert entry2.host._config.cwd == str(project_b.resolve())
+
+    # The global state (WebUIState) must NOT be affected by session creation.
+    # It stays at the startup cwd / active project, independent of either session.
+    state = client.app.state.webui
+    assert state.cwd == global_cwd.resolve()
+    assert state.active_project_id is not None
+    assert state.active_project_id not in {project_a_id, project_b_id}
+
+    # Verify session 3 without project_id inherits the global state
+    r3 = client.post("/api/sessions", headers=auth)
+    assert r3.status_code == 200
+    session3 = r3.json()
+    assert session3["project_id"] is None  # no explicit project_id passed
+
+    entry3 = manager.get(session3["session_id"])
+    assert entry3 is not None
+    assert entry3.host._config.cwd == str(global_cwd.resolve())  # falls back to global cwd

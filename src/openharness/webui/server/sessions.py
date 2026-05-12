@@ -26,6 +26,7 @@ class SessionEntry:
     task: asyncio.Task | None = None
     created_at: float = field(default_factory=time.time)
     resumed_from: str | None = None
+    project_id: str | None = None
 
 
 class SessionManager:
@@ -43,6 +44,7 @@ class SessionManager:
         restore_tool_metadata: dict[str, object] | None = None,
         resumed_from: str | None = None,
         cwd: str | None = None,
+        project_id: str | None = None,
     ) -> SessionEntry:
         session_id = uuid4().hex[:12]
         host_config = BackendHostConfig(
@@ -58,7 +60,7 @@ class SessionManager:
             restore_tool_metadata=dict(restore_tool_metadata) if restore_tool_metadata else None,
         )
         host = WebSocketBackendHost(host_config)
-        entry = SessionEntry(id=session_id, host=host, resumed_from=resumed_from)
+        entry = SessionEntry(id=session_id, host=host, resumed_from=resumed_from, project_id=project_id)
         self._sessions[session_id] = entry
         return entry
 
