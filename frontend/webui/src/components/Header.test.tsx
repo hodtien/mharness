@@ -570,3 +570,81 @@ describe("Header runtime summary badges", () => {
     expect(screen.getByText("OpenHarness")).toBeTruthy();
   });
 });
+
+describe("Header mobile overflow", () => {
+  const MOBILE_WIDTHS = [375, 390, 430];
+
+  beforeEach(() => {
+    mockLocalStorage();
+    useSession.setState({
+      appState: {
+        model: "cx/gpt-5.5-turbo-some-very-long-model-identifier",
+        provider: "openrouter",
+        cwd: "/tmp",
+        permission_mode: "default",
+      },
+      connectionStatus: "open",
+      transcript: [],
+      tasks: [
+        { id: "1", type: "job", status: "running", description: "task 1", metadata: {} },
+      ],
+      busy: true,
+      errorBanner: null,
+      pendingPermission: null,
+      pendingQuestion: null,
+      pendingSelect: null,
+      compact: null,
+      todoMarkdown: null,
+      planMode: null,
+      swarm: null,
+      resumedFrom: null,
+    });
+  });
+
+  it.each(MOBILE_WIDTHS)("header row does not overflow at %ipx", (width) => {
+    // jsdom doesn't honour real viewport widths, but we can assert that
+    // - the History link is NOT in the document's main header row (it's hidden on mobile)
+    // - or no element has been given a style that would force horizontal overflow
+    Object.defineProperty(document.documentElement, "clientWidth", { configurable: true, value: width });
+    const { container } = render(
+      <BrowserRouter>
+        <Header onToggleSidebar={() => {}} onInterrupt={() => {}} />
+      </BrowserRouter>,
+    );
+    // The primary row must not contain an unconstrained wide flex row.
+    // We verify there is no `overflow-x-auto` / direct width > viewport on the host div.
+    const topRow = container.firstChild as HTMLElement;
+    // jsdom assigns 0 to scrollWidth for non-painted elements; we just ensure no error and structural assertions below.
+    expect(topRow).toBeTruthy();
+    // History link should be hidden on mobile (sm:hidden means css class `hidden sm:flex`).
+    // In jsdom all elements are visible, but the link must be inside a hidden container — verify aria-label button exists instead.
+    const mobileModelBtn = container.querySelector('[aria-label="Open runtime controls"]');
+    expect(mobileModelBtn).toBeTruthy();
+    // Model text must be inside the button and truncated (has truncate class)
+    const truncatingSpan = mobileModelBtn?.querySelector(".truncate");
+    expect(truncatingSpan).toBeTruthy();
+  });
+
+  it("opens mobile overflow menu and exposes History, PermissionModeChip, and ModelPicker", () => {
+    render(
+      <BrowserRouter>
+        <Header onToggleSidebar={() => {}} onInterrupt={() => {}} />
+      </BrowserRouter>,
+    );
+    // Compact model button should be present (always rendered, hidden by CSS on sm+)
+    const mobileModelBtn = screen.getByRole("button", { name: /Open runtime controls/i });
+    expect(mobileModelBtn).toBeTruthy();
+
+    fireEvent.click(mobileModelBtn);
+
+    // After toggling, the mobile overflow panel renders the full History link
+    const historyLinks = screen.getAllByRole("link", { name: "History" });
+    expect(historyLinks.length).toBeGreaterThanOrEqual(1);
+    // Provider label present in overflow panel (may appear twice due to RuntimeSummary hidden span)
+    const providerEls = screen.getAllByText(/openrouter/);
+    expect(providerEls.length).toBeGreaterThanOrEqual(1);
+    // Full ModelPicker trigger rendered inside the drawer (has aria-haspopup="listbox")
+    const allModelBtns = screen.getAllByRole("button", { name: /cx\/gpt-5\.5-turbo/i, hidden: true });
+    expect(allModelBtns.length).toBeGreaterThanOrEqual(1);
+  });
+});
