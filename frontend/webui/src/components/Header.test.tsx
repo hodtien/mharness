@@ -260,6 +260,81 @@ describe("ModelPicker", () => {
     expect(screen.queryByText(/Claude Sonnet 4\.6/)).toBeNull();
     expect(screen.queryByText(/GPT-4o/)).toBeNull();
   });
+
+  it("uses active_profile over provider to resolve model group", async () => {
+    // Simulate backend state: active_profile=claude-router, provider=anthropic,
+    // but /api/models is keyed by profile ids like "claude-router", not "anthropic".
+    useSession.setState({
+      appState: {
+        model: "cc/claude-sonnet-4-6",
+        provider: "anthropic",
+        active_profile: "claude-router",
+        cwd: "/tmp",
+        permission_mode: "default",
+      },
+    });
+    const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
+      if (url === "/api/models") {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              "claude-router": [
+                { id: "cc/claude-sonnet-4-6", label: "Claude Sonnet 4 (Router)", is_default: true, is_custom: false },
+                { id: "cc/claude-opus-4-5", label: "Claude Opus 4 (Router)", is_default: false, is_custom: false },
+              ],
+              anthropic: [
+                { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", is_default: true, is_custom: false },
+              ],
+            }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected: ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ModelPicker />);
+    fireEvent.click(screen.getByRole("button", { name: /cc\/claude-sonnet-4-6/i }));
+
+    // Should show claude-router models, not anthropic ones
+    expect(await screen.findByText(/Claude Sonnet 4 \(Router\)/)).toBeTruthy();
+    expect(screen.queryByText(/Claude 3.5 Sonnet/)).toBeNull();
+  });
+
+  it("falls back to provider when active_profile is not set", async () => {
+    // When backend state lacks active_profile, the picker should fall back to provider.
+    useSession.setState({
+      appState: {
+        model: "claude-3-5-sonnet",
+        provider: "anthropic",
+        // no active_profile
+        cwd: "/tmp",
+        permission_mode: "default",
+      },
+    });
+    const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
+      if (url === "/api/models") {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              anthropic: [
+                { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", is_default: true, is_custom: false },
+                { id: "claude-3-5-haiku", label: "Claude 3.5 Haiku", is_default: false, is_custom: false },
+              ],
+            }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected: ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ModelPicker />);
+    fireEvent.click(screen.getByRole("button", { name: /claude-3-5-sonnet/i }));
+
+    expect(await screen.findByText(/Claude 3.5 Sonnet \(claude-3-5-sonnet\)/)).toBeTruthy();
+    expect(screen.getByText("✓")).toBeTruthy();
+  });
 });
 
 describe("Header navigation", () => {

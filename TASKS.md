@@ -37,6 +37,8 @@
     - [P13.B — Core Logic](#p13b--core-logic)
     - [P13.C — API, Frontend \& Tests](#p13c--api-frontend--tests)
   - [P14 — Settings Review \& Polish](#p14--settings-review--polish)
+  - [P15 — UI/UX Upgrade \& Semantic Operator Experience](#p15--uiux-upgrade--semantic-operator-experience)
+  - [P16 — Header Runtime Controls \& Per-Tab Project Context](#p16--header-runtime-controls--per-tab-project-context)
 
 ---
 
@@ -1077,6 +1079,12 @@ Depends on: P13.3." --labels "backend,resilience,api"
 
 ## P14 — Settings Review & Polish
 
+> **Status: DONE.** Phase 14 đã hoàn tất và các PR P14.1–P14.6 đã merge. Settings UI hiện có Modes advanced settings, Provider connection status + batch verify, Models search/capability metadata, Agents prompt preview + clone/validation flow, cross-cutting form UX polish, và integration tests cho toàn bộ settings improvements.
+>
+> **Delivered:** P14.1 Modes notifications + auto-compact controls (#130), P14.2 Provider connection status + Verify all (#129), P14.3 Models search + capability badges (#131), P14.4 Agents system prompt preview + clone + validation/test (#132), P14.5 dirty-state/unsaved-warning/validation/success/focus UX (#133), P14.6 settings integration tests (#134).
+>
+> **Bug fixes trong Phase 14:** clone agent endpoint được harden để validate safe filename, giữ destination trong source agent directory, không overwrite file có sẵn, và dùng exclusive file creation để tránh race/data loss.
+
 ```bash
 oh autopilot add idea "[P14.1] UI: Modes page — thêm notifications và auto-compact settings" --body "Enhance ModesSettingsPage.tsx:
 1. Add toggle for notification preferences relevant to WebUI/autopilot events
@@ -1134,7 +1142,236 @@ Depends on: P14.1, P14.2, P14.3, P14.4, P14.5.
 
 ---
 
-**Tổng cộng**: 126 tasks (P0=3, P1=8, P2=6, P3=6, P4=7, P5=10, P6=8, P7=8, P8=7, P9=11, P10=16, P11=12, P12=8, P13=8, P14=6, Cross=2)
+## P15 — UI/UX Upgrade & Semantic Operator Experience
+
+```bash
+oh autopilot add idea "[P15.1] UI Foundation: Design tokens và shared visual primitives" --body "Expand frontend/webui/src/index.css thành design-token layer rõ ràng:
+1. spacing scale, radius scale, typography scale
+2. semantic status colors cho queue/pending/running/review/done/failed/rejected
+3. priority colors, shadows, transitions
+4. focus-visible style nhất quán
+5. replace hardcoded palette/spacing ở Sidebar.tsx, Header.tsx, PipelinePage.tsx, TasksPage.tsx
+
+Tests: visual smoke pass + existing frontend tests.
+Spawn agents: code-reviewer.
+" --labels "design-system,frontend,foundation,ux"
+
+oh autopilot add idea "[P15.2] UI Foundation: Standardized PageHeader component" --body "Create frontend/webui/src/components/PageHeader.tsx:
+1. title + short description
+2. primary/secondary actions slot
+3. metadata row cho active project, job count, last sync, runtime state
+4. apply to Autopilot, Jobs, Projects, History, and Settings pages
+5. ensure mỗi page trả lời rõ: page này dùng để làm gì, trạng thái hiện tại là gì, action chính là gì
+
+Tests: PageHeader component test + touched page render tests.
+Spawn agents: code-reviewer.
+Depends on: P15.1." --labels "frontend,ui,foundation,ux"
+
+oh autopilot add idea "[P15.3] UI Shell: Sidebar noise reduction" --body "Refactor Sidebar.tsx thành 3 zones rõ ràng:
+1. Primary navigation: Chat, History, Autopilot, Jobs, Projects
+2. Collapsible Settings navigation với labels/tooltips/aria-label cho icon-only controls
+3. Collapsible System Status cho model/provider/permission/effort/jobs
+4. Jobs snippet chỉ show top 3 + View all (N)
+5. Runtime status không cạnh tranh thị giác với primary navigation
+
+Tests: Sidebar unit tests cho collapse, active route, accessible labels.
+Spawn agents: code-reviewer.
+Depends on: P15.1." --labels "frontend,sidebar,ux,a11y"
+
+oh autopilot add idea "[P15.4] UI Shell: Top bar runtime summary" --body "Upgrade Header.tsx để trả lời 'What is happening right now?':
+1. active project summary
+2. connection health
+3. running job count
+4. active model/provider
+5. current permission mode
+6. primary interrupt action khi busy
+7. move detailed runtime metadata ra khỏi sidebar nếu phù hợp top bar hơn
+
+Tests: Header unit tests cho runtime state badges và busy action.
+Spawn agents: code-reviewer.
+Depends on: P15.1, P15.2." --labels "frontend,header,ux"
+
+oh autopilot add idea "[P15.5] Autopilot UI: Board card hierarchy và completed de-emphasis" --body "Improve PipelinePage.tsx board readability:
+1. card padding/line-height thoáng hơn
+2. title hierarchy rõ hơn, max 2 lines
+3. semantic badges cho status/source/priority
+4. metadata row dễ scan: age, model, status
+5. sticky column headers + count badges
+6. Completed column collapsed hoặc giảm dominance mặc định
+7. active/running state visible nhưng không quá noisy
+
+Tests: PipelinePage render tests + visual browser pass.
+Spawn agents: code-reviewer.
+Depends on: P15.1, P15.2." --labels "frontend,autopilot,board,ux"
+
+oh autopilot add idea "[P15.6] Autopilot Logs: Semantic activity feed" --body "Transform PipelinePage.tsx/PipelineLogModel.ts log drawer từ protocol/debugger-first sang operator-first:
+1. unified chronological stream
+2. newest-first ordering
+3. tag filters (#agent, #tool, #error) thay vì hard tabs
+4. semantic event cards thay vì raw JSON/protocol rows
+5. tool summaries thay vì stdout dumps
+6. inspector panel hiển thị event details, input, output, tags
+7. raw payload hidden behind View raw event
+8. compact pause control trong toolbar
+
+Tests: log transform/unit tests nếu có model helpers + manual stream review.
+Spawn agents: planner → code-reviewer.
+Depends on: P15.1." --labels "frontend,autopilot,logs,ux"
+
+oh autopilot add idea "[P15.7] Chat UX: Collapsible semantic tool execution cards" --body "Refactor Transcript.tsx để tool execution dùng progressive disclosure:
+1. default collapsed tool cards với tool name, status, duration, semantic summary
+2. expand on click để xem command/result details
+3. auto-collapse by output size: small inline, medium preview, large collapsed
+4. group consecutive tool calls into Tools used summary
+5. raw terminal dumps không hiển thị full-height mặc định
+6. extract ToolCard.tsx nếu Transcript.tsx quá dense
+
+Tests: ToolCard/Transcript tests cho collapsed, expanded, size-based behavior.
+Spawn agents: code-reviewer.
+Depends on: P15.1." --labels "frontend,chat,tools,ux"
+
+oh autopilot add idea "[P15.8] Jobs UX: Filters, sorting, and clearer status badges" --body "Enhance TasksPage.tsx:
+1. search jobs input
+2. status/type/review filters
+3. sort control (newest/default)
+4. richer status badges with icon + semantic color
+5. review state copy rõ ràng: Reviewed, Pending review, No review needed
+6. row expansion với prompt summary, duration, model/provider, log preview
+
+Tests: TasksPage unit tests cho filter, sort, status badges, row expansion.
+Spawn agents: code-reviewer.
+Depends on: P15.1, P15.2." --labels "frontend,jobs,ux"
+
+oh autopilot add idea "[P15.9] Projects UX: Safety polish và path ergonomics" --body "Enhance ProjectsPage.tsx:
+1. active project pinned hoặc visually prioritized
+2. clearer Active badge/border/pin indicator
+3. truncate path thành ~/relative/path nếu possible
+4. copy path button + full path tooltip
+5. client-side search by name/path
+6. strengthen delete confirmation only where existing modal semantics are insufficient
+7. empty state với Add project CTA
+
+Tests: ProjectsPage tests cho active highlight, search, path copy/truncation, delete safety.
+Spawn agents: code-reviewer.
+Depends on: P15.1, P15.2." --labels "frontend,projects,safety,ux"
+
+oh autopilot add idea "[P15.10] Settings UX: Contextual microcopy and help states" --body "Add explanatory microcopy to Settings pages:
+1. Modes: Permission Mode descriptions for Default/Plan/Full Auto
+2. Modes: Effort low/medium/high tradeoffs
+3. Modes: Passes helper explaining quality/time tradeoff
+4. Providers: clearer status, verify, latency, last verified presentation
+5. Models: capability/search/filter clarity
+6. Agents: prompt preview/clone/test clarity
+7. reuse existing Section, feedback, loading, and error patterns
+
+Tests: settings page tests assert key help text is visible.
+Spawn agents: code-reviewer.
+Depends on: P15.1, P15.2." --labels "frontend,settings,ux"
+
+oh autopilot add idea "[P15.11] Cross-cutting UX: Empty/loading/error/toast states" --body "Standardize guidance states across Chat, Autopilot, Jobs, Projects, Settings:
+1. empty state copy with next CTA
+2. loading skeleton matching page shape
+3. user-facing error copy
+4. toast feedback for create/update/delete/save operations
+5. reuse existing EmptyState/ErrorBanner/LoadingSkeleton/ToastContainer before adding new primitives
+
+Tests: page state rendering tests for representative empty/loading/error cases.
+Spawn agents: code-reviewer.
+Depends on: P15.1." --labels "frontend,states,ux"
+
+oh autopilot add idea "[P15.12] Accessibility: Foundation audit and fixes" --body "Audit and fix WebUI accessibility basics:
+1. contrast on dark surfaces meets WCAG AA where practical
+2. focus-visible ring consistent across controls
+3. icon-only buttons have aria-label and minimum hit area
+4. modal/drawer labels are explicit
+5. keyboard navigation logical; Escape closes modals/drawers
+6. status does not rely on color alone
+
+Verification: manual keyboard nav + automated axe-style audit if available.
+Spawn agents: a11y-architect → code-reviewer.
+Depends on: P15.1, P15.3, P15.5, P15.6, P15.7, P15.8, P15.9, P15.10, P15.11." --labels "frontend,accessibility,a11y,ux"
+
+oh autopilot add idea "[P15.13] Tests: Playwright E2E core WebUI flows" --body "Add Playwright coverage for upgraded core flows:
+1. navigation and standardized page headers
+2. chat tool card collapse/expand
+3. Autopilot board hierarchy and new idea flow
+4. semantic log feed filtering
+5. Jobs filters and row expansion
+6. Projects active/delete safety UX
+7. Settings help text and save feedback
+8. add test:e2e script to frontend/webui/package.json
+
+Verification: Playwright suite green against http://127.0.0.1:8765.
+Spawn agents: e2e-runner → code-reviewer.
+Depends on: P15.3, P15.4, P15.5, P15.6, P15.7, P15.8, P15.9, P15.10, P15.11, P15.12." --labels "testing,e2e,frontend,ux"
+```
+
+---
+
+## P16 — Header Runtime Controls & Per-Tab Project Context
+
+```bash
+oh autopilot add idea "[P16.1] UI: Header — thay Sessions dropdown bằng nav link đến /history" --body "Bỏ SessionsDropdown component trong Header. Thay bằng plain nav link 'History' navigate đến /history page. Xóa toàn bộ dropdown logic, RECENT_HISTORY_ENDPOINT, normalizeHistoryResponse, fetch sessions call, và state liên quan trong Header.tsx. Kết quả: Header gọn hơn, không có dropdown trùng với HistoryPage.
+
+Verification: Header render History link; click navigates /history; existing History page still works.
+Spawn agents: typescript-reviewer → code-reviewer.
+Depends on: none."
+
+oh autopilot add idea "[P16.2a] Backend: cho phép PATCH /api/modes đổi active model" --body "P16.2 frontend model picker cần backend support trước. Hiện ModesPatch trong src/openharness/webui/server/routes/modes.py không có field model, ModesPayload cũng không trả model. Cần:
+1. thêm model?: str vào ModesPatch backend và ModesPatch/ModesPayload frontend types
+2. validate model tồn tại trong GET /api/models hoặc cho phép model custom đang configured
+3. persist vào settings provider default/current model đúng nơi runtime đang đọc
+4. update AppState.model cho mọi active session và broadcast state_snapshot
+5. thêm tests cho PATCH /api/modes {model: ...}
+
+Sau card này P16.2 dùng api.listModels() + api.patchModes({model}) mới đúng contract.
+Verification: pytest modes route tests pass; frontend typecheck pass.
+Spawn agents: python-reviewer → typescript-reviewer → code-reviewer.
+Depends on: none."
+
+oh autopilot add idea "[P16.2] UI: Header — model badge clickable, dropdown picker thay đổi model" --body "Hiện tại model badge trong Header chỉ là read-only span. Sau P16.2a, thêm:
+1. onClick vào model badge mở dropdown/popover danh sách models available
+2. fetch danh sách models bằng api.listModels() từ GET /api/models
+3. user click model → api.patchModes({ model: selectedModel })
+4. optimistic update AppState.model qua state_snapshot ingest; revert nếu PATCH lỗi
+5. dropdown hiển thị model đang active với checkmark; loading/error state rõ ràng
+
+File chính: frontend/webui/src/components/Header.tsx. Tham khảo ModelsSettingsPage.tsx cho shape ModelsResponse.
+Verification: Header test cover open dropdown, select model, PATCH body {model}, optimistic update, rollback.
+Spawn agents: typescript-reviewer → code-reviewer.
+Depends on: P16.2a."
+
+oh autopilot add idea "[P16.3a] Backend: project context phải truyền theo request/session, không dùng global activate cho chat" --body "P16.3 per-tab project qua ?project=id cần backend foundation. Hiện project activation dùng /api/projects/{id}/activate và active_project_id trong ProjectsResponse — đây là global server state nên 2 tabs conflict. Cần:
+1. POST /api/sessions nhận optional project_id
+2. Session/WebUIState lưu project_id/cwd riêng cho session đó
+3. WebSocket/session state dùng cwd/project theo session
+4. APIs liên quan chat/session lấy project từ session hoặc query param, không đọc global active_project_id
+5. giữ /api/projects/{id}/activate chỉ cho backward/settings default nếu cần
+6. tests chứng minh 2 sessions khác project_id có cwd/state riêng
+
+Verification: backend route tests cover two sessions with different project_id values.
+Spawn agents: python-reviewer → security-reviewer → code-reviewer.
+Depends on: none."
+
+oh autopilot add idea "[P16.3] UI: Per-tab project isolation via URL param ?project=id" --body "Sau P16.3a, frontend chuyển active project thành URL state per tab:
+1. ProjectSelector đọc project id từ URL param ?project=id
+2. chọn project cập nhật URL param thay vì POST /api/projects/{id}/activate
+3. api.createSession truyền project_id từ URL param trong POST /api/sessions
+4. highlight project dựa trên URL param; fallback về default project từ /api/projects nếu param thiếu
+5. giữ param khi navigate giữa pages trong cùng tab
+6. bỏ window.location.reload() sau project switch
+
+Kết quả: 2 browser tabs có thể chọn 2 project khác nhau vì mỗi tab có URL riêng.
+Verification: component tests cover URL param selection; manual browser test mở 2 tabs với 2 ?project= khác nhau.
+Spawn agents: typescript-reviewer → code-reviewer.
+Depends on: P16.3a."
+```
+
+---
+
+**Tổng cộng**: 144 tasks (P0=3, P1=8, P2=6, P3=6, P4=7, P5=10, P6=8, P7=8, P8=7, P9=11, P10=16, P11=12, P12=8, P13=8, P14=6, P15=13, P16=5, Cross=2)
 
 > P10 được tổ chức lại thành 6 nhóm: A=Sidebar/Nav (4), B=Autopilot Board (3), C=History (4), D=Jobs (2), E=Settings (2), F=Misc (1)
 > P11-P14 bổ sung ngày 2026-05-06: Multi-Project (12), Cron Scheduling (8), Task Resilience (8), Settings Polish (6)
+> P15 bổ sung ngày 2026-05-11: UI/UX Upgrade & Semantic Operator Experience (13)
+> P16 bổ sung ngày 2026-05-11: Header Runtime Controls & Per-Tab Project Context (5)

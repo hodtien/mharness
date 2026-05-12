@@ -73,8 +73,8 @@ export function ModelPicker() {
 
   // Resolve models from the active profile first, then fall back to provider.
   const query = search.trim().toLowerCase();
-  const activeProvider = appState?.active_profile ?? appState?.provider ?? "";
-  const providerItems = activeProvider ? models[activeProvider] ?? [] : [];
+  const activeProfile = appState?.active_profile || appState?.provider || "";
+  const providerItems = activeProfile ? models[activeProfile] ?? [] : [];
   const fallbackItems = !providerItems.length && appState?.provider ? models[appState.provider] ?? [] : [];
   const availableModels = providerItems.length ? providerItems : fallbackItems;
   const filtered = query
@@ -132,7 +132,7 @@ export function ModelPicker() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={`Search ${totalModels} models…`}
+                placeholder={loading ? "Loading models…" : `Search ${totalModels} models…`}
                 className="w-full rounded-md border border-[var(--border)] bg-[var(--panel-2)] py-1.5 pl-8 pr-3 text-xs text-[var(--text)] placeholder-[var(--text-dim)] outline-none focus:border-cyan-400/50"
               />
             </div>
@@ -151,8 +151,10 @@ export function ModelPicker() {
                 {query
                   ? `No models match "${query}"`
                   : totalModels === 0
-                  ? `No models found for this provider profile. Check your provider settings.`
-                  : "No models available"}
+                    ? activeProfile
+                      ? `No models available for ${activeProfile}`
+                      : "No models found for this provider profile. Check your provider settings."
+                    : "No models available"}
               </div>
             ) : (
               filtered.map((m) => {

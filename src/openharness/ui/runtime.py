@@ -253,6 +253,7 @@ async def build_runtime(
             for tool in plugin.tools:
                 tool_registry.register(tool)
     provider = detect_provider(settings)
+    resolved_profile_name, _resolved_profile = settings.resolve_profile()
     bridge_manager = get_bridge_manager()
     app_state = AppStateStore(
         AppState(
@@ -263,6 +264,7 @@ async def build_runtime(
             theme=settings.theme,
             cwd=cwd,
             provider=provider.name,
+            active_profile=resolved_profile_name,
             auth_status=auth_status(settings),
             base_url=settings.base_url or "",
             vim_enabled=settings.vim_mode,

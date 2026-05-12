@@ -1,6 +1,6 @@
 # my-harness Changelog
 
-> Generated: 2026-05-11
+> Generated: 2026-05-12
 > Sources: `GUIDE.md`, `AUTOPILOT.md`, `TASKS.md`
 >
 > Tài liệu này ghi lại các thay đổi chính của fork `my-harness` dựa trên ba tài liệu nguồn hiện tại. Trạng thái `DONE`/backlog phản ánh nội dung đã được ghi trong các tài liệu đó, không thay thế git history hay PR history.
@@ -462,6 +462,21 @@ Status: DONE.
 - P15.10: Settings UX contextual microcopy và help states — Modes permission/effort/passes descriptions, Providers clearer status/verify/latency, Models capability/search clarity, Agents prompt preview/clone/test clarity.
 - P15.11: Cross-cutting empty/loading/error/toast states — standardize guidance states across Chat, Autopilot, Jobs, Projects, Settings. Reuse EmptyState/ErrorBanner/LoadingSkeleton/ToastContainer.
 - P15.12: Accessibility foundation audit và fixes — WCAG AA contrast trên dark surfaces, focus-visible ring nhất quán, aria-label cho icon-only buttons, modal/drawer labels explicit, keyboard navigation logical, Escape closes modals/drawers, status không dựa hoàn toàn vào màu sắc.
+- P15.13: Playwright E2E core WebUI flows — coverage cho Sidebar navigation, Header runtime badges, Autopilot board card lifecycle, Autopilot log feed filters, ToolCard collapse/expand, Jobs filter/sort/row-expand, Projects active highlight + path copy + delete safety, Settings microcopy visibility, cross-cutting empty/loading/error states.
+
+Delivered: P15.1 design tokens (#135), P15.2 PageHeader (#136), P15.3 Sidebar (#138), P15.4 Header runtime summary (#137), P15.5 Autopilot board (#139), P15.6 Autopilot logs (#140), P15.7 ToolCard (#141), P15.8 Jobs UX (#142), P15.9 Projects UX (no PR#), P15.10 Settings microcopy (#144), P15.11 Empty/loading/error states (#145), P15.12 Accessibility (#146), P15.13 E2E (#147).
+
+### P16 — Header Runtime Controls & Per-Tab Project Context
+
+Status: DONE (một phần — P16.1, P16.2a, P16.2, P16.3a, P16.3 đã merge).
+
+- P16.1: Header — xóa SessionsDropdown, thay bằng plain nav link dẫn đến `/history`. Loại bỏ toàn bộ dropdown logic, fetch sessions, `RECENT_HISTORY_ENDPOINT`, và state liên quan trong `Header.tsx`.
+- P16.2a: Backend — thêm field `model` vào `ModesPatch` và `ModesPayload` trong `routes/modes.py`. Validate model tồn tại, persist vào settings, broadcast `state_snapshot` cho mọi active session. Thêm tests cho `PATCH /api/modes {model: ...}`.
+- P16.2: UI — model badge trong Header từ read-only thành clickable. Mở dropdown picker, fetch `GET /api/models`, `PATCH /api/modes({model})` với optimistic update + rollback. Dropdown hiển thị active model với checkmark.
+- P16.3a: Backend — tách project context khỏi global server state. `POST /api/sessions` nhận optional `project_id`. `Session`/`WebUIState` lưu `cwd` riêng theo session. Chat/WebSocket lấy project từ session thay vì đọc `active_project_id` global. Tests chứng minh 2 sessions với project khác nhau có `cwd` độc lập.
+- P16.3: UI — per-tab project isolation qua URL param `?project=id`. `ProjectSelector` đọc/ghi URL param thay vì gọi `POST /api/projects/{id}/activate`. `api.createSession` truyền `project_id` từ URL. Bỏ `window.location.reload()` sau project switch. Param giữ nguyên khi navigate giữa các pages trong cùng tab.
+
+Delivered: P16.1 (#148, #152), P16.2 (#149), P16.2a (#151, #155), P16.3a (#154), P16.3 (#156).
 
 ---
 
@@ -477,6 +492,8 @@ Status: DONE.
   - Agent prompt preview/clone flow.
   - Dirty-state và unsaved warning behavior.
 - P15 bổ sung coverage cho: design tokens smoke pass, PageHeader render tests, Sidebar collapse/a11y, Header runtime state badges, PipelinePage board hierarchy, log transform unit tests, ToolCard collapse/expand, TasksPage filter/sort/badges, ProjectsPage active highlight/search/path copy/delete safety, Settings help text visibility, cross-cutting empty/loading/error states.
+- P15.13 bổ sung Playwright E2E suite cho toàn bộ upgraded core flows (Sidebar nav, Header badges, Autopilot board, log feed, Jobs, Projects, Settings).
+- P16 bổ sung: `PATCH /api/modes {model}` tests, per-session project isolation tests (2 sessions với project khác nhau có `cwd` độc lập), Header model picker optimistic update + rollback, nav link History tests.
 
 ---
 
