@@ -167,6 +167,68 @@ describe("ModelsSettingsPage", () => {
     });
   });
 
+  it("filters models by provider", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("OpenAI")).toBeTruthy());
+
+    // Click provider filter and select Anthropic
+    const providerSelect = screen.getByRole("combobox", { name: /filter by provider/i });
+    fireEvent.change(providerSelect, { target: { value: "claude-api" } });
+
+    await waitFor(() => expect(screen.queryByText("OpenAI")).toBeNull());
+    expect(screen.getByText("Anthropic")).toBeTruthy();
+  });
+
+  it("filters models by type (built-in/custom)", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getAllByText("gpt-custom").length).toBeGreaterThan(0));
+
+    // Click "Custom" filter
+    fireEvent.click(screen.getByRole("button", { name: /custom/i }));
+
+    await waitFor(() => expect(screen.queryAllByText("gpt-custom").length).toBeGreaterThan(0));
+    // Built-in models should be hidden
+    await waitFor(() => expect(screen.queryAllByText(/built-in/i).length).toBe(0));
+  });
+
+  it("filters models by default-only", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("gpt-4o-mini")).toBeTruthy());
+
+    // Click "Default only" filter
+    fireEvent.click(screen.getByRole("button", { name: /default only/i }));
+
+    await waitFor(() => expect(screen.queryByText("gpt-custom")).toBeNull());
+    expect(screen.getByText("gpt-4o-mini")).toBeTruthy();
+  });
+
+  it("shows empty filtered state with clear link", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("OpenAI")).toBeTruthy());
+
+    // Apply filters that match nothing
+    fireEvent.change(screen.getByPlaceholderText(/filter by model id or label/i), { target: { value: "nonexistent-model-xyz" } });
+
+    await waitFor(() => expect(screen.getByText(/no models match/i)).toBeTruthy());
+    expect(screen.getByText(/clear all filters/i)).toBeTruthy();
+  });
+
   it("opens add model modal and submits", async () => {
     mockLocalStorage();
     const postCalls: Array<{ url: string; body: string }> = [];

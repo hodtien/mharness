@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, type AgentProfile, type AgentDetail, type AgentPatch, type ModelsResponse } from "../api/client";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import { toast } from "../store/toast";
@@ -40,6 +40,11 @@ export default function AgentsSettingsPage() {
   const [cloneSource, setCloneSource] = useState<string | null>(null);
   const [cloneName, setCloneName] = useState("");
   const [cloneBusy, setCloneBusy] = useState(false);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "custom" | "built-in">("all");
+  const [modelFilter, setModelFilter] = useState<"all" | "assigned" | "unassigned">("all");
+  const [permissionFilter, setPermissionFilter] = useState<string>("all");
+  const [toolsFilter, setToolsFilter] = useState<"all" | "none" | "some" | "all-tools">("all");
 
   const { feedback: saveFeedback, errorMessage: saveErrorMessage, showSaving, showSaved, showError: showSaveError } = useFormFeedback();
 
@@ -174,6 +179,25 @@ export default function AgentsSettingsPage() {
     }
   };
 
+  const filteredAgents = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return agents.filter((agent) => {
+      if (q) {
+        const haystack = `${agent.name} ${agent.description} ${agent.source_file ?? ""}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      if (typeFilter === "custom" && !agent.source_file) return false;
+      if (typeFilter === "built-in" && agent.source_file) return false;
+      if (modelFilter === "assigned" && !agent.model) return false;
+      if (modelFilter === "unassigned" && agent.model) return false;
+      if (permissionFilter !== "all" && (agent.permission_mode ?? "") !== permissionFilter) return false;
+      if (toolsFilter === "none" && (agent.tools_count ?? 0) !== 0) return false;
+      if (toolsFilter === "some" && ((agent.tools_count ?? 0) <= 0 || agent.tools_count == null)) return false;
+      if (toolsFilter === "all-tools" && agent.tools_count != null) return false;
+      return true;
+    });
+  }, [agents, search, typeFilter, modelFilter, permissionFilter, toolsFilter]);
+
   if (loading) {
     return (
       <div className="flex flex-1 overflow-y-auto p-6">
@@ -200,14 +224,83 @@ export default function AgentsSettingsPage() {
           </div>
         )}
 
+        {/* Agents search and filters */}
+        <div className="flex flex-col gap-3">
+          <div className="relative">
+            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[var(--text-dim)]">🔍</span>
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, description, or source path…"
+              aria-label="Search agents"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] py-2 pl-10 pr-4 text-sm text-[var(--text)] placeholder-[var(--text-dim)] outline-none focus:border-cyan-400/50"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {(["all", "custom", "built-in"] as const).map((t) => (
+              <button key={t} type="button" onClick={() => setTypeFilter(t)}
+                className={`rounded-full border px-2.5 py-1 text-xs ${typeFilter === t ? "border-cyan-400/50 bg-cyan-500/10 text-cyan-100" : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)]"}`}>
+                {t === "all" ? "All types" : t === "custom" ? "Custom" : "Built-in"}
+              </button>
+            ))}
+            {(["all", "assigned", "unassigned"] as const).map((t) => (
+              <button key={t} type="button" onClick={() => setModelFilter(t)}
+                className={`rounded-full border px-2.5 py-1 text-xs ${modelFilter === t ? "border-violet-400/50 bg-violet-500/10 text-violet-100" : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)]"}`}>
+                {t === "all" ? "Any model" : t === "assigned" ? "Model set" : "No model"}
+              </button>
+            ))}
+            <select
+              value={permissionFilter}
+              onChange={(e) => setPermissionFilter(e.target.value)}
+              aria-label="Filter by permission mode"
+              className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1 text-xs text-[var(--text)] outline-none focus:border-cyan-400/50"
+            >
+              <option value="all">Any permission</option>
+              {PERMISSION_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <select
+              value={toolsFilter}
+              onChange={(e) => setToolsFilter(e.target.value as "all" | "none" | "some" | "all-tools")}
+              aria-label="Filter by tools"
+              className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1 text-xs text-[var(--text)] outline-none focus:border-cyan-400/50"
+            >
+              <option value="all">Any tools</option>
+              <option value="all-tools">Unrestricted (all)</option>
+              <option value="some">Has tools list</option>
+              <option value="none">No tools</option>
+            </select>
+            {(search || typeFilter !== "all" || modelFilter !== "all" || permissionFilter !== "all" || toolsFilter !== "all") && (
+              <button type="button" onClick={() => { setSearch(""); setTypeFilter("all"); setModelFilter("all"); setPermissionFilter("all"); setToolsFilter("all"); }}
+                className="rounded-full border border-[var(--border)] bg-[var(--panel-2)] px-2.5 py-1 text-xs text-[var(--text-dim)] hover:border-[var(--text-dim)]">
+                Clear filters
+              </button>
+            )}
+          </div>
+        </div>
+
         {agents.length === 0 && (
           <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 text-sm text-[var(--text-dim)]">
             No agents found.
           </div>
         )}
 
+        {agents.length > 0 && filteredAgents.length === 0 && (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--panel)] p-8 text-center">
+            <span aria-hidden="true" className="mb-3 text-4xl">🔍</span>
+            <p className="text-sm font-medium text-[var(--text)]">No agents match your filters.</p>
+            <p className="mt-1 text-xs text-[var(--text-dim)]">
+              Try different filters or{" "}
+              <button type="button" className="text-cyan-400 hover:underline" onClick={() => { setSearch(""); setTypeFilter("all"); setModelFilter("all"); setPermissionFilter("all"); setToolsFilter("all"); }}>
+                clear all filters
+              </button>.
+            </p>
+          </div>
+        )}
+
         <div className="grid gap-4 sm:grid-cols-2">
-          {agents.map((agent) => {
+          {filteredAgents.map((agent) => {
             const isEditing = editing === agent.name;
             const isUserOwned = !!agent.source_file;
             return (

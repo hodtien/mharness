@@ -59,6 +59,7 @@ export default function ProviderSettingsPage() {
   const [selected, setSelected] = useState<ProviderProfile | null>(null);
   const [connectionStatuses, setConnectionStatuses] = useState<Record<string, ConnectionStatus>>({});
   const [batchVerifying, setBatchVerifying] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "configured" | "not-configured" | "custom-router">("all");
 
   const loadProviders = async () => {
     setError(null);
@@ -88,6 +89,17 @@ export default function ProviderSettingsPage() {
     () => providers.filter((p) => p.has_credentials),
     [providers],
   );
+
+  const filteredProviders = useMemo(() => {
+    if (statusFilter === "all") return providers;
+    if (statusFilter === "active") return providers.filter((p) => p.is_active);
+    if (statusFilter === "configured") return providers.filter((p) => p.has_credentials && !p.is_active);
+    if (statusFilter === "not-configured") return providers.filter((p) => !p.has_credentials);
+    return providers.filter((p) => {
+      const key = `${p.provider} ${p.api_format} ${p.id} ${p.label}`.toLowerCase();
+      return key.includes("custom") || key.includes("router") || key.includes("openrouter");
+    });
+  }, [providers, statusFilter]);
 
   const verifyAll = async () => {
     if (batchVerifying || configuredProviders.length === 0) return;
@@ -180,8 +192,27 @@ export default function ProviderSettingsPage() {
 
         {error && <ErrorBanner message={error} />}
 
+        <div className="flex flex-wrap gap-2">
+          {[
+            ["all", "All"],
+            ["active", "Active"],
+            ["configured", "Configured"],
+            ["not-configured", "Not configured"],
+            ["custom-router", "Custom/router"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setStatusFilter(value as "all" | "active" | "configured" | "not-configured" | "custom-router")}
+              className={`rounded-full border px-3 py-1 text-xs ${statusFilter === value ? "border-cyan-400/50 bg-cyan-500/10 text-cyan-100" : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)]"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {providers.map((provider) => {
+          {filteredProviders.map((provider) => {
             const connStatus = connectionStatuses[provider.id];
             return (
               <button
@@ -227,6 +258,20 @@ export default function ProviderSettingsPage() {
 
         {providers.length === 0 && (
           <EmptyState message="No providers returned." description="Add or sync a provider to get started." />
+        )}
+
+        {providers.length > 0 && filteredProviders.length === 0 && (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--panel)] p-8 text-center">
+            <span aria-hidden="true" className="mb-3 text-4xl">🔍</span>
+            <p className="text-sm font-medium text-[var(--text)]">No providers match this filter.</p>
+            <p className="mt-1 text-xs text-[var(--text-dim)]">
+              Try a different filter or{" "}
+              <button type="button" className="text-cyan-400 hover:underline" onClick={() => setStatusFilter("all")}>
+                clear the filter
+              </button>
+              .
+            </p>
+          </div>
         )}
       </div>
       </div>
