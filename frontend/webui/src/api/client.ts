@@ -207,11 +207,22 @@ export interface Project {
   created_at: string | null;
   updated_at: string | null;
   is_active: boolean;
+  exists?: boolean;
+  is_temp_like?: boolean;
+  is_worktree_like?: boolean;
+  last_seen_at?: string | null;
 }
 
 export interface ProjectsResponse {
   projects: Project[];
   active_project_id: string | null;
+}
+
+export interface ProjectCleanupRequest {
+  missing_only?: boolean;
+  temp_like_only?: boolean;
+  worktree_like_only?: boolean;
+  confirmed?: boolean;
 }
 
 export interface ProjectCreate {
@@ -334,6 +345,11 @@ export const api = {
     apiFetch<{ ok: boolean }>(`/api/projects/${encodeURIComponent(projectId)}`, {
       method: "DELETE",
     }),
+  cleanupProjects: (body: ProjectCleanupRequest) =>
+    apiFetch<{ ok: boolean; preview_count?: number; deleted_count?: number; deleted_ids?: string[] }>(
+      "/api/projects/cleanup",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
   activateProject: (projectId: string) =>
     apiFetch<{ ok: boolean }>(`/api/projects/${encodeURIComponent(projectId)}/activate`, {
       method: "POST",

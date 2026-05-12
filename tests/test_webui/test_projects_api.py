@@ -225,6 +225,27 @@ class TestActivateEndpoint:
         assert state.cwd == project_dir.resolve()
 
 
+class TestCleanupEndpoint:
+    def test_cleanup_without_filters_is_noop(self, client, tmp_path) -> None:
+        project_dir = tmp_path / "extra-project"
+        project_dir.mkdir()
+        created = client.post("/api/projects", json={"name": "Extra", "path": str(project_dir)})
+        assert created.status_code == 201
+        project_id = created.json()["id"]
+
+        preview = client.post("/api/projects/cleanup", json={})
+        assert preview.status_code == 200
+        assert preview.json()["preview_count"] == 0
+
+        confirmed = client.post("/api/projects/cleanup", json={"confirmed": True})
+        assert confirmed.status_code == 200
+        assert confirmed.json()["deleted_count"] == 0
+        assert confirmed.json()["deleted_ids"] == []
+
+        listed = client.get("/api/projects")
+        assert any(project["id"] == project_id for project in listed.json()["projects"])
+
+
 class TestValidationErrors:
     def test_create_requires_name(self, client, tmp_path) -> None:
         project_dir = tmp_path / "noname"
