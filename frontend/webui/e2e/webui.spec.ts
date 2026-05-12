@@ -131,6 +131,15 @@ const SAMPLE_PROJECTS = {
       updated_at: null,
       is_active: false,
     },
+    {
+      id: "proj-3",
+      name: "pytest-of-hodtien",
+      path: "/tmp/pytest-of-hodtien/pytest-42/repo",
+      description: "temp pytest project",
+      created_at: null,
+      updated_at: null,
+      is_active: false,
+    },
   ],
   active_project_id: "proj-1",
 };
@@ -746,7 +755,151 @@ test.describe("6. Projects Active/Delete Safety UX", () => {
 
 // ─── 7. Settings Help Text & Save Feedback ────────────────────────────────────
 
-test.describe("7. Settings Help Text & Save Feedback", () => {
+// ─── 7. Audit Regression Smoke (2026-05-12) ──────────────────────────────────
+
+test.describe("7. Audit Regression Smoke (2026-05-12)", () => {
+  test.beforeEach(async ({ page }) => {
+    await stubAppShell(page);
+    await stubPipelineRoutes(page);
+    await stubTasksRoutes(page);
+    await stubProjectsRoutes(page);
+    await stubSettingsRoutes(page);
+  });
+
+  test("header model dropdown is non-empty when /api/models returns active provider models", async ({ page }) => {
+    // ModelPicker lives in the mobile menu on small viewports, so use mobile size.
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    // Unroute the empty models stub from beforeEach and install one with real data.
+    await page.unroute("/api/models*");
+    await page.route("/api/models*", async (route: Route) => {
+      await route.fulfill(
+        json({
+          openai: [
+            { id: "gpt-5.5", label: "GPT-5.5", is_default: true, is_custom: false },
+            { id: "gpt-4.1", label: "GPT-4.1", is_default: false, is_custom: false },
+          ],
+        }),
+      );
+    });
+
+    await page.addInitScript(({ readyEvent }) => {
+      const payload = JSON.parse(readyEvent);
+      payload.state.provider = "openai";
+      payload.state.active_profile = "openai";
+      class MockWebSocket {
+        static CONNECTING = 0;
+        static OPEN = 1;
+        static CLOSING = 2;
+        static CLOSED = 3;
+        readyState = MockWebSocket.CONNECTING;
+        onopen: ((event: Event) => void) | null = null;
+        onmessage: ((event: MessageEvent) => void) | null = null;
+        onclose: ((event: CloseEvent) => void) | null = null;
+        onerror: ((event: Event) => void) | null = null;
+        constructor() {
+          setTimeout(() => {
+            this.readyState = MockWebSocket.OPEN;
+            this.onopen?.(new Event("open"));
+            this.onmessage?.(new MessageEvent("message", { data: JSON.stringify(payload) }));
+          }, 0);
+        }
+        send() {}
+        close() {}
+        addEventListener() {}
+        removeEventListener() {}
+      }
+      // @ts-expect-error e2e mock
+      window.WebSocket = MockWebSocket;
+    }, { readyEvent: READY_EVENT });
+
+    await page.goto("/chat");
+
+    // The RuntimeSummary model chip in the mobile header shows the current model.
+    const mobileModelChip = page.locator('button[aria-label="Open runtime controls"]');
+    await expect(mobileModelChip).toBeVisible({ timeout: 10_000 });
+    await expect(mobileModelChip).toContainText("gpt-5.5");
+
+    // Tap the chip to open the mobile menu (ModelPicker lives inside it).
+    await mobileModelChip.click();
+
+    // ModelPicker dropdown button shows the current model name.
+    const modelBtn = page.locator('button[aria-haspopup="listbox"]').filter({ hasText: "gpt-5.5" });
+    await expect(modelBtn).toBeVisible({ timeout: 5_000 });
+    await modelBtn.click();
+
+    // The dropdown is a div (not role=listbox); items have role="option".
+    const options = page.locator('button[role="option"]');
+    await expect(options).toHaveCount(2, { timeout: 5_000 });
+    await expect(options.filter({ hasText: "GPT-5.5" })).toBeVisible({ timeout: 3_000 });
+    await expect(options.filter({ hasText: "GPT-4.1" })).toBeVisible({ timeout: 3_000 });
+  });
+
+  test("mobile header does not horizontally overflow viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/chat");
+
+    const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    expect(hasOverflow).toBe(false);
+  });
+
+  test("Projects default view hides temp-like pytest projects", async ({ page }) => {
+    // The default viewFilter is "active" (see ProjectsPage.tsx line 71).
+    // pytest-of-hodtien has a temp-like name and is NOT active, so it should be hidden.
+    await page.goto("/projects");
+    await expect(page.locator("h1:has-text('Projects')")).toBeVisible({ timeout: 10_000 });
+
+    // Active project "My Project" is visible.
+    await expect(page.locator("text=My Project").first()).toBeVisible({ timeout: 5_000 });
+
+    // pytest-of-hodtien is NOT active so hidden under default "Active" filter.
+    await expect(page.locator("text=pytest-of-hodtien")).not.toBeVisible({ timeout: 3_000 });
+  });
+
+  test("Chat empty state appears when connected with no conversation", async ({ page }) => {
+    await page.addInitScript(({ readyEvent }) => {
+      class MockWebSocket {
+        static CONNECTING = 0;
+        static OPEN = 1;
+        static CLOSING = 2;
+        static CLOSED = 3;
+        readyState = MockWebSocket.CONNECTING;
+        onopen: ((event: Event) => void) | null = null;
+        onmessage: ((event: MessageEvent) => void) | null = null;
+        onclose: ((event: CloseEvent) => void) | null = null;
+        onerror: ((event: Event) => void) | null = null;
+        constructor() {
+          setTimeout(() => {
+            this.readyState = MockWebSocket.OPEN;
+            this.onopen?.(new Event("open"));
+            this.onmessage?.(new MessageEvent("message", { data: readyEvent }));
+          }, 0);
+        }
+        send() {}
+        close() {}
+        addEventListener() {}
+        removeEventListener() {}
+      }
+      // @ts-expect-error e2e mock
+      window.WebSocket = MockWebSocket;
+    }, { readyEvent: READY_EVENT });
+
+    await page.goto("/chat");
+    await expect(page.locator("text=Resume recent session")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("text=Open Autopilot board")).toBeVisible({ timeout: 5_000 });
+  });
+
+  test("Autopilot attention-first filters render", async ({ page }) => {
+    await page.goto("/autopilot");
+    await expect(page.locator('button:has-text("Needs attention")')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('button:has-text("Active")')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('button:has-text("Waiting")')).toBeVisible({ timeout: 5_000 });
+  });
+});
+
+// ─── 8. Settings Help Text & Save Feedback ────────────────────────────────────
+
+test.describe("8. Settings Help Text & Save Feedback", () => {
   test.beforeEach(async ({ page }) => {
     await stubAppShell(page);
     await stubSettingsRoutes(page);
