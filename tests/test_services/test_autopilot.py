@@ -5918,6 +5918,81 @@ def test_manual_retry_managed_pr_bypasses_ci_monitor(tmp_path: Path, monkeypatch
     assert updated.metadata.get("attempt_count") == 1
 
 
+def test_manual_retry_managed_pr_with_prior_ci_success_runs_repair(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Managed PR manual retry after CI success",
+        body="manual retry must repair instead of reusing stale CI success",
+    )
+    store.update_status(
+        card.id,
+        status="queued",
+        metadata_updates={
+            "autopilot_managed": True,
+            "linked_pr_number": 99,
+            "head_branch": f"autopilot/{card.id}",
+            "last_ci_conclusion": "success",
+            "manual_retry": True,
+            "retry_requested": True,
+        },
+    )
+
+    merge_calls: list[int] = []
+    agent_ran = False
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None):
+        return WorktreeInfo(path=repo, branch=branch or "main", name=slug)
+
+    async def fake_run_agent(*args, **kwargs):
+        nonlocal agent_ran
+        agent_ran = True
+        return "manual retry repair ran"
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
+        lambda self, pr_number: {"state": "OPEN", "url": "https://example/pr/99"},
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: merge_calls.append(pr_number),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", lambda self, path: None
+    )
+
+    store._run_agent_prompt = MethodType(fake_run_agent, store)
+    store._run_verification_steps = MethodType(lambda self, policies, *, cwd=None: [], store)
+    monkeypatch.setattr(
+        store,
+        "_upsert_pull_request",
+        lambda *args, **kwargs: {"number": 99, "url": "https://example/pr/99"},
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+
+    assert merge_calls == []
+    assert agent_ran is True
+    assert result.status in {"pr_open", "completed"}
+
+
 def test_manual_retry_flag_cleared_when_agent_loop_starts(tmp_path: Path, monkeypatch) -> None:
     """manual_retry should be cleared from metadata once the agent loop begins."""
     repo = tmp_path / "repo"
@@ -7038,4 +7113,3 @@ def test_manual_reset_failed_card_clears_terminal_retry_metadata(tmp_path: Path)
     assert "last_failure_summary" not in reset.metadata
     assert "verification_failed" not in reset.metadata
     assert "worker_id" not in reset.metadata
-

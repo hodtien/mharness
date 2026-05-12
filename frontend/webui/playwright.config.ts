@@ -9,6 +9,11 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: 1,
   reporter: [["list"]],
+  expect: {
+    toHaveScreenshot: {
+      pathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}{ext}",
+    },
+  },
   use: {
     baseURL: BASE_URL,
     trace: "on-first-retry",

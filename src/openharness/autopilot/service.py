@@ -1470,6 +1470,7 @@ class RepoAutopilotStore:
         if (
             linked_pr_number is not None
             and bool(card.metadata.get("autopilot_managed"))
+            and not bool(card.metadata.get("manual_retry"))
             and _safe_text(card.metadata.get("last_ci_conclusion")) == "success"
         ):
             pr_snapshot = self._pr_status_snapshot(linked_pr_number)

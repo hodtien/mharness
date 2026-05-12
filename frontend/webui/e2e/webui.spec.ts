@@ -133,9 +133,9 @@ const SAMPLE_PROJECTS = {
     },
     {
       id: "proj-3",
-      name: "pytest-of-hodtien",
-      path: "/tmp/pytest-of-hodtien/pytest-42/repo",
-      description: "temp pytest project",
+      name: "pytest-temp-project",
+      path: "./fixtures/pytest-temp-project",
+      description: "synthetic temp pytest project",
       created_at: null,
       updated_at: null,
       is_active: false,
@@ -396,6 +396,14 @@ test.describe("2. Chat Tool Card Collapse/Expand", () => {
                   tool_name: "bash_ide",
                   output: "x".repeat(300),
                   is_error: false,
+                }),
+              }),
+            );
+            this.onmessage?.(
+              new MessageEvent("message", {
+                data: JSON.stringify({
+                  type: "assistant_complete",
+                  message: "Tool run complete.",
                 }),
               }),
             );
@@ -693,7 +701,7 @@ test.describe("6. Projects Active/Delete Safety UX", () => {
     await expect(deleteBtn).toBeVisible({ timeout: 8_000 });
     await deleteBtn.click();
 
-    await expect(page.locator("text=Delete Project?").first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator("h2:has-text('Delete Project')").first()).toBeVisible({ timeout: 5_000 });
     await expect(page.locator("text=My Project").first()).toBeVisible({ timeout: 3_000 });
   });
 
@@ -702,10 +710,10 @@ test.describe("6. Projects Active/Delete Safety UX", () => {
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
     await page.locator('button[aria-label="Delete project My Project"]').click();
-    await expect(page.locator("text=Delete Project?").first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator("h2:has-text('Delete Project')").first()).toBeVisible({ timeout: 5_000 });
 
     await page.locator('button:has-text("Cancel")').last().click();
-    await expect(page.locator("text=Delete Project?")).not.toBeVisible({ timeout: 5_000 });
+    await expect(page.locator("h2:has-text('Delete Project')")).not.toBeVisible({ timeout: 5_000 });
 
     // Project card should still be visible
     await expect(page.locator("text=My Project").first()).toBeVisible({ timeout: 3_000 });
@@ -731,11 +739,13 @@ test.describe("6. Projects Active/Delete Safety UX", () => {
     await page.goto("/projects");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
+    await page.getByRole("tab", { name: "All" }).click();
+    await expect(page.locator('button[aria-label="Delete project Other Project"]')).toBeVisible({ timeout: 5_000 });
     await page.locator('button[aria-label="Delete project Other Project"]').click();
-    await expect(page.locator("text=Delete Project?").first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator("h2:has-text('Delete Project')").first()).toBeVisible({ timeout: 5_000 });
 
     // Click the confirm Delete button (last in the dialog)
-    await page.locator('button[aria-label="Confirm delete project"]').click();
+    await page.getByRole("button", { name: "Confirm delete project" }).click();
 
     // Wait a moment for the API call
     await page.waitForTimeout(1_000);
@@ -833,6 +843,11 @@ test.describe("7. Audit Regression Smoke (2026-05-12)", () => {
     await expect(options).toHaveCount(2, { timeout: 5_000 });
     await expect(options.filter({ hasText: "GPT-5.5" })).toBeVisible({ timeout: 3_000 });
     await expect(options.filter({ hasText: "GPT-4.1" })).toBeVisible({ timeout: 3_000 });
+
+    await expect(page.locator('[role="option"]').first().locator("xpath=ancestor::div[1]")).toHaveScreenshot(
+      "audit-model-dropdown.png",
+      { animations: "disabled" },
+    );
   });
 
   test("mobile header does not horizontally overflow viewport", async ({ page }) => {
@@ -845,15 +860,18 @@ test.describe("7. Audit Regression Smoke (2026-05-12)", () => {
 
   test("Projects default view hides temp-like pytest projects", async ({ page }) => {
     // The default viewFilter is "active" (see ProjectsPage.tsx line 71).
-    // pytest-of-hodtien has a temp-like name and is NOT active, so it should be hidden.
+    // pytest-temp-project has a temp-like name and is NOT active, so it should be hidden.
     await page.goto("/projects");
     await expect(page.locator("h1:has-text('Projects')")).toBeVisible({ timeout: 10_000 });
 
     // Active project "My Project" is visible.
     await expect(page.locator("text=My Project").first()).toBeVisible({ timeout: 5_000 });
 
-    // pytest-of-hodtien is NOT active so hidden under default "Active" filter.
-    await expect(page.locator("text=pytest-of-hodtien")).not.toBeVisible({ timeout: 3_000 });
+    // pytest-temp-project is NOT active so hidden under default "Active" filter.
+    await expect(page.locator("text=pytest-temp-project")).not.toBeVisible({ timeout: 3_000 });
+    await expect(page.locator("main").first()).toHaveScreenshot("audit-projects-default.png", {
+      animations: "disabled",
+    });
   });
 
   test("Chat empty state appears when connected with no conversation", async ({ page }) => {
@@ -894,6 +912,9 @@ test.describe("7. Audit Regression Smoke (2026-05-12)", () => {
     await expect(page.locator('button:has-text("Needs attention")')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('button:has-text("Active")')).toBeVisible({ timeout: 5_000 });
     await expect(page.locator('button:has-text("Waiting")')).toBeVisible({ timeout: 5_000 });
+    await expect(
+      page.locator('button:has-text("Needs attention")').locator("xpath=ancestor::div[1]"),
+    ).toHaveScreenshot("audit-autopilot-filters.png", { animations: "disabled" });
   });
 });
 
