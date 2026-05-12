@@ -47,6 +47,9 @@ export default function ModelsSettingsPage() {
   const [editModal, setEditModal] = useState<EditModalState | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null);
   const [search, setSearch] = useState("");
+  const [providerFilter, setProviderFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "built-in" | "custom">("all");
+  const [defaultOnly, setDefaultOnly] = useState(false);
 
   const reload = async () => {
     setError(null);
@@ -90,18 +93,34 @@ export default function ModelsSettingsPage() {
   const filteredProviderEntries = useMemo(() => {
     const query = search.trim().toLowerCase();
     const entries = Object.entries(models).map(([providerId, items]) => {
-      const filtered = query
-        ? items.filter((model) => {
-            const haystack = `${model.id} ${model.label}`.toLowerCase();
-            return haystack.includes(query);
-          })
-        : items;
+      let filtered = items;
+
+      // Provider filter
+      if (providerFilter !== "all" && providerId !== providerFilter) {
+        filtered = [];
+      }
+
+      // Text search
+      if (query) {
+        filtered = filtered.filter((model) => {
+          const haystack = `${model.id} ${model.label}`.toLowerCase();
+          return haystack.includes(query);
+        });
+      }
+
+      // Type filter
+      if (typeFilter === "built-in") filtered = filtered.filter((model) => !model.is_custom);
+      if (typeFilter === "custom") filtered = filtered.filter((model) => model.is_custom);
+
+      // Default only
+      if (defaultOnly) filtered = filtered.filter((model) => model.is_default);
+
       const builtIn = filtered.filter((model) => !model.is_custom);
       const custom = filtered.filter((model) => model.is_custom);
       return [providerId, [...custom, ...builtIn]] as [string, ModelProfile[]];
     });
     return entries.filter(([, items]) => items.length > 0);
-  }, [models, search]);
+  }, [models, search, providerFilter, typeFilter, defaultOnly]);
 
   if (loading) {
     return (
@@ -255,29 +274,69 @@ export default function ModelsSettingsPage() {
 
         {error && <ErrorBanner message={error} />}
 
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[var(--text-dim)]">
-              🔍
-            </span>
-            <input
-              type="search"
-              value={search}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
-              placeholder="Filter by model id or label…"
-              aria-label="Filter models"
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] py-2 pl-10 pr-4 text-sm text-[var(--text)] placeholder-[var(--text-dim)] outline-none focus:border-cyan-400/50"
-            />
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[var(--text-dim)]">
+                🔍
+              </span>
+              <input
+                type="search"
+                value={search}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+                placeholder="Filter by model id or label…"
+                aria-label="Filter models"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] py-2 pl-10 pr-4 text-sm text-[var(--text)] placeholder-[var(--text-dim)] outline-none focus:border-cyan-400/50"
+              />
+            </div>
+            {(search || providerFilter !== "all" || typeFilter !== "all" || defaultOnly) && (
+              <button
+                type="button"
+                onClick={() => { setSearch(""); setProviderFilter("all"); setTypeFilter("all"); setDefaultOnly(false); }}
+                className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs text-[var(--text-dim)] hover:border-[var(--text-dim)]"
+              >
+                Clear all
+              </button>
+            )}
           </div>
-          {search && (
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Provider filter */}
+            <select
+              value={providerFilter}
+              onChange={(e) => setProviderFilter(e.target.value)}
+              className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text)] outline-none focus:border-cyan-400/50"
+              aria-label="Filter by provider"
+            >
+              <option value="all">All providers</option>
+              {Object.keys(models).map((pid) => (
+                <option key={pid} value={pid}>
+                  {providerLabels[pid] ?? pid}
+                </option>
+              ))}
+            </select>
+
+            {/* Type filter chips */}
+            {(["all", "built-in", "custom"] as const).map((type) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => setTypeFilter(type)}
+                className={`rounded-full border px-2.5 py-1 text-xs ${typeFilter === type ? "border-cyan-400/50 bg-cyan-500/10 text-cyan-100" : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)]"}`}
+              >
+                {type === "all" ? "All types" : type === "built-in" ? "Built-in" : "Custom"}
+              </button>
+            ))}
+
+            {/* Default only toggle */}
             <button
               type="button"
-              onClick={() => setSearch("")}
-              className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs text-[var(--text-dim)] hover:border-[var(--text-dim)]"
+              onClick={() => setDefaultOnly((v) => !v)}
+              className={`rounded-full border px-2.5 py-1 text-xs ${defaultOnly ? "border-amber-400/50 bg-amber-500/10 text-amber-100" : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)]"}`}
             >
-              Clear
+              Default only
             </button>
-          )}
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -285,13 +344,17 @@ export default function ModelsSettingsPage() {
             <EmptyState message="No provider profiles configured." description="Add a provider in Provider settings first." />
           )}
           {filteredProviderEntries.length === 0 && Object.keys(models).length > 0 ? (
-            search ? (
-              <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--panel)] p-8 text-center">
-                <span aria-hidden="true" className="mb-3 text-4xl">🔍</span>
-                <p className="text-sm font-medium text-[var(--text)]">No models match &ldquo;{search}&rdquo;</p>
-                <p className="mt-1 text-xs text-[var(--text-dim)]">Try a different search term.</p>
-              </div>
-            ) : null
+            <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--panel)] p-8 text-center">
+              <span aria-hidden="true" className="mb-3 text-4xl">🔍</span>
+              <p className="text-sm font-medium text-[var(--text)]">No models match your filters.</p>
+              <p className="mt-1 text-xs text-[var(--text-dim)]">
+                Try different filters or{" "}
+                <button type="button" className="text-cyan-400 hover:underline" onClick={() => { setSearch(""); setProviderFilter("all"); setTypeFilter("all"); setDefaultOnly(false); }}>
+                  clear all filters
+                </button>
+                .
+              </p>
+            </div>
           ) : (
             filteredProviderEntries.map(([providerId, items]) => {
               const open = openProviders[providerId] ?? true;
