@@ -18,6 +18,7 @@ from openharness.webui.server.app import create_app
 
 EXPECTED_FIELDS = (
     "permission_mode",
+    "model",
     "fast_mode",
     "vim_enabled",
     "effort",
@@ -81,6 +82,26 @@ def test_patch_modes_with_valid_values_returns_200_and_applies_changes(tmp_path)
     assert follow["effort"] == "high"
     assert follow["passes"] == 3
     assert follow["fast_mode"] is True
+
+
+def test_patch_modes_model_updates_response_and_persists(tmp_path, monkeypatch) -> None:
+    """PATCH model updates the runtime model and persists settings."""
+    client = _client(tmp_path)
+
+    response = client.patch(
+        "/api/modes",
+        json={"model": "gpt-4o-mini"},
+        headers=AUTH,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["model"] == "gpt-4o-mini"
+
+    settings = load_settings()
+    assert settings.model == "gpt-4o-mini"
+
+    follow = client.get("/api/modes", headers=AUTH).json()
+    assert follow["model"] == "gpt-4o-mini"
 
 
 def test_patch_modes_invalid_effort_returns_422(tmp_path) -> None:
