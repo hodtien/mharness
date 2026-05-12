@@ -5,11 +5,7 @@ import remarkBreaks from "remark-breaks";
 import { useSession, type DisplayItem } from "../store/session";
 import ToolCard from "./ToolCard";
 
-interface TranscriptProps {
-  hideWelcome?: boolean;
-}
-
-export default function Transcript({ hideWelcome = false }: TranscriptProps) {
+export default function Transcript() {
   const transcript = useSession((s) => s.transcript);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -25,11 +21,6 @@ export default function Transcript({ hideWelcome = false }: TranscriptProps) {
       className="flex-1 overflow-y-auto px-3 py-3 sm:px-5 sm:py-4"
     >
       <div className="mx-auto flex max-w-4xl flex-col gap-3">
-        {transcript.length === 0 && !hideWelcome && (
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm text-[var(--text-dim)]">
-            Waiting for backend… Send your first message below.
-          </div>
-        )}
         {transcript.map((item) => (
           <Bubble key={item.id} item={item} />
         ))}

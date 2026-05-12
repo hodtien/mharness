@@ -1,5 +1,6 @@
 import Transcript from "../components/Transcript";
 import InputBar from "../components/InputBar";
+import ChatEmptyState from "../components/ChatEmptyState";
 import { useSession } from "../store/session";
 
 interface Props {
@@ -8,15 +9,11 @@ interface Props {
 
 export default function ChatPage({ onSend }: Props) {
   const connectionStatus = useSession((s) => s.connectionStatus);
-  const sessionId = useSession((s) => s.sessionId);
-  const appState = useSession((s) => s.appState);
   const transcript = useSession((s) => s.transcript);
 
   const isDisconnected = connectionStatus === "closed";
-  const showWelcome = connectionStatus === "open" && transcript.length === 0;
-
-  const truncatedSessionId = sessionId ? `${sessionId.slice(0, 8)}...` : "—";
-  const model = appState?.model || "—";
+  const hasConversation = transcript.some((item) => item.role === "user" || item.role === "assistant");
+  const showEmptyState = connectionStatus === "open" && !hasConversation;
 
   return (
     <>
@@ -45,24 +42,7 @@ export default function ChatPage({ onSend }: Props) {
           <span>Disconnected — attempting to reconnect...</span>
         </div>
       )}
-      <Transcript hideWelcome={!showWelcome} />
-      {showWelcome && (
-        <div className="border-b border-[var(--border)] bg-[var(--panel)] px-4 py-3">
-          <div className="mx-auto flex max-w-4xl items-center gap-3 text-sm text-[var(--text)]">
-            <span className="flex h-2 w-2">
-              <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-            </span>
-            <div>
-              <strong className="font-semibold">Connected</strong>
-              <span className="ml-3 text-[var(--text-dim)]">
-                Session: {truncatedSessionId}
-              </span>
-              <span className="ml-3 text-[var(--text-dim)]">Model: {model}</span>
-            </div>
-          </div>
-        </div>
-      )}
+      {showEmptyState ? <ChatEmptyState onSend={onSend} /> : <Transcript />}
       <InputBar onSend={onSend} />
     </>
   );
