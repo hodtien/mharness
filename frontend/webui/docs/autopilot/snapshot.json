@@ -1,11 +1,11 @@
 {
-  "generated_at": 1778003294.7724211,
+  "generated_at": 1778464053.233223,
   "repo_name": "webui",
   "repo_path": "/Users/hodtien/harness/my-harness/frontend/webui",
   "focus": {
-    "id": "ap-0de0d4ba",
-    "title": "[P10.1] UI: Tối ưu layout phần Status trong Sidebar",
-    "body": "Cải thiện visual hierarchy cho phần Status trong sidebar: dùng pill/badge thay vì text thuần cho model/provider/permission/effort, thêm màu semantic (xanh=ok, đỏ=error), nhóm các field liên quan, tách JOBS và CRON JOBS thành sub-section riêng với border-top. Tránh hiển thị dày đặc văn bản như hiện tại. Spawn agents: code-reviewer.",
+    "id": "ap-8cf9384d",
+    "title": "[P15.1] UI Foundation: Design tokens và shared visual primitives",
+    "body": "Expand frontend/webui/src/index.css thành design-token layer rõ ràng:\n1. spacing scale, radius scale, typography scale\n2. semantic status colors cho queue/pending/running/review/done/failed/rejected\n3. priority colors, shadows, transitions\n4. focus-visible style nhất quán\n5. replace hardcoded palette/spacing ở Sidebar.tsx, Header.tsx, PipelinePage.tsx, TasksPage.tsx\n\nTests: visual smoke pass + existing frontend tests.\nSpawn agents: code-reviewer.",
     "status": "queued",
     "source_kind": "manual_idea",
     "source_ref": "",
@@ -17,8 +17,8 @@
       "recently updated"
     ],
     "labels": [],
-    "created_at": 1778003205.033091,
-    "updated_at": 1778003252.4592068,
+    "created_at": 1778463882.2100859,
+    "updated_at": 1778463882.2100859,
     "metadata": {
       "last_note": "",
       "url": "",
@@ -39,7 +39,7 @@
     }
   },
   "counts": {
-    "queued": 7,
+    "queued": 13,
     "accepted": 0,
     "preparing": 0,
     "running": 0,
@@ -71,9 +71,9 @@
   "columns": {
     "queued": [
       {
-        "id": "ap-0de0d4ba",
-        "title": "[P10.1] UI: Tối ưu layout phần Status trong Sidebar",
-        "body": "Cải thiện visual hierarchy cho phần Status trong sidebar: dùng pill/badge thay vì text thuần cho model/provider/permission/effort, thêm màu semantic (xanh=ok, đỏ=error), nhóm các field liên quan, tách JOBS và CRON JOBS thành sub-section riêng với border-top. Tránh hiển thị dày đặc văn bản như hiện tại. Spawn agents: code-reviewer.",
+        "id": "ap-8cf9384d",
+        "title": "[P15.1] UI Foundation: Design tokens và shared visual primitives",
+        "body": "Expand frontend/webui/src/index.css thành design-token layer rõ ràng:\n1. spacing scale, radius scale, typography scale\n2. semantic status colors cho queue/pending/running/review/done/failed/rejected\n3. priority colors, shadows, transitions\n4. focus-visible style nhất quán\n5. replace hardcoded palette/spacing ở Sidebar.tsx, Header.tsx, PipelinePage.tsx, TasksPage.tsx\n\nTests: visual smoke pass + existing frontend tests.\nSpawn agents: code-reviewer.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -85,8 +85,8 @@
           "recently updated"
         ],
         "labels": [],
-        "created_at": 1778003205.033091,
-        "updated_at": 1778003252.4592068,
+        "created_at": 1778463882.2100859,
+        "updated_at": 1778463882.2100859,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -107,9 +107,9 @@
         }
       },
       {
-        "id": "ap-5d12507f",
-        "title": "[P10.2] UX: Collapsible SETTINGS section trong Sidebar",
-        "body": "Settings section trong sidebar có 4 items (Modes, Provider, Models, Agents) chiếm nhiều space. Thêm toggle collapse/expand cho section SETTINGS. Lưu trạng thái vào localStorage. Khi collapsed: hiện icon gear nhỏ thay vì list. Default: expanded. Spawn agents: code-reviewer.",
+        "id": "ap-7ac9516d",
+        "title": "[P15.2] UI Foundation: Standardized PageHeader component",
+        "body": "Create frontend/webui/src/components/PageHeader.tsx:\n1. title + short description\n2. primary/secondary actions slot\n3. metadata row cho active project, job count, last sync, runtime state\n4. apply to Autopilot, Jobs, Projects, History, and Settings pages\n5. ensure mỗi page trả lời rõ: page này dùng để làm gì, trạng thái hiện tại là gì, action chính là gì\n\nTests: PageHeader component test + touched page render tests.\nSpawn agents: code-reviewer.\nDepends on: P15.1.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -121,8 +121,8 @@
           "recently updated"
         ],
         "labels": [],
-        "created_at": 1778003256.914895,
-        "updated_at": 1778003256.914895,
+        "created_at": 1778463889.1423738,
+        "updated_at": 1778463889.1423738,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -143,9 +143,9 @@
         }
       },
       {
-        "id": "ap-470cb11e",
-        "title": "[P10.3] UX: Thêm liên kết Docs/Help vào Sidebar",
-        "body": "Thêm liên kết 'Docs' hoặc 'Help' ở cuối sidebar (dưới CRON JOBS) dẫn đến tài liệu hướng dẫn sử dụng. Dùng icon ? hoặc book. Mở link trong tab mới. Spawn agents: code-reviewer.",
+        "id": "ap-3934a540",
+        "title": "[P15.3] UI Shell: Sidebar noise reduction",
+        "body": "Refactor Sidebar.tsx thành 3 zones rõ ràng:\n1. Primary navigation: Chat, History, Autopilot, Jobs, Projects\n2. Collapsible Settings navigation với labels/tooltips/aria-label cho icon-only controls\n3. Collapsible System Status cho model/provider/permission/effort/jobs\n4. Jobs snippet chỉ show top 3 + View all (N)\n5. Runtime status không cạnh tranh thị giác với primary navigation\n\nTests: Sidebar unit tests cho collapse, active route, accessible labels.\nSpawn agents: code-reviewer.\nDepends on: P15.1.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -157,8 +157,8 @@
           "recently updated"
         ],
         "labels": [],
-        "created_at": 1778003262.679401,
-        "updated_at": 1778003262.679401,
+        "created_at": 1778463893.068008,
+        "updated_at": 1778463893.068008,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -179,9 +179,9 @@
         }
       },
       {
-        "id": "ap-4aa6cc69",
-        "title": "[P10.4] UI: Header breadcrumb responsive truncation",
-        "body": "Header hiện tại hiển thị '* DEFAULT↓ · claude-review · /Users/hodtien/harness/my-harness' — khó đọc trên màn nhỏ. Ưu tiên hiển thị: model badge trước, path truncate từ trái (hiện ...my-harness thay vì full path), tooltip hover để xem đầy đủ. Trên mobile <768px: ẩn path, chỉ giữ model + provider. Spawn agents: code-reviewer.",
+        "id": "ap-972e56df",
+        "title": "[P15.4] UI Shell: Top bar runtime summary",
+        "body": "Upgrade Header.tsx để trả lời 'What is happening right now?':\n1. active project summary\n2. connection health\n3. running job count\n4. active model/provider\n5. current permission mode\n6. primary interrupt action khi busy\n7. move detailed runtime metadata ra khỏi sidebar nếu phù hợp top bar hơn\n\nTests: Header unit tests cho runtime state badges và busy action.\nSpawn agents: code-reviewer.\nDepends on: P15.1, P15.2.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -193,8 +193,8 @@
           "recently updated"
         ],
         "labels": [],
-        "created_at": 1778003267.7689779,
-        "updated_at": 1778003267.7689779,
+        "created_at": 1778463897.864873,
+        "updated_at": 1778463897.864873,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -215,9 +215,9 @@
         }
       },
       {
-        "id": "ap-cac01728",
-        "title": "[P10.5] UI: Column count badge màu theo trạng thái",
-        "body": "Header mỗi cột Kanban (QUEUE, IN PROGRESS, REVIEW, COMPLETED, FAILED, REJECTED) chỉ hiển thị số trắng. Thêm màu semantic: QUEUE=xanh-lam, IN PROGRESS=cam (nhấp nháy nhẹ khi count>0), REVIEW=tím, COMPLETED=xanh-lá, FAILED=đỏ, REJECTED=xám mờ. Badge pulse animation khi có card active. Spawn agents: code-reviewer.",
+        "id": "ap-c864f873",
+        "title": "[P15.5] Autopilot UI: Board card hierarchy và completed de-emphasis",
+        "body": "Improve PipelinePage.tsx board readability:\n1. card padding/line-height thoáng hơn\n2. title hierarchy rõ hơn, max 2 lines\n3. semantic badges cho status/source/priority\n4. metadata row dễ scan: age, model, status\n5. sticky column headers + count badges\n6. Completed column collapsed hoặc giảm dominance mặc định\n7. active/running state visible nhưng không quá noisy\n\nTests: PipelinePage render tests + visual browser pass.\nSpawn agents: code-reviewer.\nDepends on: P15.1, P15.2.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -229,8 +229,8 @@
           "recently updated"
         ],
         "labels": [],
-        "created_at": 1778003271.6348999,
-        "updated_at": 1778003271.6348999,
+        "created_at": 1778463902.400984,
+        "updated_at": 1778463902.400984,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -251,9 +251,9 @@
         }
       },
       {
-        "id": "ap-71e868b2",
-        "title": "[P10.6] UX: Empty state có hành động cho cột QUEUE",
-        "body": "Cột QUEUE đang hiện 'No cards' nhưng không gợi ý gì. Thêm empty state: icon + text 'No tasks queued' + nút '+ Add idea' trực tiếp trong cột (gọi cùng modal với nút '+ New idea' trên header). Tương tự cho cột IN PROGRESS: 'No active tasks. Click Run Next to start.' Spawn agents: code-reviewer.",
+        "id": "ap-1b5deb39",
+        "title": "[P15.6] Autopilot Logs: Semantic activity feed",
+        "body": "Transform PipelinePage.tsx/PipelineLogModel.ts log drawer từ protocol/debugger-first sang operator-first:\n1. unified chronological stream\n2. newest-first ordering\n3. tag filters (#agent, #tool, #error) thay vì hard tabs\n4. semantic event cards thay vì raw JSON/protocol rows\n5. tool summaries thay vì stdout dumps\n6. inspector panel hiển thị event details, input, output, tags\n7. raw payload hidden behind View raw event\n8. compact pause control trong toolbar\n\nTests: log transform/unit tests nếu có model helpers + manual stream review.\nSpawn agents: planner → code-reviewer.\nDepends on: P15.1.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -265,8 +265,8 @@
           "recently updated"
         ],
         "labels": [],
-        "created_at": 1778003274.18142,
-        "updated_at": 1778003274.18142,
+        "created_at": 1778463908.050627,
+        "updated_at": 1778463908.050627,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -287,9 +287,9 @@
         }
       },
       {
-        "id": "ap-2de56b7d",
-        "title": "[P10.7] UX: Autopilot log viewer — chronological + grouped blocks",
-        "body": "Trong card detail drawer (Activity tab): hiện tại log entries không rõ thứ tự. Sắp xếp tất cả entries theo timestamp tăng dần. Gom các entries liên tiếp cùng kind thành collapsible block với header [timestamp] kind (N entries). Expanded by default nếu block ≤3 entries, collapsed nếu >3. Format: ▼ [10:32] implement (3) / ▶ [10:35] tool_use bash (12, collapsed). Spawn agents: planner → code-reviewer.",
+        "id": "ap-fc37885f",
+        "title": "[P15.7] Chat UX: Collapsible semantic tool execution cards",
+        "body": "Refactor Transcript.tsx để tool execution dùng progressive disclosure:\n1. default collapsed tool cards với tool name, status, duration, semantic summary\n2. expand on click để xem command/result details\n3. auto-collapse by output size: small inline, medium preview, large collapsed\n4. group consecutive tool calls into Tools used summary\n5. raw terminal dumps không hiển thị full-height mặc định\n6. extract ToolCard.tsx nếu Transcript.tsx quá dense\n\nTests: ToolCard/Transcript tests cho collapsed, expanded, size-based behavior.\nSpawn agents: code-reviewer.\nDepends on: P15.1.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -301,8 +301,224 @@
           "recently updated"
         ],
         "labels": [],
-        "created_at": 1778003294.770726,
-        "updated_at": 1778003294.770726,
+        "created_at": 1778464026.58891,
+        "updated_at": 1778464026.58891,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-82a7db4e",
+        "title": "[P15.8] Jobs UX: Filters, sorting, and clearer status badges",
+        "body": "Enhance TasksPage.tsx:\n1. search jobs input\n2. status/type/review filters\n3. sort control (newest/default)\n4. richer status badges with icon + semantic color\n5. review state copy rõ ràng: Reviewed, Pending review, No review needed\n6. row expansion với prompt summary, duration, model/provider, log preview\n\nTests: TasksPage unit tests cho filter, sort, status badges, row expansion.\nSpawn agents: code-reviewer.\nDepends on: P15.1, P15.2.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778464031.519915,
+        "updated_at": 1778464031.519915,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-8b56bc4f",
+        "title": "[P15.9] Projects UX: Safety polish và path ergonomics",
+        "body": "Enhance ProjectsPage.tsx:\n1. active project pinned hoặc visually prioritized\n2. clearer Active badge/border/pin indicator\n3. truncate path thành ~/relative/path nếu possible\n4. copy path button + full path tooltip\n5. client-side search by name/path\n6. strengthen delete confirmation only where existing modal semantics are insufficient\n7. empty state với Add project CTA\n\nTests: ProjectsPage tests cho active highlight, search, path copy/truncation, delete safety.\nSpawn agents: code-reviewer.\nDepends on: P15.1, P15.2.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778464034.8463502,
+        "updated_at": 1778464034.8463502,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-5983bbf8",
+        "title": "[P15.10] Settings UX: Contextual microcopy and help states",
+        "body": "Add explanatory microcopy to Settings pages:\n1. Modes: Permission Mode descriptions for Default/Plan/Full Auto\n2. Modes: Effort low/medium/high tradeoffs\n3. Modes: Passes helper explaining quality/time tradeoff\n4. Providers: clearer status, verify, latency, last verified presentation\n5. Models: capability/search/filter clarity\n6. Agents: prompt preview/clone/test clarity\n7. reuse existing Section, feedback, loading, and error patterns\n\nTests: settings page tests assert key help text is visible.\nSpawn agents: code-reviewer.\nDepends on: P15.1, P15.2.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778464039.186244,
+        "updated_at": 1778464039.186244,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-0a46c4a6",
+        "title": "[P15.11] Cross-cutting UX: Empty/loading/error/toast states",
+        "body": "Standardize guidance states across Chat, Autopilot, Jobs, Projects, Settings:\n1. empty state copy with next CTA\n2. loading skeleton matching page shape\n3. user-facing error copy\n4. toast feedback for create/update/delete/save operations\n5. reuse existing EmptyState/ErrorBanner/LoadingSkeleton/ToastContainer before adding new primitives\n\nTests: page state rendering tests for representative empty/loading/error cases.\nSpawn agents: code-reviewer.\nDepends on: P15.1.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778464043.6582348,
+        "updated_at": 1778464043.6582348,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-eabfe881",
+        "title": "[P15.12] Accessibility: Foundation audit and fixes",
+        "body": "Audit and fix WebUI accessibility basics:\n1. contrast on dark surfaces meets WCAG AA where practical\n2. focus-visible ring consistent across controls\n3. icon-only buttons have aria-label and minimum hit area\n4. modal/drawer labels are explicit\n5. keyboard navigation logical; Escape closes modals/drawers\n6. status does not rely on color alone\n\nVerification: manual keyboard nav + automated axe-style audit if available.\nSpawn agents: a11y-architect → code-reviewer.\nDepends on: P15.1, P15.3, P15.5, P15.6, P15.7, P15.8, P15.9, P15.10, P15.11.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778464048.587698,
+        "updated_at": 1778464048.587698,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-6a26e6e9",
+        "title": "[P15.13] Tests: Playwright E2E core WebUI flows",
+        "body": "Add Playwright coverage for upgraded core flows:\n1. navigation and standardized page headers\n2. chat tool card collapse/expand\n3. Autopilot board hierarchy and new idea flow\n4. semantic log feed filtering\n5. Jobs filters and row expansion\n6. Projects active/delete safety UX\n7. Settings help text and save feedback\n8. add test:e2e script to frontend/webui/package.json\n\nVerification: Playwright suite green against http://127.0.0.1:8765.\nSpawn agents: e2e-runner → code-reviewer.\nDepends on: P15.3, P15.4, P15.5, P15.6, P15.7, P15.8, P15.9, P15.10, P15.11, P15.12.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778464053.231455,
+        "updated_at": 1778464053.231455,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -338,9 +554,9 @@
   },
   "cards": [
     {
-      "id": "ap-0de0d4ba",
-      "title": "[P10.1] UI: Tối ưu layout phần Status trong Sidebar",
-      "body": "Cải thiện visual hierarchy cho phần Status trong sidebar: dùng pill/badge thay vì text thuần cho model/provider/permission/effort, thêm màu semantic (xanh=ok, đỏ=error), nhóm các field liên quan, tách JOBS và CRON JOBS thành sub-section riêng với border-top. Tránh hiển thị dày đặc văn bản như hiện tại. Spawn agents: code-reviewer.",
+      "id": "ap-8cf9384d",
+      "title": "[P15.1] UI Foundation: Design tokens và shared visual primitives",
+      "body": "Expand frontend/webui/src/index.css thành design-token layer rõ ràng:\n1. spacing scale, radius scale, typography scale\n2. semantic status colors cho queue/pending/running/review/done/failed/rejected\n3. priority colors, shadows, transitions\n4. focus-visible style nhất quán\n5. replace hardcoded palette/spacing ở Sidebar.tsx, Header.tsx, PipelinePage.tsx, TasksPage.tsx\n\nTests: visual smoke pass + existing frontend tests.\nSpawn agents: code-reviewer.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
@@ -352,8 +568,8 @@
         "recently updated"
       ],
       "labels": [],
-      "created_at": 1778003205.033091,
-      "updated_at": 1778003252.4592068,
+      "created_at": 1778463882.2100859,
+      "updated_at": 1778463882.2100859,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -374,9 +590,9 @@
       }
     },
     {
-      "id": "ap-5d12507f",
-      "title": "[P10.2] UX: Collapsible SETTINGS section trong Sidebar",
-      "body": "Settings section trong sidebar có 4 items (Modes, Provider, Models, Agents) chiếm nhiều space. Thêm toggle collapse/expand cho section SETTINGS. Lưu trạng thái vào localStorage. Khi collapsed: hiện icon gear nhỏ thay vì list. Default: expanded. Spawn agents: code-reviewer.",
+      "id": "ap-7ac9516d",
+      "title": "[P15.2] UI Foundation: Standardized PageHeader component",
+      "body": "Create frontend/webui/src/components/PageHeader.tsx:\n1. title + short description\n2. primary/secondary actions slot\n3. metadata row cho active project, job count, last sync, runtime state\n4. apply to Autopilot, Jobs, Projects, History, and Settings pages\n5. ensure mỗi page trả lời rõ: page này dùng để làm gì, trạng thái hiện tại là gì, action chính là gì\n\nTests: PageHeader component test + touched page render tests.\nSpawn agents: code-reviewer.\nDepends on: P15.1.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
@@ -388,8 +604,8 @@
         "recently updated"
       ],
       "labels": [],
-      "created_at": 1778003256.914895,
-      "updated_at": 1778003256.914895,
+      "created_at": 1778463889.1423738,
+      "updated_at": 1778463889.1423738,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -410,9 +626,9 @@
       }
     },
     {
-      "id": "ap-470cb11e",
-      "title": "[P10.3] UX: Thêm liên kết Docs/Help vào Sidebar",
-      "body": "Thêm liên kết 'Docs' hoặc 'Help' ở cuối sidebar (dưới CRON JOBS) dẫn đến tài liệu hướng dẫn sử dụng. Dùng icon ? hoặc book. Mở link trong tab mới. Spawn agents: code-reviewer.",
+      "id": "ap-3934a540",
+      "title": "[P15.3] UI Shell: Sidebar noise reduction",
+      "body": "Refactor Sidebar.tsx thành 3 zones rõ ràng:\n1. Primary navigation: Chat, History, Autopilot, Jobs, Projects\n2. Collapsible Settings navigation với labels/tooltips/aria-label cho icon-only controls\n3. Collapsible System Status cho model/provider/permission/effort/jobs\n4. Jobs snippet chỉ show top 3 + View all (N)\n5. Runtime status không cạnh tranh thị giác với primary navigation\n\nTests: Sidebar unit tests cho collapse, active route, accessible labels.\nSpawn agents: code-reviewer.\nDepends on: P15.1.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
@@ -424,8 +640,8 @@
         "recently updated"
       ],
       "labels": [],
-      "created_at": 1778003262.679401,
-      "updated_at": 1778003262.679401,
+      "created_at": 1778463893.068008,
+      "updated_at": 1778463893.068008,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -446,9 +662,9 @@
       }
     },
     {
-      "id": "ap-4aa6cc69",
-      "title": "[P10.4] UI: Header breadcrumb responsive truncation",
-      "body": "Header hiện tại hiển thị '* DEFAULT↓ · claude-review · /Users/hodtien/harness/my-harness' — khó đọc trên màn nhỏ. Ưu tiên hiển thị: model badge trước, path truncate từ trái (hiện ...my-harness thay vì full path), tooltip hover để xem đầy đủ. Trên mobile <768px: ẩn path, chỉ giữ model + provider. Spawn agents: code-reviewer.",
+      "id": "ap-972e56df",
+      "title": "[P15.4] UI Shell: Top bar runtime summary",
+      "body": "Upgrade Header.tsx để trả lời 'What is happening right now?':\n1. active project summary\n2. connection health\n3. running job count\n4. active model/provider\n5. current permission mode\n6. primary interrupt action khi busy\n7. move detailed runtime metadata ra khỏi sidebar nếu phù hợp top bar hơn\n\nTests: Header unit tests cho runtime state badges và busy action.\nSpawn agents: code-reviewer.\nDepends on: P15.1, P15.2.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
@@ -460,8 +676,8 @@
         "recently updated"
       ],
       "labels": [],
-      "created_at": 1778003267.7689779,
-      "updated_at": 1778003267.7689779,
+      "created_at": 1778463897.864873,
+      "updated_at": 1778463897.864873,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -482,9 +698,9 @@
       }
     },
     {
-      "id": "ap-cac01728",
-      "title": "[P10.5] UI: Column count badge màu theo trạng thái",
-      "body": "Header mỗi cột Kanban (QUEUE, IN PROGRESS, REVIEW, COMPLETED, FAILED, REJECTED) chỉ hiển thị số trắng. Thêm màu semantic: QUEUE=xanh-lam, IN PROGRESS=cam (nhấp nháy nhẹ khi count>0), REVIEW=tím, COMPLETED=xanh-lá, FAILED=đỏ, REJECTED=xám mờ. Badge pulse animation khi có card active. Spawn agents: code-reviewer.",
+      "id": "ap-c864f873",
+      "title": "[P15.5] Autopilot UI: Board card hierarchy và completed de-emphasis",
+      "body": "Improve PipelinePage.tsx board readability:\n1. card padding/line-height thoáng hơn\n2. title hierarchy rõ hơn, max 2 lines\n3. semantic badges cho status/source/priority\n4. metadata row dễ scan: age, model, status\n5. sticky column headers + count badges\n6. Completed column collapsed hoặc giảm dominance mặc định\n7. active/running state visible nhưng không quá noisy\n\nTests: PipelinePage render tests + visual browser pass.\nSpawn agents: code-reviewer.\nDepends on: P15.1, P15.2.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
@@ -496,8 +712,8 @@
         "recently updated"
       ],
       "labels": [],
-      "created_at": 1778003271.6348999,
-      "updated_at": 1778003271.6348999,
+      "created_at": 1778463902.400984,
+      "updated_at": 1778463902.400984,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -518,9 +734,9 @@
       }
     },
     {
-      "id": "ap-71e868b2",
-      "title": "[P10.6] UX: Empty state có hành động cho cột QUEUE",
-      "body": "Cột QUEUE đang hiện 'No cards' nhưng không gợi ý gì. Thêm empty state: icon + text 'No tasks queued' + nút '+ Add idea' trực tiếp trong cột (gọi cùng modal với nút '+ New idea' trên header). Tương tự cho cột IN PROGRESS: 'No active tasks. Click Run Next to start.' Spawn agents: code-reviewer.",
+      "id": "ap-1b5deb39",
+      "title": "[P15.6] Autopilot Logs: Semantic activity feed",
+      "body": "Transform PipelinePage.tsx/PipelineLogModel.ts log drawer từ protocol/debugger-first sang operator-first:\n1. unified chronological stream\n2. newest-first ordering\n3. tag filters (#agent, #tool, #error) thay vì hard tabs\n4. semantic event cards thay vì raw JSON/protocol rows\n5. tool summaries thay vì stdout dumps\n6. inspector panel hiển thị event details, input, output, tags\n7. raw payload hidden behind View raw event\n8. compact pause control trong toolbar\n\nTests: log transform/unit tests nếu có model helpers + manual stream review.\nSpawn agents: planner → code-reviewer.\nDepends on: P15.1.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
@@ -532,8 +748,8 @@
         "recently updated"
       ],
       "labels": [],
-      "created_at": 1778003274.18142,
-      "updated_at": 1778003274.18142,
+      "created_at": 1778463908.050627,
+      "updated_at": 1778463908.050627,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -554,9 +770,9 @@
       }
     },
     {
-      "id": "ap-2de56b7d",
-      "title": "[P10.7] UX: Autopilot log viewer — chronological + grouped blocks",
-      "body": "Trong card detail drawer (Activity tab): hiện tại log entries không rõ thứ tự. Sắp xếp tất cả entries theo timestamp tăng dần. Gom các entries liên tiếp cùng kind thành collapsible block với header [timestamp] kind (N entries). Expanded by default nếu block ≤3 entries, collapsed nếu >3. Format: ▼ [10:32] implement (3) / ▶ [10:35] tool_use bash (12, collapsed). Spawn agents: planner → code-reviewer.",
+      "id": "ap-fc37885f",
+      "title": "[P15.7] Chat UX: Collapsible semantic tool execution cards",
+      "body": "Refactor Transcript.tsx để tool execution dùng progressive disclosure:\n1. default collapsed tool cards với tool name, status, duration, semantic summary\n2. expand on click để xem command/result details\n3. auto-collapse by output size: small inline, medium preview, large collapsed\n4. group consecutive tool calls into Tools used summary\n5. raw terminal dumps không hiển thị full-height mặc định\n6. extract ToolCard.tsx nếu Transcript.tsx quá dense\n\nTests: ToolCard/Transcript tests cho collapsed, expanded, size-based behavior.\nSpawn agents: code-reviewer.\nDepends on: P15.1.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
@@ -568,8 +784,224 @@
         "recently updated"
       ],
       "labels": [],
-      "created_at": 1778003294.770726,
-      "updated_at": 1778003294.770726,
+      "created_at": 1778464026.58891,
+      "updated_at": 1778464026.58891,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-82a7db4e",
+      "title": "[P15.8] Jobs UX: Filters, sorting, and clearer status badges",
+      "body": "Enhance TasksPage.tsx:\n1. search jobs input\n2. status/type/review filters\n3. sort control (newest/default)\n4. richer status badges with icon + semantic color\n5. review state copy rõ ràng: Reviewed, Pending review, No review needed\n6. row expansion với prompt summary, duration, model/provider, log preview\n\nTests: TasksPage unit tests cho filter, sort, status badges, row expansion.\nSpawn agents: code-reviewer.\nDepends on: P15.1, P15.2.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778464031.519915,
+      "updated_at": 1778464031.519915,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-8b56bc4f",
+      "title": "[P15.9] Projects UX: Safety polish và path ergonomics",
+      "body": "Enhance ProjectsPage.tsx:\n1. active project pinned hoặc visually prioritized\n2. clearer Active badge/border/pin indicator\n3. truncate path thành ~/relative/path nếu possible\n4. copy path button + full path tooltip\n5. client-side search by name/path\n6. strengthen delete confirmation only where existing modal semantics are insufficient\n7. empty state với Add project CTA\n\nTests: ProjectsPage tests cho active highlight, search, path copy/truncation, delete safety.\nSpawn agents: code-reviewer.\nDepends on: P15.1, P15.2.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778464034.8463502,
+      "updated_at": 1778464034.8463502,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-5983bbf8",
+      "title": "[P15.10] Settings UX: Contextual microcopy and help states",
+      "body": "Add explanatory microcopy to Settings pages:\n1. Modes: Permission Mode descriptions for Default/Plan/Full Auto\n2. Modes: Effort low/medium/high tradeoffs\n3. Modes: Passes helper explaining quality/time tradeoff\n4. Providers: clearer status, verify, latency, last verified presentation\n5. Models: capability/search/filter clarity\n6. Agents: prompt preview/clone/test clarity\n7. reuse existing Section, feedback, loading, and error patterns\n\nTests: settings page tests assert key help text is visible.\nSpawn agents: code-reviewer.\nDepends on: P15.1, P15.2.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778464039.186244,
+      "updated_at": 1778464039.186244,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-0a46c4a6",
+      "title": "[P15.11] Cross-cutting UX: Empty/loading/error/toast states",
+      "body": "Standardize guidance states across Chat, Autopilot, Jobs, Projects, Settings:\n1. empty state copy with next CTA\n2. loading skeleton matching page shape\n3. user-facing error copy\n4. toast feedback for create/update/delete/save operations\n5. reuse existing EmptyState/ErrorBanner/LoadingSkeleton/ToastContainer before adding new primitives\n\nTests: page state rendering tests for representative empty/loading/error cases.\nSpawn agents: code-reviewer.\nDepends on: P15.1.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778464043.6582348,
+      "updated_at": 1778464043.6582348,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-eabfe881",
+      "title": "[P15.12] Accessibility: Foundation audit and fixes",
+      "body": "Audit and fix WebUI accessibility basics:\n1. contrast on dark surfaces meets WCAG AA where practical\n2. focus-visible ring consistent across controls\n3. icon-only buttons have aria-label and minimum hit area\n4. modal/drawer labels are explicit\n5. keyboard navigation logical; Escape closes modals/drawers\n6. status does not rely on color alone\n\nVerification: manual keyboard nav + automated axe-style audit if available.\nSpawn agents: a11y-architect → code-reviewer.\nDepends on: P15.1, P15.3, P15.5, P15.6, P15.7, P15.8, P15.9, P15.10, P15.11.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778464048.587698,
+      "updated_at": 1778464048.587698,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-6a26e6e9",
+      "title": "[P15.13] Tests: Playwright E2E core WebUI flows",
+      "body": "Add Playwright coverage for upgraded core flows:\n1. navigation and standardized page headers\n2. chat tool card collapse/expand\n3. Autopilot board hierarchy and new idea flow\n4. semantic log feed filtering\n5. Jobs filters and row expansion\n6. Projects active/delete safety UX\n7. Settings help text and save feedback\n8. add test:e2e script to frontend/webui/package.json\n\nVerification: Playwright suite green against http://127.0.0.1:8765.\nSpawn agents: e2e-runner → code-reviewer.\nDepends on: P15.3, P15.4, P15.5, P15.6, P15.7, P15.8, P15.9, P15.10, P15.11, P15.12.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778464053.231455,
+      "updated_at": 1778464053.231455,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -592,80 +1024,130 @@
   ],
   "journal": [
     {
-      "timestamp": 1778003205.033904,
+      "timestamp": 1778463882.2105238,
       "kind": "intake_added",
-      "summary": "Queued manual_idea: [P10.1] UI: Tối ưu layout phần Status trong Sidebar",
-      "task_id": "ap-0de0d4ba",
+      "summary": "Queued manual_idea: [P15.1] UI Foundation: Design tokens và shared visual primitives",
+      "task_id": "ap-8cf9384d",
       "metadata": {
         "source_ref": "",
         "score": 120
       }
     },
     {
-      "timestamp": 1778003252.459682,
-      "kind": "intake_refresh",
-      "summary": "Refreshed intake card ap-0de0d4ba: [P10.1] UI: Tối ưu layout phần Status trong Sidebar",
-      "task_id": "ap-0de0d4ba",
-      "metadata": {
-        "source_kind": "manual_idea",
-        "source_ref": ""
-      }
-    },
-    {
-      "timestamp": 1778003256.9154098,
+      "timestamp": 1778463889.143018,
       "kind": "intake_added",
-      "summary": "Queued manual_idea: [P10.2] UX: Collapsible SETTINGS section trong Sidebar",
-      "task_id": "ap-5d12507f",
+      "summary": "Queued manual_idea: [P15.2] UI Foundation: Standardized PageHeader component",
+      "task_id": "ap-7ac9516d",
       "metadata": {
         "source_ref": "",
         "score": 120
       }
     },
     {
-      "timestamp": 1778003262.680077,
+      "timestamp": 1778463893.0686631,
       "kind": "intake_added",
-      "summary": "Queued manual_idea: [P10.3] UX: Thêm liên kết Docs/Help vào Sidebar",
-      "task_id": "ap-470cb11e",
+      "summary": "Queued manual_idea: [P15.3] UI Shell: Sidebar noise reduction",
+      "task_id": "ap-3934a540",
       "metadata": {
         "source_ref": "",
         "score": 120
       }
     },
     {
-      "timestamp": 1778003267.76966,
+      "timestamp": 1778463897.865483,
       "kind": "intake_added",
-      "summary": "Queued manual_idea: [P10.4] UI: Header breadcrumb responsive truncation",
-      "task_id": "ap-4aa6cc69",
+      "summary": "Queued manual_idea: [P15.4] UI Shell: Top bar runtime summary",
+      "task_id": "ap-972e56df",
       "metadata": {
         "source_ref": "",
         "score": 120
       }
     },
     {
-      "timestamp": 1778003271.6355321,
+      "timestamp": 1778463902.401642,
       "kind": "intake_added",
-      "summary": "Queued manual_idea: [P10.5] UI: Column count badge màu theo trạng thái",
-      "task_id": "ap-cac01728",
+      "summary": "Queued manual_idea: [P15.5] Autopilot UI: Board card hierarchy và completed de-emphasis",
+      "task_id": "ap-c864f873",
       "metadata": {
         "source_ref": "",
         "score": 120
       }
     },
     {
-      "timestamp": 1778003274.182073,
+      "timestamp": 1778463908.051344,
       "kind": "intake_added",
-      "summary": "Queued manual_idea: [P10.6] UX: Empty state có hành động cho cột QUEUE",
-      "task_id": "ap-71e868b2",
+      "summary": "Queued manual_idea: [P15.6] Autopilot Logs: Semantic activity feed",
+      "task_id": "ap-1b5deb39",
       "metadata": {
         "source_ref": "",
         "score": 120
       }
     },
     {
-      "timestamp": 1778003294.771528,
+      "timestamp": 1778464026.5896692,
       "kind": "intake_added",
-      "summary": "Queued manual_idea: [P10.7] UX: Autopilot log viewer — chronological + grouped blocks",
-      "task_id": "ap-2de56b7d",
+      "summary": "Queued manual_idea: [P15.7] Chat UX: Collapsible semantic tool execution cards",
+      "task_id": "ap-fc37885f",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778464031.5206559,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [P15.8] Jobs UX: Filters, sorting, and clearer status badges",
+      "task_id": "ap-82a7db4e",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778464034.847188,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [P15.9] Projects UX: Safety polish và path ergonomics",
+      "task_id": "ap-8b56bc4f",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778464039.18697,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [P15.10] Settings UX: Contextual microcopy and help states",
+      "task_id": "ap-5983bbf8",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778464043.658824,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [P15.11] Cross-cutting UX: Empty/loading/error/toast states",
+      "task_id": "ap-0a46c4a6",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778464048.588496,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [P15.12] Accessibility: Foundation audit and fixes",
+      "task_id": "ap-eabfe881",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778464053.23216,
+      "kind": "intake_added",
+      "summary": "Queued manual_idea: [P15.13] Tests: Playwright E2E core WebUI flows",
+      "task_id": "ap-6a26e6e9",
       "metadata": {
         "source_ref": "",
         "score": 120
@@ -677,5 +1159,5 @@
     "verification": "/Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/verification_policy.yaml",
     "release": "/Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/release_policy.yaml"
   },
-  "active_context": "# Active Repo Context\n\nGenerated at: 2026-05-05 17:48:14 UTC\n\n## Current Task Focus\n- [queued] [P10.1] UI: Tối ưu layout phần Status trong Sidebar (manual_idea, score=120)\n- Detail: Cải thiện visual hierarchy cho phần Status trong sidebar: dùng pill/badge thay vì text thuần cho model/provider/permission/effort, thêm màu semantic (xanh=ok, đỏ=error), nhóm các field liên quan, tách JOBS và CRON JOB...\n\n## In Progress\n- None.\n\n## Next Up\n- [120] ap-0de0d4ba [P10.1] UI: Tối ưu layout phần Status trong Sidebar (manual_idea)\n- [120] ap-5d12507f [P10.2] UX: Collapsible SETTINGS section trong Sidebar (manual_idea)\n- [120] ap-470cb11e [P10.3] UX: Thêm liên kết Docs/Help vào Sidebar (manual_idea)\n- [120] ap-4aa6cc69 [P10.4] UI: Header breadcrumb responsive truncation (manual_idea)\n- [120] ap-cac01728 [P10.5] UI: Column count badge màu theo trạng thái (manual_idea)\n- [120] ap-71e868b2 [P10.6] UX: Empty state có hành động cho cột QUEUE (manual_idea)\n- [120] ap-2de56b7d [P10.7] UX: Autopilot log viewer — chronological + grouped blocks (manual_idea)\n\n## Recently Completed\n- None yet.\n\n## Recent Failures\n- None.\n\n## Recent Repo Journal\n- 05-05 17:46 intake_added: Queued manual_idea: [P10.1] UI: Tối ưu layout phần Status trong Sidebar\n- 05-05 17:47 intake_refresh: Refreshed intake card ap-0de0d4ba: [P10.1] UI: Tối ưu layout phần Status trong Sidebar\n- 05-05 17:47 intake_added: Queued manual_idea: [P10.2] UX: Collapsible SETTINGS section trong Sidebar\n- 05-05 17:47 intake_added: Queued manual_idea: [P10.3] UX: Thêm liên kết Docs/Help vào Sidebar\n- 05-05 17:47 intake_added: Queued manual_idea: [P10.4] UI: Header breadcrumb responsive truncation\n- 05-05 17:47 intake_added: Queued manual_idea: [P10.5] UI: Column count badge màu theo trạng thái\n- 05-05 17:47 intake_added: Queued manual_idea: [P10.6] UX: Empty state có hành động cho cột QUEUE\n- 05-05 17:48 intake_added: Queued manual_idea: [P10.7] UX: Autopilot log viewer — chronological + grouped blocks\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/release_policy.yaml"
+  "active_context": "# Active Repo Context\n\nGenerated at: 2026-05-11 01:47:33 UTC\n\n## Current Task Focus\n- [queued] [P15.1] UI Foundation: Design tokens và shared visual primitives (manual_idea, score=120)\n- Detail: Expand frontend/webui/src/index.css thành design-token layer rõ ràng: 1. spacing scale, radius scale, typography scale 2. semantic status colors cho queue/pending/running/review/done/failed/rejected 3. priority colors...\n\n## In Progress\n- None.\n\n## Next Up\n- [120] ap-8cf9384d [P15.1] UI Foundation: Design tokens và shared visual primitives (manual_idea)\n- [120] ap-7ac9516d [P15.2] UI Foundation: Standardized PageHeader component (manual_idea)\n- [120] ap-3934a540 [P15.3] UI Shell: Sidebar noise reduction (manual_idea)\n- [120] ap-972e56df [P15.4] UI Shell: Top bar runtime summary (manual_idea)\n- [120] ap-c864f873 [P15.5] Autopilot UI: Board card hierarchy và completed de-emphasis (manual_idea)\n- [120] ap-1b5deb39 [P15.6] Autopilot Logs: Semantic activity feed (manual_idea)\n- [120] ap-fc37885f [P15.7] Chat UX: Collapsible semantic tool execution cards (manual_idea)\n- [120] ap-82a7db4e [P15.8] Jobs UX: Filters, sorting, and clearer status badges (manual_idea)\n\n## Recently Completed\n- None yet.\n\n## Recent Failures\n- None.\n\n## Recent Repo Journal\n- 05-11 01:45 intake_added: Queued manual_idea: [P15.6] Autopilot Logs: Semantic activity feed\n- 05-11 01:47 intake_added: Queued manual_idea: [P15.7] Chat UX: Collapsible semantic tool execution cards\n- 05-11 01:47 intake_added: Queued manual_idea: [P15.8] Jobs UX: Filters, sorting, and clearer status badges\n- 05-11 01:47 intake_added: Queued manual_idea: [P15.9] Projects UX: Safety polish và path ergonomics\n- 05-11 01:47 intake_added: Queued manual_idea: [P15.10] Settings UX: Contextual microcopy and help states\n- 05-11 01:47 intake_added: Queued manual_idea: [P15.11] Cross-cutting UX: Empty/loading/error/toast states\n- 05-11 01:47 intake_added: Queued manual_idea: [P15.12] Accessibility: Foundation audit and fixes\n- 05-11 01:47 intake_added: Queued manual_idea: [P15.13] Tests: Playwright E2E core WebUI flows\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/frontend/webui/.openharness/autopilot/release_policy.yaml"
 }
