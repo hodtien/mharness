@@ -255,10 +255,11 @@ describe("ModelPicker", () => {
     fireEvent.click(screen.getByRole("button", { name: /claude-3-5-sonnet/i }));
 
     const input = await screen.findByPlaceholderText(/Search 2 models/i);
-    fireEvent.change(input, { target: { value: "gpt" } });
+    fireEvent.change(input, { target: { value: "haiku" } });
 
-    expect(await screen.findByText(/GPT-4o/)).toBeTruthy();
-    expect(screen.queryByText(/Claude 3.5 Haiku/)).toBeNull();
+    expect(await screen.findByText(/Claude 3.5 Haiku/)).toBeTruthy();
+    expect(screen.queryByText(/Claude 3.5 Sonnet/)).toBeNull();
+    expect(screen.queryByText(/GPT-4o/)).toBeNull();
   });
 });
 
