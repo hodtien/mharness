@@ -151,10 +151,10 @@ export default function ProjectSelector() {
             </ul>
           )}
 
-          {/* Footer link */}
+          {/* Footer link: preserve ?project= param */}
           <div className="border-t border-[var(--border)] px-3 py-1.5">
             <NavLink
-              to="/projects"
+              to={activeProjectId ? `/projects?project=${encodeURIComponent(activeProjectId)}` : "/projects"}
               onClick={() => setOpen(false)}
               className="flex items-center gap-1.5 text-[11px] text-[var(--text-dim)] transition hover:text-[var(--text)]"
             >
