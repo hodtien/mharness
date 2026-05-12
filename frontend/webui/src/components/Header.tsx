@@ -113,10 +113,10 @@ export function ModelPicker() {
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => !updating && setOpen((v) => !v)}
-        className={`inline-flex items-center gap-1.5 rounded border border-[var(--border)] bg-[var(--panel-2)] px-1.5 py-0.5 text-xs font-medium text-[var(--text)] hover:brightness-125 ${updating ? "opacity-60" : ""}`}
+        className={`inline-flex min-h-9 max-w-[10rem] items-center gap-1.5 rounded border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1 text-xs font-medium text-[var(--text)] hover:brightness-125 ${updating ? "opacity-60" : ""}`}
       >
-        {current}
-        <span className="text-[10px] opacity-60">▾</span>
+        <span className="truncate">{current}</span>
+        <span aria-hidden className="text-[10px] opacity-60">▾</span>
       </button>
 
       {open ? (
@@ -182,7 +182,7 @@ export function ModelPicker() {
   );
 }
 
-function RuntimeSummary() {
+function RuntimeSummary({ onMobileMenuToggle }: { onMobileMenuToggle: () => void }) {
   const appState = useSession((s) => s.appState);
   const tasks = useSession((s) => s.tasks);
   const busy = useSession((s) => s.busy);
@@ -196,22 +196,28 @@ function RuntimeSummary() {
 
   return (
     <div className="flex items-center gap-1.5 text-xs text-[var(--text-dim)]">
-      {/* Model badge — now clickable dropdown picker */}
-      {appState?.model && <ModelPicker />}
-      {/* Provider badge (tablet+) */}
+      {appState?.model && (
+        <button
+          type="button"
+          aria-label="Open runtime controls"
+          onClick={onMobileMenuToggle}
+          className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded border border-[var(--border)] bg-[var(--panel-2)] px-2 text-xs font-medium text-[var(--text)] hover:brightness-125 sm:hidden"
+        >
+          <span className="truncate max-w-[86px]">{appState.model}</span>
+          <span aria-hidden className="text-[10px] opacity-60">▾</span>
+        </button>
+      )}
       {appState?.provider && (
         <span className="hidden md:inline rounded border border-[var(--border)] bg-[var(--panel-2)] px-1.5 py-0.5">
           {appState.provider}
         </span>
       )}
-      {/* Running jobs badge */}
       {hasJobs && (
         <span className="flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-amber-300">
           <span aria-hidden>⚡</span>
           <span>{runningCount} job{runningCount !== 1 ? "s" : ""}</span>
         </span>
       )}
-      {/* Busy indicator */}
       {busy && (
         <span className="flex items-center gap-1 rounded border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-rose-300">
           <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" />
@@ -286,7 +292,7 @@ export function PermissionModeChip() {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => !updating && setOpen((v) => !v)}
-        className={`inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2 py-1 text-xs font-medium text-[var(--text)] hover:brightness-125 ${updating ? "opacity-60" : ""}`}
+        className={`inline-flex min-h-9 items-center gap-1.5 rounded-md border border-[var(--border)] px-2 py-1 text-xs font-medium text-[var(--text)] hover:brightness-125 ${updating ? "opacity-60" : ""}`}
       >
         <span className={`inline-block h-1.5 w-1.5 rounded-full ${option.color}`} />
         {option.label}
@@ -334,6 +340,8 @@ export default function Header({ onToggleSidebar, onInterrupt }: Props) {
   const busy = useSession((s) => s.busy);
   const errorBanner = useSession((s) => s.errorBanner);
   const tasks = useSession((s) => s.tasks);
+  const appState = useSession((s) => s.appState);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const dotColor = CONNECTION_COLORS[connectionStatus] ?? CONNECTION_COLORS.closed;
 
@@ -342,44 +350,45 @@ export default function Header({ onToggleSidebar, onInterrupt }: Props) {
     (t) => t.status === "running" || t.status === "queued",
   ).length;
 
+  const currentModel = appState?.model;
+  const currentProvider = appState?.provider;
+
   return (
     <div className="flex flex-col border-b border-[var(--border)] bg-[var(--panel)]">
-      <div className="flex items-center gap-2 px-3 py-2 sm:px-5">
+      <div className="flex min-w-0 items-center gap-2 px-3 py-2 sm:px-5">
         <button
           aria-label="Toggle sidebar"
           onClick={onToggleSidebar}
-          className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1 text-sm text-[var(--text-dim)] hover:text-[var(--text)]"
+          className="shrink-0 rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1 text-sm text-[var(--text-dim)] hover:text-[var(--text)]"
         >
           ☰
         </button>
 
-        {/* Connection dot + brand */}
-        <div className="flex items-center gap-1.5">
-          <span className={`inline-block h-2 w-2 rounded-full ${dotColor}`} />
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${dotColor}`} />
           <span className="truncate text-sm font-semibold tracking-wide">OpenHarness</span>
         </div>
 
-        <Link
-          to={historyTo}
-          className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1 text-xs text-[var(--text-dim)] hover:text-[var(--text)]"
-        >
-          History
-        </Link>
+        <div className="hidden sm:flex items-center gap-2">
+          <Link
+            to={historyTo}
+            className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1 text-xs text-[var(--text-dim)] hover:text-[var(--text)]"
+          >
+            History
+          </Link>
 
-        {/* Permission mode chip */}
-        <PermissionModeChip />
+          <PermissionModeChip />
+        </div>
 
-        {/* Runtime summary: model, provider, jobs, busy */}
-        <RuntimeSummary />
+        <div className="min-w-0 flex-1" />
 
-        <div className="flex-1" />
+        <RuntimeSummary onMobileMenuToggle={() => setMobileMenuOpen((v) => !v)} />
 
-        {/* Busy: primary interrupt action with running count label */}
         {busy && (
           <button
             onClick={onInterrupt}
             aria-label={runningCount > 0 ? `Stop ${runningCount} running job(s)` : "Stop current task"}
-            className="flex items-center gap-1.5 rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/20"
+            className="shrink-0 flex items-center gap-1.5 rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/20"
           >
             <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" />
             <span>Stop{runningCount > 0 ? ` (${runningCount})` : ""}</span>
@@ -387,7 +396,26 @@ export default function Header({ onToggleSidebar, onInterrupt }: Props) {
         )}
       </div>
 
-      {/* Error banner */}
+      {mobileMenuOpen && (
+        <div className="border-t border-[var(--border)] bg-[var(--panel)] px-3 py-2 sm:hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to={historyTo}
+              className="inline-flex min-h-9 items-center rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 text-xs text-[var(--text-dim)] hover:text-[var(--text)]"
+            >
+              History
+            </Link>
+            <PermissionModeChip />
+            {currentProvider && (
+              <span className="inline-flex min-h-9 items-center rounded border border-[var(--border)] bg-[var(--panel-2)] px-2.5 text-xs text-[var(--text-dim)]">
+                {currentProvider}
+              </span>
+            )}
+            {currentModel && <ModelPicker />}
+          </div>
+        </div>
+      )}
+
       {errorBanner && (
         <div className="bg-rose-500/15 px-3 py-1 text-xs text-rose-300 sm:px-5">
           {errorBanner}
