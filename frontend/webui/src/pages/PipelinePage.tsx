@@ -368,6 +368,41 @@ const ACTIVE_STATUSES: RepoTaskStatus[] = [
   "waiting_ci",
 ];
 
+/** Statuses that represent a terminal outcome — collapsed behind "Terminal history" by default. */
+export const TERMINAL_STATUSES: RepoTaskStatus[] = [
+  "completed",
+  "merged",
+  "failed",
+  "rejected",
+  "killed",
+  "paused",
+];
+
+/** Statuses that operators need to act on immediately. */
+export const ATTENTION_STATUSES: RepoTaskStatus[] = ["failed", "paused"];
+
+/** Statuses representing waiting for external signal. */
+export const WAITING_STATUSES: RepoTaskStatus[] = ["waiting_ci", "pr_open"];
+
+export type BoardFilter = "all" | "active" | "attention" | "waiting" | "terminal";
+
+export const BOARD_FILTERS: { id: BoardFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "active", label: "Active" },
+  { id: "attention", label: "Needs attention" },
+  { id: "waiting", label: "Waiting" },
+  { id: "terminal", label: "Terminal" },
+];
+
+export function matchesBoardFilter(status: RepoTaskStatus, filter: BoardFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "active") return ACTIVE_STATUSES.includes(status) || status === "queued" || status === "accepted" || status === "pending";
+  if (filter === "attention") return ATTENTION_STATUSES.includes(status);
+  if (filter === "waiting") return WAITING_STATUSES.includes(status);
+  if (filter === "terminal") return TERMINAL_STATUSES.includes(status);
+  return false;
+}
+
 function hasActiveCard(cards: PipelineCard[]): boolean {
   return cards.some((c) => ACTIVE_STATUSES.includes(c.status));
 }
@@ -389,13 +424,16 @@ function formatRelativeTime(timestamp: number | null | undefined): string {
 
 // ─── Kanban columns ────────────────────────────────────────────────────────────
 
-const COLUMNS: {
+interface ColumnDef {
   id: string;
   label: string;
   statuses: RepoTaskStatus[];
   badgeColor: string;
   pulseWhenActive?: boolean;
-}[] = [
+  isTerminal?: boolean;
+}
+
+const COLUMNS: ColumnDef[] = [
   {
     id: "queue",
     label: "Queue",
@@ -426,18 +464,21 @@ const COLUMNS: {
     label: "Completed",
     statuses: ["completed", "merged"],
     badgeColor: "bg-[var(--status-done-bg)] text-[var(--status-done-text)] border-[var(--status-done-border)]",
+    isTerminal: true,
   },
   {
     id: "failed",
     label: "Failed",
     statuses: ["failed"],
     badgeColor: "bg-[var(--status-failed-bg)] text-[var(--status-failed-text)] border-[var(--status-failed-border)]",
+    isTerminal: true,
   },
   {
     id: "rejected",
     label: "Rejected",
     statuses: ["rejected", "killed", "paused"],
     badgeColor: "bg-[var(--status-rejected-bg)] text-[var(--status-rejected-text)] border-[var(--status-rejected-border)]",
+    isTerminal: true,
   },
 ];
 
@@ -1660,11 +1701,20 @@ export default function PipelinePage() {
   const [runningNext, setRunningNext] = useState(false);
   const [runNextError, setRunNextError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("board");
+  const [boardFilter, setBoardFilter] = useState<BoardFilter>("all");
+  const [terminalCollapsed, setTerminalCollapsed] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [policyDefaultModel, setPolicyDefaultModel] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const projectSwitchedAt = useSession((s) => s.projectSwitchedAt);
+
+  // Attention strip counts
+  const failedCount = cards.filter((c) => c.status === "failed" || c.status === "paused").length;
+  const waitingCICount = cards.filter((c) => c.status === "waiting_ci").length;
+  const reviewCount = cards.filter((c) => c.status === "pr_open").length;
+  const runningCount = cards.filter((c) => ACTIVE_STATUSES.includes(c.status)).length;
+  const queueCount = cards.filter((c) => c.status === "queued" || c.status === "accepted").length;
 
   useEffect(() => {
     const previous = document.title;
@@ -1946,49 +1996,54 @@ export default function PipelinePage() {
       {activeTab === "policy" ? (
         <PolicyTab onSaved={() => {}} />
       ) : (
-        <div className="flex flex-1 overflow-x-auto overflow-y-hidden p-4 gap-4">
-          {COLUMNS.map((col) => {
-            const colCards = cards.filter((c) => col.statuses.includes(c.status));
-            const isCompletedColumn = col.id === "completed";
-            return (
-              <div
-                key={col.id}
-                className={`flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] ${
-                  isCompletedColumn ? "opacity-60 hover:opacity-100 transition-opacity" : ""
-                }`}
-              >
-                {/* Sticky column header */}
-                <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-3 py-2.5">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">
-                    {col.label}
-                  </span>
-                  <span
-                    className={`flex h-5 min-w-5 items-center justify-center rounded-full border px-1.5 text-[10px] font-medium ${col.badgeColor}${col.pulseWhenActive && colCards.length > 0 ? " animate-pulse-subtle" : ""}`}
-                  >
-                    {colCards.length}
-                  </span>
+        <>
+          <div className="border-b border-[var(--border)] px-4 py-3">
+            <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">
+              {[
+                { label: "Failed/Paused", count: failedCount },
+                { label: "Waiting CI", count: waitingCICount },
+                { label: "Review", count: reviewCount },
+                { label: "Running", count: runningCount },
+                { label: "Queue", count: queueCount },
+              ].map((item) => (
+                <div key={item.label} className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs">
+                  <div className="text-[var(--text-dim)]">{item.label}</div>
+                  <div className="mt-1 text-lg font-semibold text-[var(--text)]">{item.count}</div>
                 </div>
-
-                {/* Cards */}
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                  {colCards.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--text-dim)]">
-                      No cards
-                    </div>
-                  ) : (
-                    colCards.map((card) => (
-                      <Card
-                        key={card.id}
-                        card={card}
-                        onClick={() => setSelectedCard(card)}
-                      />
-                    ))
-                  )}
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {BOARD_FILTERS.map((filter) => (
+                <button key={filter.id} onClick={() => setBoardFilter(filter.id)} className={`rounded-md border px-2.5 py-1 text-xs ${boardFilter === filter.id ? "border-[var(--accent)] text-[var(--accent)]" : "border-[var(--border)] text-[var(--text-dim)]"}`}>
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-1 overflow-x-auto overflow-y-hidden p-4 gap-4">
+            {COLUMNS.filter((col) => !col.isTerminal).map((col) => {
+              const colCards = cards.filter((c) => col.statuses.includes(c.status) && matchesBoardFilter(c.status, boardFilter));
+              return (
+                <div key={col.id} className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+                  <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-3 py-2.5">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">{col.label}</span>
+                    <span className={`flex h-5 min-w-5 items-center justify-center rounded-full border px-1.5 text-[10px] font-medium ${col.badgeColor}${col.pulseWhenActive && colCards.length > 0 ? " animate-pulse-subtle" : ""}`}>{colCards.length}</span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                    {colCards.length === 0 ? <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--text-dim)]">No active cards. Try Run Next, New idea, or Terminal history.</div> : colCards.map((card) => <Card key={card.id} card={card} onClick={() => setSelectedCard(card)} />)}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+            <div className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+              <button onClick={() => setTerminalCollapsed((v) => !v)} className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2.5 text-left">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">Terminal history</span>
+                <span className="text-xs text-[var(--text-dim)]">{terminalCollapsed ? "Show" : "Hide"}</span>
+              </button>
+              {!terminalCollapsed && <div className="flex-1 overflow-y-auto p-2 space-y-2">{cards.filter((c) => TERMINAL_STATUSES.includes(c.status) && matchesBoardFilter(c.status, boardFilter)).map((card) => <Card key={card.id} card={card} onClick={() => setSelectedCard(card)} />)}</div>}
+            </div>
+          </div>
+        </>
       )}
 
       {showNewIdea && (
