@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, type ModelProfile } from "../api/client";
 import { useSession } from "../store/session";
 
@@ -310,6 +310,9 @@ interface Props {
 }
 
 export default function Header({ onToggleSidebar, onInterrupt }: Props) {
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get("project");
+  const historyTo = projectId ? `/history?project=${encodeURIComponent(projectId)}` : "/history";
   const connectionStatus = useSession((s) => s.connectionStatus);
   const busy = useSession((s) => s.busy);
   const errorBanner = useSession((s) => s.errorBanner);
@@ -340,7 +343,7 @@ export default function Header({ onToggleSidebar, onInterrupt }: Props) {
         </div>
 
         <Link
-          to="/history"
+          to={historyTo}
           className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1 text-xs text-[var(--text-dim)] hover:text-[var(--text)]"
         >
           History

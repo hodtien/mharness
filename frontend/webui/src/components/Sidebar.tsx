@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import ProjectSelector from "./ProjectSelector";
 import { useSession } from "../store/session";
@@ -15,6 +15,9 @@ interface Props {
 }
 
 export default function Sidebar({ open, onClose, collapsed = false }: Props) {
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get("project");
+  const projectQ = projectId ? `project=${encodeURIComponent(projectId)}` : "";
   const tasks = useSession((s) => s.tasks);
   const appState = useSession((s) => s.appState);
   const todoMarkdown = useSession((s) => s.todoMarkdown);
@@ -96,7 +99,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
         {settingsCollapsed ? (
           <div className="sidebar-settings-grid">
             <NavLink
-              to="/settings/modes"
+              to={projectQ ? `/settings/modes?${projectQ}` : "/settings/modes"}
               className={({ isActive }) =>
                 `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
               }
@@ -105,7 +108,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
               <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>🎚️</span>
             </NavLink>
             <NavLink
-              to="/settings/provider"
+              to={projectQ ? `/settings/provider?${projectQ}` : "/settings/provider"}
               className={({ isActive }) =>
                 `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
               }
@@ -114,7 +117,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
               <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>🔌</span>
             </NavLink>
             <NavLink
-              to="/settings/models"
+              to={projectQ ? `/settings/models?${projectQ}` : "/settings/models"}
               className={({ isActive }) =>
                 `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
               }
@@ -123,7 +126,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
               <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>🧠</span>
             </NavLink>
             <NavLink
-              to="/settings/agents"
+              to={projectQ ? `/settings/agents?${projectQ}` : "/settings/agents"}
               className={({ isActive }) =>
                 `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
               }
@@ -132,7 +135,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
               <span aria-hidden="true" style={{ fontSize: "18px", lineHeight: 1 }}>🤖</span>
             </NavLink>
             <NavLink
-              to="/settings/cron"
+              to={projectQ ? `/settings/cron?${projectQ}` : "/settings/cron"}
               className={({ isActive }) =>
                 `sidebar-settings-link flex items-center justify-center gap-1 rounded-md border transition text-[var(--text-dim)] hover:border-[var(--border-hover)] hover:bg-[var(--panel-2)] hover:text-[var(--text)] ${isActive ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]" : "border-[var(--border)]"}`
               }
@@ -337,9 +340,14 @@ function NavItem({
   icon: string;
   onClose: () => void;
 }) {
+  // Preserve ?project= param when navigating between pages.
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get("project");
+  const target = projectId ? `${to}?project=${encodeURIComponent(projectId)}` : to;
+
   return (
     <NavLink
-      to={to}
+      to={target}
       end
       onClick={onClose}
       className={({ isActive }) =>
