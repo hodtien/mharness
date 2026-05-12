@@ -24,6 +24,7 @@ export interface AppStatePayload {
   model?: string;
   cwd?: string;
   provider?: string;
+  active_profile?: string;
   auth_status?: string;
   base_url?: string;
   permission_mode?: string;

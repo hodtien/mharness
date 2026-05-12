@@ -18,6 +18,7 @@ export function ModelPicker() {
   const [updating, setUpdating] = useState(false);
   const [models, setModels] = useState<Record<string, ModelProfile[]>>({});
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -30,9 +31,13 @@ export function ModelPicker() {
   useEffect(() => {
     if (!open) return;
     setLoading(true);
+    setLoadError(null);
     api
       .listModels()
       .then(setModels)
+      .catch((error: unknown) => {
+        setLoadError(error instanceof Error ? error.message : "Failed to load models");
+      })
       .finally(() => setLoading(false));
   }, [open]);
 
@@ -66,14 +71,16 @@ export function ModelPicker() {
     };
   }, [open]);
 
-  // Only allow models for the active provider; PATCH /api/modes updates model only.
+  // Resolve models from the active profile first, then fall back to provider.
   const query = search.trim().toLowerCase();
-  const activeProvider = appState?.provider ?? "";
+  const activeProvider = appState?.active_profile ?? appState?.provider ?? "";
   const providerItems = activeProvider ? models[activeProvider] ?? [] : [];
+  const fallbackItems = !providerItems.length && appState?.provider ? models[appState.provider] ?? [] : [];
+  const availableModels = providerItems.length ? providerItems : fallbackItems;
   const filtered = query
-    ? providerItems.filter((m) => `${m.id} ${m.label}`.toLowerCase().includes(query))
-    : providerItems;
-  const totalModels = providerItems.length;
+    ? availableModels.filter((m) => `${m.id} ${m.label}`.toLowerCase().includes(query))
+    : availableModels;
+  const totalModels = availableModels.length;
 
   const selectModel = useCallback(
     async (modelId: string) => {
@@ -135,9 +142,17 @@ export function ModelPicker() {
           <div className="max-h-56 overflow-y-auto py-1">
             {loading ? (
               <div className="px-3 py-4 text-center text-xs text-[var(--text-dim)]">Loading…</div>
+            ) : loadError ? (
+              <div className="px-3 py-4 text-center text-xs text-rose-400">
+                Could not load models — {loadError}
+              </div>
             ) : filtered.length === 0 ? (
               <div className="px-3 py-4 text-center text-xs text-[var(--text-dim)]">
-                {query ? `No models match "${query}"` : "No models available"}
+                {query
+                  ? `No models match "${query}"`
+                  : totalModels === 0
+                  ? `No models found for this provider profile. Check your provider settings.`
+                  : "No models available"}
               </div>
             ) : (
               filtered.map((m) => {

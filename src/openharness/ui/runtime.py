@@ -488,6 +488,7 @@ def sync_app_state(bundle: RuntimeBundle) -> None:
         theme=settings.theme,
         cwd=bundle.cwd,
         provider=provider.name,
+        active_profile=settings.active_profile,
         auth_status=auth_status(settings),
         base_url=settings.base_url or "",
         vim_enabled=settings.vim_mode,
