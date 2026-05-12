@@ -253,3 +253,44 @@ async def test_bash_cwd_empty_or_whitespace_falls_back_to_context_cwd(monkeypatc
     )
 
     assert seen_kwargs["cwd"] == tmp_path
+
+
+@pytest.mark.asyncio
+async def test_bash_cwd_nonexistent_directory_returns_tool_error(monkeypatch, tmp_path: Path):
+    async def fake_create_shell_subprocess(*args, **kwargs):
+        raise AssertionError("subprocess should not start for invalid cwd")
+
+    monkeypatch.setitem(BashTool.execute.__globals__, "create_shell_subprocess", fake_create_shell_subprocess)
+
+    missing_dir = tmp_path / "nullnull,"
+    result = await BashTool().execute(
+        BashToolInput(command="echo ok", cwd=str(missing_dir)),
+        ToolExecutionContext(cwd=tmp_path),
+    )
+
+    assert result.is_error is True
+    assert result.metadata["invalid_cwd"] is True
+    assert result.metadata["cwd_reason"] == "not_found"
+    assert result.metadata["cwd_value"] == str(missing_dir)
+    assert str(missing_dir) in result.output
+
+
+@pytest.mark.asyncio
+async def test_bash_cwd_file_path_returns_tool_error(monkeypatch, tmp_path: Path):
+    async def fake_create_shell_subprocess(*args, **kwargs):
+        raise AssertionError("subprocess should not start for invalid cwd")
+
+    monkeypatch.setitem(BashTool.execute.__globals__, "create_shell_subprocess", fake_create_shell_subprocess)
+
+    file_path = tmp_path / "not-a-directory"
+    file_path.write_text("content")
+    result = await BashTool().execute(
+        BashToolInput(command="echo ok", cwd=str(file_path)),
+        ToolExecutionContext(cwd=tmp_path),
+    )
+
+    assert result.is_error is True
+    assert result.metadata["invalid_cwd"] is True
+    assert result.metadata["cwd_reason"] == "not_directory"
+    assert result.metadata["cwd_value"] == str(file_path)
+    assert str(file_path) in result.output

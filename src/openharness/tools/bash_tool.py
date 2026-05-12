@@ -41,6 +41,17 @@ class BashTool(BaseTool):
             cwd = Path(stripped).expanduser()
         else:
             cwd = context.cwd
+        if not cwd.is_dir():
+            cwd_reason = "not_found" if not cwd.exists() else "not_directory"
+            return ToolResult(
+                output=f"Invalid working directory: {cwd}",
+                is_error=True,
+                metadata={
+                    "invalid_cwd": True,
+                    "cwd_reason": cwd_reason,
+                    "cwd_value": str(cwd),
+                },
+            )
         preflight_error = _preflight_interactive_command(arguments.command)
         if preflight_error is not None:
             return ToolResult(
