@@ -3383,6 +3383,12 @@ class RepoAutopilotStore:
         self._run_git(["checkout", head_branch], cwd=cwd, check=True)
         if rebase_strategy == "none":
             return
+        if self._fetch_remote_branch(cwd, branch=head_branch) and not self._branch_matches_remote(
+            cwd, branch=head_branch
+        ):
+            self._rebase_head_onto_remote_branch(
+                cwd, remote_branch=f"origin/{head_branch}", card_id=card_id
+            )
         has_advanced = self._base_branch_has_advanced(cwd, base_branch=base_branch)
         should_rebase = rebase_strategy == "always" or (
             has_advanced and rebase_strategy in {"on_advance", "on_conflict"}

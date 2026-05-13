@@ -447,6 +447,338 @@ async def test_run_next_returns_409_when_at_capacity(tmp_path, monkeypatch) -> N
     assert "1" in body["message"]
 
 
+async def test_run_next_counts_running_retry_task_as_capacity(tmp_path, monkeypatch) -> None:
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import httpx
+    from openharness.webui.server.app import create_app
+    import openharness.webui.server.routes.pipeline as pipeline_routes
+
+    reg_dir = tmp_path / ".openharness" / "autopilot"
+    reg_dir.mkdir(parents=True)
+    registry = {
+        "updated_at": 0.0,
+        "cards": [
+            {
+                "id": "ap-test-retry",
+                "fingerprint": "fp-retry",
+                "title": "Retrying card",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "score": 0,
+                "labels": [],
+                "body": "",
+                "created_at": 0.0,
+                "updated_at": 0.0,
+                "metadata": {"retry_requested": True},
+            },
+            {
+                "id": "ap-test-queued",
+                "fingerprint": "fp-queued",
+                "title": "Waiting card",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "score": 0,
+                "labels": [],
+                "body": "",
+                "created_at": 1.0,
+                "updated_at": 1.0,
+                "metadata": {},
+            },
+        ],
+    }
+    (reg_dir / "registry.json").write_text(json.dumps(registry), encoding="utf-8")
+    (reg_dir / "autopilot_policy.yaml").write_text(
+        "execution:\n  max_parallel_runs: 1\n",
+        encoding="utf-8",
+    )
+
+    running_task = SimpleNamespace(
+        cwd=str(tmp_path.resolve()),
+        command=f"oh autopilot run-next --cwd {tmp_path} --card-id ap-test-retry",
+    )
+    mock_manager = MagicMock()
+    mock_manager.list_tasks.return_value = [running_task]
+    monkeypatch.setattr(pipeline_routes, "get_task_manager", lambda: mock_manager)
+
+    app = create_app(token="test-token", cwd=tmp_path, spa_dir="")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/pipeline/run-next", headers=AUTH)
+
+    assert response.status_code == 409
+    body = response.json()["detail"]
+    assert body["error"] == "capacity_reached"
+    mock_manager.create_shell_task.assert_not_called()
+
+
+async def test_run_next_adds_running_retry_task_to_active_cards(tmp_path, monkeypatch) -> None:
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import httpx
+    from openharness.webui.server.app import create_app
+    import openharness.webui.server.routes.pipeline as pipeline_routes
+
+    reg_dir = tmp_path / ".openharness" / "autopilot"
+    reg_dir.mkdir(parents=True)
+    registry = {
+        "updated_at": 0.0,
+        "cards": [
+            {
+                "id": "ap-test-running",
+                "fingerprint": "fp-running",
+                "title": "Running card",
+                "status": "running",
+                "source_kind": "manual_idea",
+                "score": 0,
+                "labels": [],
+                "body": "",
+                "created_at": 0.0,
+                "updated_at": 0.0,
+                "metadata": {"worker_id": "worker-running"},
+            },
+            {
+                "id": "ap-test-retry",
+                "fingerprint": "fp-retry",
+                "title": "Retrying card",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "score": 0,
+                "labels": [],
+                "body": "",
+                "created_at": 1.0,
+                "updated_at": 1.0,
+                "metadata": {"retry_requested": True},
+            },
+            {
+                "id": "ap-test-queued",
+                "fingerprint": "fp-queued",
+                "title": "Waiting card",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "score": 0,
+                "labels": [],
+                "body": "",
+                "created_at": 2.0,
+                "updated_at": 2.0,
+                "metadata": {},
+            },
+        ],
+    }
+    (reg_dir / "registry.json").write_text(json.dumps(registry), encoding="utf-8")
+    (reg_dir / "autopilot_policy.yaml").write_text(
+        "execution:\n  max_parallel_runs: 2\n",
+        encoding="utf-8",
+    )
+
+    running_task = SimpleNamespace(
+        cwd=str(tmp_path.resolve()),
+        command=f"oh autopilot run-next --cwd {tmp_path} --card-id ap-test-retry",
+    )
+    mock_manager = MagicMock()
+    mock_manager.list_tasks.return_value = [running_task]
+    monkeypatch.setattr(pipeline_routes, "get_task_manager", lambda: mock_manager)
+
+    app = create_app(token="test-token", cwd=tmp_path, spa_dir="")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/pipeline/run-next", headers=AUTH)
+
+    assert response.status_code == 409
+    body = response.json()["detail"]
+    assert body["error"] == "capacity_reached"
+    mock_manager.create_shell_task.assert_not_called()
+
+
+async def test_run_next_counts_unscoped_run_next_task_as_capacity(tmp_path, monkeypatch) -> None:
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import httpx
+    from openharness.webui.server.app import create_app
+    import openharness.webui.server.routes.pipeline as pipeline_routes
+
+    reg_dir = tmp_path / ".openharness" / "autopilot"
+    reg_dir.mkdir(parents=True)
+    registry = {
+        "updated_at": 0.0,
+        "cards": [
+            {
+                "id": "ap-test-running",
+                "fingerprint": "fp-running",
+                "title": "Running card",
+                "status": "running",
+                "source_kind": "manual_idea",
+                "score": 0,
+                "labels": [],
+                "body": "",
+                "created_at": 0.0,
+                "updated_at": 0.0,
+                "metadata": {"worker_id": "worker-running"},
+            },
+            {
+                "id": "ap-test-queued",
+                "fingerprint": "fp-queued",
+                "title": "Waiting card",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "score": 0,
+                "labels": [],
+                "body": "",
+                "created_at": 1.0,
+                "updated_at": 1.0,
+                "metadata": {},
+            },
+        ],
+    }
+    (reg_dir / "registry.json").write_text(json.dumps(registry), encoding="utf-8")
+    (reg_dir / "autopilot_policy.yaml").write_text(
+        "execution:\n  max_parallel_runs: 2\n",
+        encoding="utf-8",
+    )
+
+    running_task = SimpleNamespace(
+        cwd=str(tmp_path.resolve()),
+        command=f"oh autopilot run-next --cwd {tmp_path}",
+    )
+    mock_manager = MagicMock()
+    mock_manager.list_tasks.return_value = [running_task]
+    monkeypatch.setattr(pipeline_routes, "get_task_manager", lambda: mock_manager)
+
+    app = create_app(token="test-token", cwd=tmp_path, spa_dir="")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/pipeline/run-next", headers=AUTH)
+
+    assert response.status_code == 409
+    body = response.json()["detail"]
+    assert body["error"] == "capacity_reached"
+    mock_manager.create_shell_task.assert_not_called()
+
+
+async def test_run_next_dedupes_running_task_for_active_card(tmp_path, monkeypatch) -> None:
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    import httpx
+    from openharness.webui.server.app import create_app
+    import openharness.webui.server.routes.pipeline as pipeline_routes
+
+    reg_dir = tmp_path / ".openharness" / "autopilot"
+    reg_dir.mkdir(parents=True)
+    registry = {
+        "updated_at": 0.0,
+        "cards": [
+            {
+                "id": "ap-test-running",
+                "fingerprint": "fp-running",
+                "title": "Running card",
+                "status": "running",
+                "source_kind": "manual_idea",
+                "score": 0,
+                "labels": [],
+                "body": "",
+                "created_at": 0.0,
+                "updated_at": 0.0,
+                "metadata": {"worker_id": "worker-running"},
+            },
+            {
+                "id": "ap-test-queued",
+                "fingerprint": "fp-queued",
+                "title": "Waiting card",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "score": 0,
+                "labels": [],
+                "body": "",
+                "created_at": 1.0,
+                "updated_at": 1.0,
+                "metadata": {},
+            },
+        ],
+    }
+    (reg_dir / "registry.json").write_text(json.dumps(registry), encoding="utf-8")
+    (reg_dir / "autopilot_policy.yaml").write_text(
+        "execution:\n  max_parallel_runs: 2\n",
+        encoding="utf-8",
+    )
+
+    running_task = SimpleNamespace(
+        cwd=str(tmp_path.resolve()),
+        command=f"oh autopilot run-next --cwd {tmp_path} --card-id ap-test-running",
+    )
+    fake_task = MagicMock()
+    fake_task.id = "task-stub-001"
+    mock_manager = MagicMock()
+    mock_manager.list_tasks.return_value = [running_task]
+    mock_manager.create_shell_task = AsyncMock(return_value=fake_task)
+    monkeypatch.setattr(pipeline_routes, "get_task_manager", lambda: mock_manager)
+
+    app = create_app(token="test-token", cwd=tmp_path, spa_dir="")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/pipeline/run-next", headers=AUTH)
+
+    assert response.status_code == 202
+    mock_manager.create_shell_task.assert_called_once()
+
+
+async def test_run_next_ignores_running_non_autopilot_tasks_for_capacity(tmp_path, monkeypatch) -> None:
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    import httpx
+    from openharness.webui.server.app import create_app
+    import openharness.webui.server.routes.pipeline as pipeline_routes
+
+    reg_dir = tmp_path / ".openharness" / "autopilot"
+    reg_dir.mkdir(parents=True)
+    registry = {
+        "updated_at": 0.0,
+        "cards": [
+            {
+                "id": "ap-test-queued",
+                "fingerprint": "fp-queued",
+                "title": "Waiting card",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "score": 0,
+                "labels": [],
+                "body": "",
+                "created_at": 1.0,
+                "updated_at": 1.0,
+                "metadata": {},
+            },
+        ],
+    }
+    (reg_dir / "registry.json").write_text(json.dumps(registry), encoding="utf-8")
+    (reg_dir / "autopilot_policy.yaml").write_text(
+        "execution:\n  max_parallel_runs: 1\n",
+        encoding="utf-8",
+    )
+
+    running_task = SimpleNamespace(
+        cwd=str(tmp_path.resolve()),
+        command="python -m pytest 'autopilot run-next should work'",
+    )
+    fake_task = MagicMock()
+    fake_task.id = "task-stub-001"
+    mock_manager = MagicMock()
+    mock_manager.list_tasks.return_value = [running_task]
+    mock_manager.create_shell_task = AsyncMock(return_value=fake_task)
+    monkeypatch.setattr(pipeline_routes, "get_task_manager", lambda: mock_manager)
+
+    app = create_app(token="test-token", cwd=tmp_path, spa_dir="")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/pipeline/run-next", headers=AUTH)
+
+    assert response.status_code == 202
+    mock_manager.create_shell_task.assert_called_once()
+
+
 def test_run_next_returns_202_when_under_capacity(tmp_path, monkeypatch) -> None:
     """When 1 of max_parallel_runs=2 slots are in use, capacity is available."""
     import json

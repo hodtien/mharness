@@ -3869,6 +3869,46 @@ def test_rebase_on_advance_rebases_when_base_ahead(tmp_path: Path, monkeypatch) 
     assert ["rebase", "origin/main"] in calls
 
 
+def test_reused_worktree_rebases_stale_local_branch_onto_remote_head(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    calls = []
+
+    def fake_run_git(args, *, cwd=None, check=False):
+        calls.append(args)
+        if args == ["rev-list", "--count", "origin/autopilot/card..HEAD"]:
+            return subprocess.CompletedProcess(args, 0, stdout="0\n", stderr="")
+        if args == ["rev-list", "--count", "HEAD..origin/autopilot/card"]:
+            return subprocess.CompletedProcess(args, 0, stdout="1\n", stderr="")
+        if args == ["rev-list", "--count", "HEAD..origin/main"]:
+            return subprocess.CompletedProcess(args, 0, stdout="0\n", stderr="")
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(store, "_run_git", fake_run_git)
+
+    store._sync_worktree_to_base(
+        repo,
+        base_branch="main",
+        head_branch="autopilot/card",
+        reset=False,
+        rebase_strategy="on_conflict",
+        card_id="card",
+    )
+
+    assert calls == [
+        ["fetch", "origin", "main"],
+        ["checkout", "autopilot/card"],
+        ["fetch", "origin", "autopilot/card"],
+        ["rev-list", "--count", "origin/autopilot/card..HEAD"],
+        ["rev-list", "--count", "HEAD..origin/autopilot/card"],
+        ["rebase", "origin/autopilot/card"],
+        ["rev-list", "--count", "HEAD..origin/main"],
+    ]
+
+
 def test_reset_worktree_prefers_remote_head_branch_when_present(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

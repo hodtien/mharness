@@ -320,6 +320,52 @@ _ACTIVE_STATUSES: frozenset[str] = frozenset(
 )
 
 
+def _run_next_command_card_id(command: str) -> tuple[bool, str | None]:
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return False, None
+    is_run_next = any(
+        part == "autopilot" and index + 1 < len(parts) and parts[index + 1] == "run-next"
+        for index, part in enumerate(parts)
+    )
+    if not is_run_next:
+        return False, None
+    for index, part in enumerate(parts):
+        if part == "--card-id" and index + 1 < len(parts):
+            return True, parts[index + 1]
+        if part.startswith("--card-id="):
+            return True, part.split("=", 1)[1]
+    return True, None
+
+
+def _running_autopilot_task_reservations(
+    manager: Any, cwd: Path, active_card_ids: set[str]
+) -> int:
+    cwd_path = cwd.resolve()
+    scoped_reservations = 0
+    unscoped_runs = 0
+    for task in manager.list_tasks(status="running"):
+        task_cwd = getattr(task, "cwd", None)
+        command = getattr(task, "command", None)
+        if not isinstance(task_cwd, str) or not isinstance(command, str):
+            continue
+        try:
+            if Path(task_cwd).resolve() != cwd_path:
+                continue
+        except (OSError, RuntimeError):
+            continue
+        is_run_next, card_id = _run_next_command_card_id(command)
+        if not is_run_next:
+            continue
+        if card_id:
+            if card_id not in active_card_ids:
+                scoped_reservations += 1
+        else:
+            unscoped_runs += 1
+    return scoped_reservations + unscoped_runs
+
+
 def _load_autopilot_policy(cwd: Path) -> dict[str, Any]:
     policy_path = get_project_autopilot_policy_path(cwd)
     if not policy_path.is_file():
@@ -501,7 +547,11 @@ async def run_next_card(state: WebUIState = Depends(get_state)) -> dict:
             },
         )
     policies = _load_autopilot_policy(state.cwd)
-    active_count = sum(1 for c in cards if c.status in _ACTIVE_STATUSES)
+    manager = get_task_manager()
+    active_card_ids = {c.id for c in cards if c.status in _ACTIVE_STATUSES}
+    active_count = len(active_card_ids) + _running_autopilot_task_reservations(
+        manager, state.cwd, active_card_ids
+    )
     execution = policies.get("execution")
     if not isinstance(execution, dict):
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
@@ -518,7 +568,6 @@ async def run_next_card(state: WebUIState = Depends(get_state)) -> dict:
         )
     oh_executable = str(Path(sys.executable).with_name("oh"))
     command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
-    manager = get_task_manager()
     task = await manager.create_shell_task(
         command=command,
         description="autopilot run-next",
