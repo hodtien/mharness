@@ -1564,8 +1564,6 @@ class RepoAutopilotStore:
             linked_pr_number is not None
             and bool(card.metadata.get("autopilot_managed"))
             and not bool(card.metadata.get("manual_retry"))
-            # Skip CI-monitor path when card is requeued for repair — let the main
-            # repair loop run the agent to actually fix the failing tests/review issues.
             and card.metadata.get("last_failure_stage")
             not in {"remote_ci_failed", "remote_review_failed"}
         ):
@@ -1592,87 +1590,11 @@ class RepoAutopilotStore:
                     pr_number=linked_pr_number,
                     pr_url=pr_url,
                 )
-            if ci_state != "success":
-                if ci_state == "pending":
-                    self.update_status(
-                        card.id,
-                        status="waiting_ci",
-                        note=f"autopilot managed PR #{linked_pr_number} CI still running, waiting",
-                        metadata_updates={
-                            "linked_pr_number": linked_pr_number,
-                            "linked_pr_url": pr_url,
-                        },
-                    )
-                    return RepoRunResult(
-                        card_id=card.id,
-                        status="waiting_ci",
-                        run_report_path="",
-                        verification_report_path="",
-                        pr_number=linked_pr_number,
-                        pr_url=pr_url,
-                    )
-                repeat_meta = self._failure_repeat_metadata(
-                    card, stage="remote_ci_failed", summary=ci_summary
-                )
-                ci_meta = {
-                    "linked_pr_number": linked_pr_number,
-                    "linked_pr_url": pr_url,
-                    "last_failure_stage": "remote_ci_failed",
-                    "last_failure_summary": ci_summary,
-                    **repeat_meta,
-                }
-                if (
-                    int(card.metadata.get("attempt_count", 0) or 0) < max_attempts
-                    and repeat_meta["repeated_failure_count"]
-                    < self._max_repeated_failure_attempts(policies)
-                ):
-                    self.update_status(
-                        card.id,
-                        status="queued",
-                        note=f"autopilot managed PR #{linked_pr_number} CI failed; queued repair retry",
-                        metadata_updates=ci_meta,
-                    )
-                    return RepoRunResult(
-                        card_id=card.id,
-                        status="queued",
-                        run_report_path="",
-                        verification_report_path="",
-                        pr_number=linked_pr_number,
-                        pr_url=pr_url,
-                    )
+            if ci_state == "success":
                 self.update_status(
                     card.id,
-                    status="failed",
-                    note=f"autopilot managed PR #{linked_pr_number} CI failed: {ci_summary}",
-                    metadata_updates=ci_meta,
-                )
-                return RepoRunResult(
-                    card_id=card.id,
-                    status="failed",
-                    run_report_path="",
-                    verification_report_path="",
-                    pr_number=linked_pr_number,
-                    pr_url=pr_url,
-                )
-
-        # autopilot_managed cards with linked PR + CI pass: merge directly, skip repair loop
-        if (
-            linked_pr_number is not None
-            and bool(card.metadata.get("autopilot_managed"))
-            and not bool(card.metadata.get("manual_retry"))
-            and card.metadata.get("last_failure_stage")
-            not in {"remote_ci_failed", "remote_review_failed"}
-        ):
-            ci_state, ci_summary, pr_snapshot, _checks = await self._wait_for_pr_ci(
-                linked_pr_number, policies
-            )
-            pr_url = _safe_text(pr_snapshot.get("url"))
-            if ci_state == "success" and self._automerge_eligible(pr_snapshot, policies):
-                self._merge_pull_request(linked_pr_number)
-                self.update_status(
-                    card.id,
-                    status="merged",
-                    note=f"autopilot managed PR #{linked_pr_number} CI passed, merged automatically",
+                    status="waiting_ci",
+                    note=f"autopilot managed PR #{linked_pr_number} CI passed; waiting for merge eligibility",
                     metadata_updates={
                         "linked_pr_number": linked_pr_number,
                         "linked_pr_url": pr_url,
@@ -1680,77 +1602,73 @@ class RepoAutopilotStore:
                 )
                 return RepoRunResult(
                     card_id=card.id,
-                    status="merged",
+                    status="waiting_ci",
                     run_report_path="",
                     verification_report_path="",
                     pr_number=linked_pr_number,
                     pr_url=pr_url,
                 )
-            # CI not yet passed or not eligible — stay in waiting_ci, don't re-run
-            if ci_state != "success":
-                # Pending CI: update status and return so tick can check later
-                if ci_state == "pending":
-                    self.update_status(
-                        card.id,
-                        status="waiting_ci",
-                        note=f"autopilot managed PR #{linked_pr_number} CI still running, waiting",
-                        metadata_updates={
-                            "linked_pr_number": linked_pr_number,
-                            "linked_pr_url": pr_url,
-                        },
-                    )
-                    return RepoRunResult(
-                        card_id=card.id,
-                        status="waiting_ci",
-                        run_report_path="",
-                        verification_report_path="",
-                        pr_number=linked_pr_number,
-                        pr_url=pr_url,
-                    )
-                # Failed CI
-                repeat_meta = self._failure_repeat_metadata(
-                    card, stage="remote_ci_failed", summary=ci_summary
-                )
-                ci_meta = {
-                    "linked_pr_number": linked_pr_number,
-                    "linked_pr_url": pr_url,
-                    "last_failure_stage": "remote_ci_failed",
-                    "last_failure_summary": ci_summary,
-                    **repeat_meta,
-                }
-                if (
-                    int(card.metadata.get("attempt_count", 0) or 0) < max_attempts
-                    and repeat_meta["repeated_failure_count"]
-                    < self._max_repeated_failure_attempts(policies)
-                ):
-                    self.update_status(
-                        card.id,
-                        status="queued",
-                        note=f"autopilot managed PR #{linked_pr_number} CI failed; queued repair retry",
-                        metadata_updates=ci_meta,
-                    )
-                    return RepoRunResult(
-                        card_id=card.id,
-                        status="queued",
-                        run_report_path="",
-                        verification_report_path="",
-                        pr_number=linked_pr_number,
-                        pr_url=pr_url,
-                    )
+            if ci_state == "pending":
                 self.update_status(
                     card.id,
-                    status="failed",
-                    note=f"autopilot managed PR #{linked_pr_number} CI failed: {ci_summary}",
+                    status="waiting_ci",
+                    note=f"autopilot managed PR #{linked_pr_number} CI still running, waiting",
+                    metadata_updates={
+                        "linked_pr_number": linked_pr_number,
+                        "linked_pr_url": pr_url,
+                    },
+                )
+                return RepoRunResult(
+                    card_id=card.id,
+                    status="waiting_ci",
+                    run_report_path="",
+                    verification_report_path="",
+                    pr_number=linked_pr_number,
+                    pr_url=pr_url,
+                )
+            repeat_meta = self._failure_repeat_metadata(
+                card, stage="remote_ci_failed", summary=ci_summary
+            )
+            ci_meta = {
+                "linked_pr_number": linked_pr_number,
+                "linked_pr_url": pr_url,
+                "last_failure_stage": "remote_ci_failed",
+                "last_failure_summary": ci_summary,
+                **repeat_meta,
+            }
+            if (
+                int(card.metadata.get("attempt_count", 0) or 0) < max_attempts
+                and repeat_meta["repeated_failure_count"]
+                < self._max_repeated_failure_attempts(policies)
+            ):
+                self.update_status(
+                    card.id,
+                    status="queued",
+                    note=f"autopilot managed PR #{linked_pr_number} CI failed; queued repair retry",
                     metadata_updates=ci_meta,
                 )
                 return RepoRunResult(
                     card_id=card.id,
-                    status="failed",
+                    status="queued",
                     run_report_path="",
                     verification_report_path="",
                     pr_number=linked_pr_number,
                     pr_url=pr_url,
                 )
+            self.update_status(
+                card.id,
+                status="failed",
+                note=f"autopilot managed PR #{linked_pr_number} CI failed: {ci_summary}",
+                metadata_updates=ci_meta,
+            )
+            return RepoRunResult(
+                card_id=card.id,
+                status="failed",
+                run_report_path="",
+                verification_report_path="",
+                pr_number=linked_pr_number,
+                pr_url=pr_url,
+            )
 
         worktree_manager = WorktreeManager()
         worktree_info = None
@@ -2423,6 +2341,9 @@ class RepoAutopilotStore:
                                 or remote_review_step.stdout
                                 or "remote code review blocked merge"
                             )
+                            repeat_meta = self._failure_repeat_metadata(
+                                card, stage="remote_review_failed", summary=summary
+                            )
                             remote_review_meta = {
                                 "human_gate_pending": False,
                                 "linked_pr_number": linked_pr_number,
@@ -2430,8 +2351,13 @@ class RepoAutopilotStore:
                                 "remote_review_status": remote_review_step.status,
                                 "last_failure_stage": "remote_review_failed",
                                 "last_failure_summary": summary,
+                                **repeat_meta,
                             }
-                            if attempt_count < max_attempts:
+                            if (
+                                attempt_count < max_attempts
+                                and repeat_meta["repeated_failure_count"]
+                                < self._max_repeated_failure_attempts(policies)
+                            ):
                                 architect_plan_path = await self._maybe_run_repair_architect_plan(
                                     card,
                                     cwd=working_cwd,
@@ -4544,6 +4470,9 @@ class RepoAutopilotStore:
                     or remote_review_step.stdout
                     or "remote code review blocked merge"
                 )
+                repeat_meta = self._failure_repeat_metadata(
+                    card, stage="remote_review_failed", summary=summary
+                )
                 remote_review_meta = {
                     "linked_pr_number": pr_number,
                     "linked_pr_url": pr_url,
@@ -4551,9 +4480,14 @@ class RepoAutopilotStore:
                     "remote_review_status": remote_review_step.status,
                     "last_failure_stage": "remote_review_failed",
                     "last_failure_summary": summary,
+                    **repeat_meta,
                 }
                 max_attempts = self._max_attempts(policies)
-                if attempt_count < max_attempts:
+                if (
+                    attempt_count < max_attempts
+                    and repeat_meta["repeated_failure_count"]
+                    < self._max_repeated_failure_attempts(policies)
+                ):
                     self.update_status(
                         card.id,
                         status="queued",

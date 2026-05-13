@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import subprocess
 import threading
 import time
@@ -2527,6 +2528,25 @@ def _remote_review_policy(*, enabled: bool = True, repair: dict[str, int] | None
     return policy
 
 
+def _full_remote_review_policy(
+    *, enabled: bool = True, repair: dict[str, int] | None = None
+) -> dict[str, Any]:
+    policies = {
+        "autopilot": copy.deepcopy(_DEFAULT_AUTOPILOT_POLICY),
+        "verification": copy.deepcopy(_DEFAULT_VERIFICATION_POLICY),
+        "release": {},
+    }
+    policies["autopilot"].setdefault("github", {})["remote_code_review"] = {
+        "enabled": enabled,
+        "block_on": ["critical"],
+        "max_turns": 6,
+        "max_diff_chars": 80000,
+    }
+    if repair is not None:
+        policies["autopilot"]["repair"].update(repair)
+    return policies
+
+
 def _green_pr_snapshot(pr_number: int) -> tuple[str, str, dict, list]:
     return (
         "success",
@@ -3061,6 +3081,417 @@ def test_existing_pr_remote_code_review_failure_repairs_when_attempts_remain(
     assert updated.metadata["attempt_count"] == 1
     assert updated.metadata["last_failure_stage"] == "remote_review_failed"
     assert updated.metadata["last_failure_summary"] == "severity=critical"
+
+
+def test_existing_pr_remote_review_failure_stops_at_repeated_failure_cap(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #94: Existing autopilot PR",
+        body="open",
+        source_ref="pr:94",
+    )
+    store.update_status(
+        card.id,
+        status="queued",
+        metadata_updates={
+            "attempt_count": 2,
+            "repeated_failure_key": "remote_review_failed:severity=critical",
+            "repeated_failure_count": 2,
+        },
+    )
+    card = store.get_card(card.id)
+    assert card is not None
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        return _green_pr_snapshot(pr_number)
+
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=1,
+            status="failed",
+            stderr="severity=critical",
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci",
+        fake_wait_for_pr_ci,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(
+        store._process_existing_pr_card(
+            card,
+            94,
+            _full_remote_review_policy(
+                repair={"max_repeated_failure_attempts": 3, "max_rounds": 49}
+            ),
+        )
+    )
+    updated = store.get_card(card.id)
+
+    assert result.status == "completed"
+    assert updated is not None
+    assert updated.status == "completed"
+    assert updated.metadata["human_gate_pending"] is True
+    assert updated.metadata["repeated_failure_count"] == 3
+
+
+def test_remote_review_failed_stops_at_repeated_failure_cap(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Stop repeated remote review failure",
+        body="remote review keeps failing with the same finding",
+    )
+    store.update_status(
+        card.id,
+        status="queued",
+        metadata_updates={
+            "attempt_count": 2,
+            "last_failure_stage": "remote_review_failed",
+            "last_failure_summary": "severity=critical",
+            "repeated_failure_key": "remote_review_failed:severity=critical",
+            "repeated_failure_count": 2,
+        },
+    )
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None, agent_id=None):
+        return SimpleNamespace(path=worktree)
+
+    async def fake_remove_worktree(self, slug):
+        return True
+
+    async def fake_run_agent_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
+        return "repair attempt"
+
+    def fake_run_verification_steps(self, policies, *, cwd=None):
+        return [RepoVerificationStep(command="uv run pytest -q", returncode=0, status="success")]
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        return _green_pr_snapshot(pr_number)
+
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=1,
+            status="failed",
+            stderr="severity=critical",
+        )
+
+    architect_called = {"value": False}
+    merged = {"called": False}
+
+    async def fake_architect_plan(self, *args, **kwargs):
+        architect_called["value"] = True
+        return None
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.load_policies",
+        lambda self: _full_remote_review_policy(
+            repair={"max_repeated_failure_attempts": 3, "max_rounds": 49}
+        ),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt", fake_run_agent_prompt
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        fake_run_verification_steps,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_commit_all",
+        lambda self, cwd, message: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
+            True,
+            "branch_push_done",
+            f"Pushed {head_branch}.",
+        ),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
+        lambda self, card, *, head_branch, base_branch, run_report_path, verification_report_path: {
+            "number": 92,
+            "url": "https://example/pr/92",
+        },
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._maybe_run_repair_architect_plan",
+        fake_architect_plan,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: merged.__setitem__("called", True),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    updated = store.get_card(card.id)
+
+    assert result.status == "completed"
+    assert result.pr_number == 92
+    assert architect_called["value"] is False
+    assert merged["called"] is False
+    assert updated is not None
+    assert updated.metadata["human_gate_pending"] is True
+    assert updated.metadata["last_failure_stage"] == "remote_review_failed"
+    assert updated.metadata["repeated_failure_count"] == 3
+
+
+def test_remote_review_failed_under_repeated_failure_cap_retries(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Retry remote review failure below cap",
+        body="remote review failed once before",
+    )
+    store.update_status(
+        card.id,
+        status="queued",
+        metadata_updates={
+            "attempt_count": 1,
+            "last_failure_stage": "remote_review_failed",
+            "last_failure_summary": "severity=critical",
+            "repeated_failure_key": "remote_review_failed:severity=critical",
+            "repeated_failure_count": 1,
+        },
+    )
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None, agent_id=None):
+        return SimpleNamespace(path=worktree)
+
+    async def fake_remove_worktree(self, slug):
+        return True
+
+    async def fake_run_agent_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
+        return "repair attempt"
+
+    def fake_run_verification_steps(self, policies, *, cwd=None):
+        return [RepoVerificationStep(command="uv run pytest -q", returncode=0, status="success")]
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        return _green_pr_snapshot(pr_number)
+
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
+        if checkpoint_attempt == 2:
+            return RepoVerificationStep(
+                command="agent:code-reviewer",
+                returncode=1,
+                status="failed",
+                stderr="severity=critical",
+            )
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=0,
+            status="success",
+            stdout="Severity: NONE",
+        )
+
+    architect_called = {"value": False}
+    merged = {"called": False}
+
+    async def fake_architect_plan(self, *args, **kwargs):
+        architect_called["value"] = True
+        return None
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.load_policies",
+        lambda self: _full_remote_review_policy(
+            repair={"max_repeated_failure_attempts": 3, "max_rounds": 49}
+        ),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt", fake_run_agent_prompt
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        fake_run_verification_steps,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_commit_all",
+        lambda self, cwd, message: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
+            True,
+            "branch_push_done",
+            f"Pushed {head_branch}.",
+        ),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
+        lambda self, card, *, head_branch, base_branch, run_report_path, verification_report_path: {
+            "number": 93,
+            "url": "https://example/pr/93",
+        },
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._maybe_run_repair_architect_plan",
+        fake_architect_plan,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: merged.__setitem__("called", True),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pull_base_branch",
+        lambda self, *, base_branch=None: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.rebase_inflight_worktrees",
+        lambda self, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._install_editable",
+        lambda self: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._journal_base_advanced_for_active_cards",
+        lambda self, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    updated = store.get_card(card.id)
+
+    assert result.status == "merged"
+    assert architect_called["value"] is True
+    assert merged["called"] is True
+    assert updated is not None
+    assert updated.status == "merged"
+    assert updated.metadata["repeated_failure_count"] == 2
 
 
 def test_pull_base_branch_called_after_merge(tmp_path: Path, monkeypatch) -> None:
@@ -6050,11 +6481,92 @@ def test_autopilot_managed_card_stays_waiting_when_ci_pending(tmp_path: Path, mo
 
     import asyncio
 
-    asyncio.run(store.run_card(card.id))
+    result = asyncio.run(store.run_card(card.id))
     # CI pending → card stays in waiting_ci (don't re-run worktree)
     updated = store.get_card(card.id)
+    assert result.status == "waiting_ci"
     assert updated is not None
     assert updated.status == "waiting_ci"
+
+
+def test_autopilot_managed_card_waits_when_ci_passes_without_merge_eligibility(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Managed PR missing merge eligibility",
+        body="CI passes but human merge gate is still pending",
+    )
+    store.update_status(
+        card.id,
+        status="queued",
+        metadata_updates={
+            "autopilot_managed": True,
+            "linked_pr_number": 78,
+            "head_branch": f"autopilot/{card.id}",
+        },
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        assert pr_number == 78
+        return (
+            "success",
+            "All reported remote checks passed.",
+            {"url": "https://example/pr/78", "labels": [], "isDraft": False},
+            [],
+        )
+
+    agent_called = {"value": False}
+    merged = {"called": False}
+
+    async def fake_run_agent_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
+        agent_called["value"] = True
+        return "should not run"
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._pr_status_snapshot",
+        lambda self, pr_number: {"state": "OPEN", "url": "https://example/pr/78"},
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: False,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: merged.__setitem__("called", True),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: False
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt", fake_run_agent_prompt
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    updated = store.get_card(card.id)
+
+    assert result.status == "waiting_ci"
+    assert result.pr_number == 78
+    assert agent_called["value"] is False
+    assert merged["called"] is False
+    assert updated is not None
+    assert updated.status == "waiting_ci"
+    assert updated.metadata["linked_pr_number"] == 78
+    assert updated.metadata["linked_pr_url"] == "https://example/pr/78"
 
 
 def test_autopilot_managed_card_repairs_when_ci_fail(tmp_path: Path, monkeypatch) -> None:
