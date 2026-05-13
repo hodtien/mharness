@@ -39,6 +39,7 @@
   - [P14 — Settings Review \& Polish](#p14--settings-review--polish)
   - [P15 — UI/UX Upgrade \& Semantic Operator Experience](#p15--uiux-upgrade--semantic-operator-experience)
   - [P16 — Header Runtime Controls \& Per-Tab Project Context](#p16--header-runtime-controls--per-tab-project-context)
+  - [P18 — Operational UX Hardening](#p18--operational-ux-hardening)
 
 ---
 
@@ -1369,9 +1370,34 @@ Depends on: P16.3a."
 
 ---
 
-**Tổng cộng**: 144 tasks (P0=3, P1=8, P2=6, P3=6, P4=7, P5=10, P6=8, P7=8, P8=7, P9=11, P10=16, P11=12, P12=8, P13=8, P14=6, P15=13, P16=5, Cross=2)
+## P18 — Operational UX Hardening
+
+> Phase này xuất phát từ walkthrough thực tế WebUI ngày 2026-05-13. Mục tiêu là làm trạng thái vận hành đáng tin hơn, giảm nhiễu ở những trang dữ liệu lớn, và biến Control Center thành nơi người dùng có thể ra quyết định nhanh.
+
+```bash
+oh autopilot add idea "[P18.1] UX/State: thống nhất truth model cho Cron, Scheduler, và Autopilot Scheduling" --body "Hiện tại WebUI đang hiển thị mâu thuẫn: Sidebar có thể báo 'Cron 2/2 enabled', Control Center báo 'Scheduler running', trong khi Settings/Schedule lại báo 'Status Disabled'. Cần thiết kế lại contract dữ liệu và copy để tách rõ 3 khái niệm: (1) scheduler process/runtime có đang chạy hay không, (2) autopilot scheduling feature có enabled hay disabled, (3) cron entries đã được cài/đang enabled bao nhiêu. Cập nhật API payload nếu cần, rồi cập nhật Sidebar.tsx, SettingsControlPage.tsx, Cron/Schedule settings page và test để mọi nơi dùng cùng vocabulary, cùng màu semantic, không còn trạng thái tự mâu thuẫn. Verification: UI tests cover 3 state combinations chính; manual walkthrough trên /settings và sidebar cho thấy thông tin khớp nhau. Spawn agents: planner → python-reviewer → typescript-reviewer → code-reviewer."
+
+oh autopilot add idea "[P18.2] Auth UX: login hint chỉ hiển thị đúng khi còn dùng default password" --body "Màn login hiện luôn hiển thị 'Default password: 123456. Change it after login.' ngay cả khi password đã đổi, gây hiểu nhầm. Dùng auth status hiện có để chỉ render warning này khi backend báo is_default_password=true; nếu password đã đổi thì ẩn hoàn toàn hoặc thay bằng copy trung tính không nêu mật khẩu. Cập nhật LoginScreen.tsx, client auth snapshot/status flow nếu cần, và test cho cả 2 trường hợp default/non-default. Verification: login smoke test xác nhận warning xuất hiện đúng khi default password còn hiệu lực và biến mất sau khi password custom đã được cấu hình. Spawn agents: typescript-reviewer → code-reviewer."
+
+oh autopilot add idea "[P18.3] UI Semantics: chuẩn hóa màu và nhãn auth/runtime status trong shell + Control Center" --body "Status chip 'Access configured' đang dùng tone dễ bị hiểu như cảnh báo, trong khi nghĩa thực tế không nhất quán giữa sidebar và Control Center. Xây bảng semantic rõ cho auth/runtime state: configured, authenticated/ok, needs_setup, error; map từng state sang label + color nhất quán. Áp dụng cho Sidebar.tsx, Header nếu có badge liên quan, SettingsControlPage.tsx và Security settings. Không chỉ đổi màu; phải đổi copy để người dùng hiểu sự khác nhau giữa 'credentials saved' và 'usable right now'. Verification: snapshot/unit tests cover each semantic state; visual QA desktop cho sidebar/control center. Spawn agents: planner → typescript-reviewer → a11y-architect → code-reviewer."
+
+oh autopilot add idea "[P18.4] Projects UX: stale registry warning, cleanup preview, và default focus vào project hữu ích" --body "Walkthrough cho thấy registry có thể phình lớn với hundreds of Missing/Temp/Test entries, khiến người dùng khó thấy project thật. Nâng ProjectsPage để: (1) hiển thị banner tóm tắt khi stale/temp count cao, (2) nút Cleanup mở preview số item sẽ loại bỏ trước khi xác nhận, (3) filter mặc định ưu tiên Active/Existing hoặc ghi nhớ lựa chọn gần nhất, (4) copy rõ rằng cleanup không đụng project directory thật nếu chỉ dọn registry record. Reuse endpoint cleanup hiện có nếu đã có; nếu chưa đủ dữ liệu preview thì bổ sung endpoint dry-run/lightweight count. Verification: tests cho preview, confirm, cancel, và default filter; manual walkthrough với dataset có missing/temp entries. Spawn agents: planner → python-reviewer → typescript-reviewer → code-reviewer."
+
+oh autopilot add idea "[P18.5] Autopilot UX: de-emphasize Completed/Terminal history để board active dễ scan" --body "Autopilot board hiện có thể chứa hơn 100 terminal cards, làm active work bị chìm. Giữ phân nhóm Completed/Terminal nhưng mặc định chỉ hiển thị recent N cards hoặc section collapsed; có nút Show more/View archive rõ ràng. Counts tổng vẫn phải chính xác. Không được làm mất khả năng truy cập card terminal cũ. Verification: tests cho collapsed default, expand/show more, count accuracy, và filter All/Terminal. Spawn agents: planner → typescript-reviewer → code-reviewer."
+
+oh autopilot add idea "[P18.6] Agents UX: compact mode, pinned operational agents, và linkage với autopilot policy" --body "Trang Agents đang mạnh nhưng khó scan khi có hàng chục agent. Thêm view mode compact/table ngoài card view, pin nhóm operational agents quan trọng (worker, reviewer, architect, verification hoặc policy-selected agents), và hiển thị badge 'Used by Autopilot' khi agent được policy/reference hiện tại sử dụng. Nếu policy map đang rải rác thì tạo helper/selectors read-only để UI tổng hợp. Verification: tests cover view toggle, pinned group, policy linkage badge, search/filter vẫn hoạt động. Spawn agents: planner → python-reviewer nếu cần helper backend → typescript-reviewer → code-reviewer."
+
+oh autopilot add idea "[P18.7] Models UX: active-first catalog, relation badges, và collapse provider không active" --body "Trang Models quá dài khi có nhiều provider/router. Sắp xếp lại theo hướng active-first: active provider/router mở mặc định và đứng trên cùng; provider không active collapsed mặc định; model row có relation badges như Default, Active profile, Used by agent nếu dữ liệu sẵn có. Search vẫn phải mở/đưa tới section phù hợp khi có match, không được giấu kết quả trong accordion đang collapsed. Verification: tests cho active provider ordering, default collapse, search auto-reveal, và badge rendering. Spawn agents: planner → typescript-reviewer → code-reviewer."
+
+oh autopilot add idea "[P18.8] UX Polish: full-path reveal/copy cho CWD và config locations trong control surfaces" --body "Control Center Live Status đang truncate CWD khá sớm; các path như project cwd, config directory, source file rất quan trọng với power user. Thêm pattern thống nhất cho long path: monospace truncation có tooltip/full reveal, nút copy rõ, và wrap hợp lý trên viewport hẹp. Áp dụng trước cho Control Center CWD, Security config directory, và các path xuất hiện trong Projects/Agents nếu component chung dùng được. Verification: component tests cho copy action và accessible label; visual QA desktop/mobile tránh overflow. Spawn agents: typescript-reviewer → a11y-architect → code-reviewer."
+```
+
+---
+
+**Tổng cộng**: 152 tasks (P0=3, P1=8, P2=6, P3=6, P4=7, P5=10, P6=8, P7=8, P8=7, P9=11, P10=16, P11=12, P12=8, P13=8, P14=6, P15=13, P16=5, P18=8, Cross=2)
 
 > P10 được tổ chức lại thành 6 nhóm: A=Sidebar/Nav (4), B=Autopilot Board (3), C=History (4), D=Jobs (2), E=Settings (2), F=Misc (1)
 > P11-P14 bổ sung ngày 2026-05-06: Multi-Project (12), Cron Scheduling (8), Task Resilience (8), Settings Polish (6)
 > P15 bổ sung ngày 2026-05-11: UI/UX Upgrade & Semantic Operator Experience (13)
 > P16 bổ sung ngày 2026-05-11: Header Runtime Controls & Per-Tab Project Context (5)
+> P18 bổ sung ngày 2026-05-13: Operational UX Hardening (8)
