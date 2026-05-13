@@ -1743,9 +1743,15 @@ def test_autopilot_run_card_uses_architect_plan_for_reviewer_repair(
     assert architect_calls[0]["model"] == "claude-architect"
     assert architect_calls[0]["system_prompt"] == "ARCHITECT SYSTEM PROMPT"
     assert "Severity: HIGH" in architect_calls[0]["prompt"]
+    assert "Required output format (use these exact headings):" in architect_calls[0]["prompt"]
+    assert "1. ROOT CAUSE" in architect_calls[0]["prompt"]
+    assert "4. ACCEPTANCE CHECKS" in architect_calls[0]["prompt"]
+    assert "5. DO NOT CHANGE" in architect_calls[0]["prompt"]
     second_worker_prompt = [call["prompt"] for call in agent_calls if call["phase"] == "implement"][1]
     assert "Architect repair plan:" in second_worker_prompt
     assert "Fix the missing status transition before retry" in second_worker_prompt
+    assert "Treat reviewer findings and architect guidance as acceptance criteria" in second_worker_prompt
+    assert "do not stop at copy, placeholder constants, or UI-only changes" in second_worker_prompt
     assert (store._runs_dir / f"{card.id}-attempt-01-repair-architect.md").exists()
 
 
@@ -7263,6 +7269,8 @@ Findings:
     assert "Missing retry metadata" in prompt
     assert "Repair Architect Plan" in prompt
     assert "Fix retry metadata" in prompt
+    assert "Treat reviewer findings and architect guidance as acceptance criteria" in prompt
+    assert "do not stop at copy, placeholder constants, or UI-only changes" in prompt
 
 
 def test_repair_architect_system_prompt_falls_back_to_claude_agents(

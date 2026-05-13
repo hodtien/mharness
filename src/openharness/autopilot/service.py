@@ -4146,12 +4146,21 @@ class RepoAutopilotStore:
             f"Severity: {severity.upper()}\n\n"
             "Reviewer feedback:\n"
             f"{reviewer_feedback}\n\n"
-            "Required output:\n"
-            "1. Root cause hypothesis.\n"
-            "2. Exact files/functions the worker should inspect or change.\n"
-            "3. Minimal repair steps in order.\n"
-            "4. Verification commands to run.\n"
-            "5. Risks or constraints the worker must preserve.\n\n"
+            "Your output will be injected verbatim into the next worker prompt, so it must be "
+            "specific enough to implement without guessing.\n\n"
+            "Required output format (use these exact headings):\n"
+            "1. ROOT CAUSE\n"
+            "2. FILES TO CHANGE\n"
+            "3. EXACT CHANGES\n"
+            "4. ACCEPTANCE CHECKS\n"
+            "5. DO NOT CHANGE\n\n"
+            "Requirements for each section:\n"
+            "- ROOT CAUSE: one short paragraph tying the reviewer findings to the likely defect.\n"
+            "- FILES TO CHANGE: list concrete repository paths and, when possible, functions/components.\n"
+            "- EXACT CHANGES: ordered implementation steps describing the minimal patch, expected data flow, and what must be persisted or wired end-to-end. Name required API calls/state updates instead of vague advice.\n"
+            "- ACCEPTANCE CHECKS: specific commands, assertions, or reviewer-visible behaviors that prove the fix is complete. Include any missing behavior that must exist to satisfy the requirement, not just compile.\n"
+            "- DO NOT CHANGE: unrelated files, existing valid behavior, and shortcuts to avoid. Call out forbidden shortcuts like hardcoded placeholders, copy-only changes, or partial UI without persistence when relevant.\n\n"
+            "Do not restate the reviewer feedback without turning it into an implementation brief. Prefer file_path:line_number references when the reviewer already identified them.\n\n"
             f"Diff vs `{base_branch}`{' (truncated)' if truncated else ''}:\n"
             f"```\n{diff_text or '(empty diff)'}\n```\n"
         )
@@ -4287,8 +4296,11 @@ class RepoAutopilotStore:
                 "",
                 "Repair instructions:",
                 "- Make the smallest patch that fixes the reported failure.",
+                "- Treat reviewer findings and architect guidance as acceptance criteria, not optional suggestions.",
+                "- Implement the missing behavior end-to-end; do not stop at copy, placeholder constants, or UI-only changes when persistence/wiring is required.",
                 "- Do not restart the task from scratch if the existing branch already contains valid progress.",
-                "- Re-run the relevant verification commands after the fix.",
+                "- Do not refactor unrelated code or broaden scope beyond the reported failure.",
+                "- Re-run the relevant verification commands after the fix and confirm the reported reviewer findings are actually addressed.",
             ]
         )
         return prompt + "\n" + "\n".join(extras).strip() + "\n"
