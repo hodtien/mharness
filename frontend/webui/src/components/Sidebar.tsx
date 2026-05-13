@@ -3,6 +3,7 @@ import { NavLink, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import ProjectSelector from "./ProjectSelector";
 import { useSession } from "../store/session";
+import { getAuthSemanticState } from "../utils/authStatusSemantics";
 
 const STATUS_COLLAPSED_KEY = "oh:sidebar:status-collapsed";
 
@@ -123,8 +124,8 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
             />
             <StatusField
               label="Access"
-              value={appState?.auth_status ?? "—"}
-              tone={appState?.auth_status === "ok" ? "success" : "danger"}
+              value={getAuthSemanticState(appState?.auth_status).label}
+              tone={getAuthSemanticState(appState?.auth_status).tone}
             />
             <StatusField
               label="Jobs"
