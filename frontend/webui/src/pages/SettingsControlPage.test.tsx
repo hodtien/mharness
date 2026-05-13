@@ -14,7 +14,7 @@ function mockLocalStorage() {
   });
 }
 
-function stubFetchEmpty() {
+function stubFetchEmpty({ schedulerRunning = false }: { schedulerRunning?: boolean } = {}) {
   const fetchMock = vi.fn((url: string) => {
     if (url.includes("/projects")) {
       return Promise.resolve({
@@ -22,6 +22,14 @@ function stubFetchEmpty() {
         status: 200,
         headers: { get: () => null },
         json: () => Promise.resolve({ projects: [], active_project_id: null }),
+      });
+    }
+    if (url.includes("/cron/config")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: () => Promise.resolve({ enabled: true, scheduler_running: schedulerRunning }),
       });
     }
     return Promise.resolve({
@@ -76,6 +84,7 @@ describe("SettingsControlPage (Control Center)", () => {
     expect(screen.getByRole("link", { name: /security/i })).toBeTruthy();
   });
 
+  // ── State combination: scheduler_running=false, jobs all disabled ──────────────
   it("shows scheduler-stopped callout when cron jobs are configured but disabled", async () => {
     // Simulate 2 jobs coming back from the API
     const fetchMock = vi.fn((url: string) => {
@@ -101,6 +110,14 @@ describe("SettingsControlPage (Control Center)", () => {
           json: () => Promise.resolve({ projects: [], active_project_id: null }),
         });
       }
+      if (url.includes("/cron/config")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: () => Promise.resolve({ enabled: true, scheduler_running: false }),
+        });
+      }
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -118,6 +135,7 @@ describe("SettingsControlPage (Control Center)", () => {
     expect(screen.getByRole("alert").textContent).toContain("Scheduler stopped");
   });
 
+  // ── State combination: scheduler_running=true, jobs enabled ─────────────────
   it("does not show scheduler-stopped callout when scheduler is running", async () => {
     const fetchMock = vi.fn((url: string) => {
       if (url.includes("/cron/jobs")) {
@@ -131,6 +149,14 @@ describe("SettingsControlPage (Control Center)", () => {
                 { name: "scan", enabled: true },
               ],
             }),
+        });
+      }
+      if (url.includes("/cron/config")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: () => Promise.resolve({ enabled: true, scheduler_running: true }),
         });
       }
       return Promise.resolve({
@@ -151,6 +177,54 @@ describe("SettingsControlPage (Control Center)", () => {
       )).toBe(true),
     );
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  // ── State combination: scheduler_running=true but feature enabled=false ──────
+  it("shows 'stopped' scheduler status when scheduler process is not running", async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes("/cron/config")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: () => Promise.resolve({
+            enabled: false,
+            scheduler_running: false,
+            scan_cron: "*/15 * * * *",
+            tick_cron: "0 * * * *",
+          }),
+        });
+      }
+      if (url.includes("/projects")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: () => Promise.resolve({ projects: [], active_project_id: null }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: () => Promise.resolve({ jobs: [] }),
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderControlPage();
+
+    await waitFor(() =>
+      expect((fetchMock as ReturnType<typeof vi.fn>).mock.calls.some((c: unknown[]) =>
+        String(c[0]).includes("/cron/config"),
+      )).toBe(true),
+    );
+    // scheduler_running=false, no cron jobs → "no jobs" status value
+    expect(screen.getByText("Scheduler")).toBeTruthy();
+    // The text "no jobs" is rendered when scheduler is stopped and no jobs configured
+    await waitFor(() => {
+      expect(screen.getByText("no jobs")).toBeTruthy();
+    });
   });
 
   it("displays appState model and provider in live status", () => {

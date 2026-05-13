@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, useSearchParams } from "react-router-dom";
-import { api } from "../api/client";
+import { api, type CronConfigResponse } from "../api/client";
 import { useSession } from "../store/session";
 import type { AppStatePayload } from "../api/types";
 import PageHeader from "../components/PageHeader";
@@ -118,6 +118,7 @@ const SECTIONS: ControlSection[] = [
 
 interface OperationalStatusProps {
   appState: AppStatePayload | null;
+  cronConfig: CronConfigResponse | null;
   cron: Array<Record<string, unknown>>;
   tasksRunning: number;
   tasksFailed: number;
@@ -125,12 +126,12 @@ interface OperationalStatusProps {
 
 function OperationalStatus({
   appState,
+  cronConfig,
   cron,
   tasksRunning,
   tasksFailed,
 }: OperationalStatusProps) {
-  const enabledCron = cron.filter((j) => Boolean(j.enabled)).length;
-  const schedulerRunning = enabledCron > 0;
+  const schedulerRunning = cronConfig?.scheduler_running ?? false;
 
   return (
     <div
@@ -296,6 +297,7 @@ export default function SettingsControlPage() {
   const appState = useSession((s) => s.appState);
   const tasks = useSession((s) => s.tasks);
   const [cron, setCron] = useState<Array<Record<string, unknown>>>([]);
+  const [cronConfig, setCronConfig] = useState<CronConfigResponse | null>(null);
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("project");
 
@@ -304,6 +306,10 @@ export default function SettingsControlPage() {
       .listCron()
       .then((d) => setCron(d.jobs || []))
       .catch(() => setCron([]));
+    api
+      .getCronConfig()
+      .then((cfg) => setCronConfig(cfg))
+      .catch(() => setCronConfig(null));
   }, []);
 
   const tasksRunning = tasks.filter((t) =>
@@ -323,6 +329,7 @@ export default function SettingsControlPage() {
           {/* Operational status */}
           <OperationalStatus
             appState={appState}
+            cronConfig={cronConfig}
             cron={cron}
             tasksRunning={tasksRunning}
             tasksFailed={tasksFailed}

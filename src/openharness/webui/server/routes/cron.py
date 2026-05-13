@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from openharness.config.settings import CronScheduleConfig, load_settings, save_settings
 from openharness.services.cron import load_cron_jobs, preview_cron_next_runs
+from openharness.services.cron_scheduler import is_scheduler_running
 from openharness.webui.server.state import require_token
 
 router = APIRouter(
@@ -80,6 +81,7 @@ class CronConfigResponse(BaseModel):
     tick_cron: str
     timezone: str
     install_mode: str
+    scheduler_running: bool = Field(description="Whether the cron scheduler daemon is running")
     scan_cron_description: str = Field(description="Human-readable description of scan_cron")
     tick_cron_description: str = Field(description="Human-readable description of tick_cron")
     next_scan_runs: list[str] = Field(
@@ -124,6 +126,7 @@ def get_cron_config() -> CronConfigResponse:
     settings = load_settings()
     cfg = settings.cron_schedule
     return _build_cron_config_response(cfg)
+
 
 
 @router.patch("/config", response_model=CronConfigResponse)
@@ -252,6 +255,7 @@ def _build_cron_config_response(
         tick_cron=cfg.tick_cron,
         timezone=cfg.timezone,
         install_mode=cfg.install_mode,
+        scheduler_running=is_scheduler_running(),
         scan_cron_description=_describe_cron(cfg.scan_cron),
         tick_cron_description=_describe_cron(cfg.tick_cron),
         next_scan_runs=scan_runs,

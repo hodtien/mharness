@@ -27,6 +27,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
   const tasks = useSession((s) => s.tasks);
   const appState = useSession((s) => s.appState);
   const [cron, setCron] = useState<Array<Record<string, unknown>>>([]);
+  const [schedulerRunning, setSchedulerRunning] = useState<boolean>(false);
   const [statusCollapsed, setStatusCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem(STATUS_COLLAPSED_KEY) === "true";
@@ -41,6 +42,13 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
       .then((d) => setCron(d.jobs || []))
       .catch(() => setCron([]));
   }, [tasks.length]);
+
+  useEffect(() => {
+    api
+      .getCronConfig()
+      .then((cfg) => setSchedulerRunning(cfg.scheduler_running ?? false))
+      .catch(() => setSchedulerRunning(false));
+  }, []);
 
   const runningJobs = tasks.filter((t) =>
     ["running", "active", "in_progress"].includes(t.status),
@@ -124,7 +132,12 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
               tone={failedJobs > 0 ? "danger" : runningJobs > 0 ? "warning" : "success"}
             />
             <StatusField
-              label="Cron"
+              label="Scheduler"
+              value={schedulerRunning ? "running" : "stopped"}
+              tone={schedulerRunning ? "success" : "neutral"}
+            />
+            <StatusField
+              label="Cron jobs"
               value={`${enabledCron}/${cron.length} enabled`}
               tone={enabledCron > 0 ? "success" : cron.length > 0 ? "warning" : "neutral"}
             />

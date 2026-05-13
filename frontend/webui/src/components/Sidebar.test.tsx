@@ -126,6 +126,43 @@ describe("Sidebar", () => {
     expect(screen.queryByText("Model")).toBeNull();
   });
 
+  it("shows scheduler running and cron job count as separate statuses", async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes("/cron/config")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: () => Promise.resolve({ enabled: true, scheduler_running: true }),
+        });
+      }
+      if (url.includes("/projects")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: () => Promise.resolve({ projects: [], active_project_id: null }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: () => Promise.resolve({ jobs: [{ enabled: true }, { enabled: false }] }),
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderSidebar({ open: false, collapsed: false });
+
+    await waitFor(() => {
+      expect(screen.getByText("Scheduler")).toBeTruthy();
+    });
+    expect(screen.getByText("running")).toBeTruthy();
+    expect(screen.getByText("Cron jobs")).toBeTruthy();
+    expect(screen.getByText("1/2 enabled")).toBeTruthy();
+  });
+
   it("calls onClose when the mobile backdrop is clicked", () => {
     const onClose = vi.fn();
     renderSidebar({ open: true, collapsed: false, onClose });

@@ -32,6 +32,7 @@ function jsonResponse(data: unknown, status = 200) {
 
 const defaultCronConfig = {
   enabled: true,
+  scheduler_running: true,
   scan_cron: "*/15 * * * *",
   tick_cron: "0 * * * *",
   timezone: "UTC",
@@ -85,7 +86,7 @@ describe("CronSettingsPage", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText("Enable Autopilot Scheduling")).toBeTruthy();
+      expect(screen.getByText("Autopilot Scheduling Feature")).toBeTruthy();
     });
     expect(screen.getByLabelText(/enable autopilot scheduling/i)).toBeTruthy();
     expect(screen.getByLabelText(/scan cron/i)).toBeTruthy();
@@ -127,7 +128,8 @@ describe("CronSettingsPage", () => {
       expect(screen.getByText("Cron Expression Examples")).toBeTruthy();
     });
     expect(screen.getByText("Every 5 minutes")).toBeTruthy();
-    expect(screen.getByText("Every hour")).toBeTruthy();
+    // "Every hour" appears multiple times (metadata + description), getAllByText is fine
+    expect(screen.getAllByText("Every hour").length).toBeGreaterThan(0);
   });
 
   it("calls PATCH when Apply is clicked with changes", async () => {
@@ -272,7 +274,7 @@ describe("CronSettingsPage", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText("Enable Autopilot Scheduling")).toBeTruthy();
+      expect(screen.getByText("Autopilot Scheduling Feature")).toBeTruthy();
     });
 
     // When disabled, the next runs preview should not appear
