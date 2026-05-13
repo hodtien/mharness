@@ -1,11 +1,11 @@
 {
-  "generated_at": 1778559915.457506,
+  "generated_at": 1778640974.445672,
   "repo_name": "my-harness",
   "repo_path": "/Users/hodtien/harness/my-harness",
   "focus": {
-    "id": "ap-755d6eae",
-    "title": "[P17.4] Projects UX: Hide stale pytest/temp projects and add cleanup action",
-    "body": "Observed from live WebUI audit: Projects page shows 194 projects, mostly /private/.../pytest... temp paths from tests. This makes real project switching noisy and risky.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Add backend project metadata flags: exists, is_temp_like, is_worktree_like, last_seen/created_at if available.\n3. Frontend default view should prioritize active, existing, user-created projects and hide temp-like pytest/private test directories behind a filter.\n4. Add filters: All, Active, Existing, Missing, Temp/Test, Worktrees.\n5. Add a safe cleanup action for stale missing/temp projects, with explicit confirmation and count preview.\n6. Never delete project directories from disk; cleanup only unregisters project records.\n\nVerification:\n- Backend tests for metadata classification and cleanup not deleting filesystem directories.\n- ProjectsPage tests for default hidden temp projects, filter visibility, cleanup confirmation.\n- Manual check: real projects remain visible; pytest temp projects are hidden by default.\n\nSpawn agents: python-reviewer -> typescript-reviewer -> code-reviewer.",
+    "id": "ap-19661243",
+    "title": "[P18.1] UX/State: thống nhất truth model cho Cron, Scheduler, và Autopilot Scheduling",
+    "body": "Hiện tại WebUI đang hiển thị mâu thuẫn: Sidebar có thể báo 'Cron 2/2 enabled', Control Center báo 'Scheduler running', trong khi Settings/Schedule lại báo 'Status Disabled'. Cần thiết kế lại contract dữ liệu và copy để tách rõ 3 khái niệm: (1) scheduler process/runtime có đang chạy hay không, (2) autopilot scheduling feature có enabled hay disabled, (3) cron entries đã được cài/đang enabled bao nhiêu. Cập nhật API payload nếu cần, rồi cập nhật Sidebar.tsx, SettingsControlPage.tsx, Cron/Schedule settings page và test để mọi nơi dùng cùng vocabulary, cùng màu semantic, không còn trạng thái tự mâu thuẫn. Verification: UI tests cover 3 state combinations chính; manual walkthrough trên /settings và sidebar cho thấy thông tin khớp nhau. Spawn agents: planner → python-reviewer → typescript-reviewer → code-reviewer.",
     "status": "queued",
     "source_kind": "manual_idea",
     "source_ref": "",
@@ -16,15 +16,9 @@
       "urgent signals",
       "recently updated"
     ],
-    "labels": [
-      "cleanup",
-      "p17",
-      "projects",
-      "ux",
-      "webui"
-    ],
-    "created_at": 1778554357.6511302,
-    "updated_at": 1778554357.6511302,
+    "labels": [],
+    "created_at": 1778640762.590828,
+    "updated_at": 1778640762.590828,
     "metadata": {
       "last_note": "",
       "url": "",
@@ -45,7 +39,7 @@
     }
   },
   "counts": {
-    "queued": 5,
+    "queued": 8,
     "accepted": 0,
     "preparing": 0,
     "running": 0,
@@ -54,8 +48,8 @@
     "waiting_ci": 0,
     "repairing": 0,
     "completed": 19,
-    "merged": 137,
-    "failed": 1,
+    "merged": 144,
+    "failed": 2,
     "rejected": 23,
     "superseded": 1,
     "paused": 1
@@ -78,9 +72,9 @@
   "columns": {
     "queued": [
       {
-        "id": "ap-755d6eae",
-        "title": "[P17.4] Projects UX: Hide stale pytest/temp projects and add cleanup action",
-        "body": "Observed from live WebUI audit: Projects page shows 194 projects, mostly /private/.../pytest... temp paths from tests. This makes real project switching noisy and risky.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Add backend project metadata flags: exists, is_temp_like, is_worktree_like, last_seen/created_at if available.\n3. Frontend default view should prioritize active, existing, user-created projects and hide temp-like pytest/private test directories behind a filter.\n4. Add filters: All, Active, Existing, Missing, Temp/Test, Worktrees.\n5. Add a safe cleanup action for stale missing/temp projects, with explicit confirmation and count preview.\n6. Never delete project directories from disk; cleanup only unregisters project records.\n\nVerification:\n- Backend tests for metadata classification and cleanup not deleting filesystem directories.\n- ProjectsPage tests for default hidden temp projects, filter visibility, cleanup confirmation.\n- Manual check: real projects remain visible; pytest temp projects are hidden by default.\n\nSpawn agents: python-reviewer -> typescript-reviewer -> code-reviewer.",
+        "id": "ap-19661243",
+        "title": "[P18.1] UX/State: thống nhất truth model cho Cron, Scheduler, và Autopilot Scheduling",
+        "body": "Hiện tại WebUI đang hiển thị mâu thuẫn: Sidebar có thể báo 'Cron 2/2 enabled', Control Center báo 'Scheduler running', trong khi Settings/Schedule lại báo 'Status Disabled'. Cần thiết kế lại contract dữ liệu và copy để tách rõ 3 khái niệm: (1) scheduler process/runtime có đang chạy hay không, (2) autopilot scheduling feature có enabled hay disabled, (3) cron entries đã được cài/đang enabled bao nhiêu. Cập nhật API payload nếu cần, rồi cập nhật Sidebar.tsx, SettingsControlPage.tsx, Cron/Schedule settings page và test để mọi nơi dùng cùng vocabulary, cùng màu semantic, không còn trạng thái tự mâu thuẫn. Verification: UI tests cover 3 state combinations chính; manual walkthrough trên /settings và sidebar cho thấy thông tin khớp nhau. Spawn agents: planner → python-reviewer → typescript-reviewer → code-reviewer.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -91,15 +85,9 @@
           "urgent signals",
           "recently updated"
         ],
-        "labels": [
-          "cleanup",
-          "p17",
-          "projects",
-          "ux",
-          "webui"
-        ],
-        "created_at": 1778554357.6511302,
-        "updated_at": 1778554357.6511302,
+        "labels": [],
+        "created_at": 1778640762.590828,
+        "updated_at": 1778640762.590828,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -120,9 +108,9 @@
         }
       },
       {
-        "id": "ap-05a93e73",
-        "title": "[P17.5] Autopilot UX: Attention-first board and collapsed terminal history",
-        "body": "Observed from live WebUI audit: Autopilot has 179 total cards, active columns are empty, and terminal/completed history dominates the body text. Operators need immediate visibility into items that need action.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Add an attention strip above the board: Failed/Paused, Waiting CI, Review, Running, Queue counts.\n3. Default board should show non-terminal/attention states first; completed/merged cards are collapsed behind a Terminal history section.\n4. Add quick filters: Active, Needs attention, Waiting, Terminal, All.\n5. Empty active columns should suggest next action: Run Next, New idea, or open terminal history.\n6. Preserve existing card actions and policy tab.\n\nVerification:\n- PipelinePage tests cover status grouping, collapsed terminal section, filter behavior.\n- Playwright check with mixed fixture cards confirms failed/waiting cards appear above terminal cards.\n\nSpawn agents: ux-reviewer -> typescript-reviewer -> code-reviewer.",
+        "id": "ap-d164205d",
+        "title": "[P18.2] Auth UX: login hint chỉ hiển thị đúng khi còn dùng default password",
+        "body": "Màn login hiện luôn hiển thị 'Default password: 123456. Change it after login.' ngay cả khi password đã đổi, gây hiểu nhầm. Dùng auth status hiện có để chỉ render warning này khi backend báo is_default_password=true; nếu password đã đổi thì ẩn hoàn toàn hoặc thay bằng copy trung tính không nêu mật khẩu. Cập nhật LoginScreen.tsx, client auth snapshot/status flow nếu cần, và test cho cả 2 trường hợp default/non-default. Verification: login smoke test xác nhận warning xuất hiện đúng khi default password còn hiệu lực và biến mất sau khi password custom đã được cấu hình. Spawn agents: typescript-reviewer → code-reviewer.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -133,15 +121,9 @@
           "urgent signals",
           "recently updated"
         ],
-        "labels": [
-          "autopilot",
-          "board",
-          "p17",
-          "ux",
-          "webui"
-        ],
-        "created_at": 1778554357.803732,
-        "updated_at": 1778554357.803732,
+        "labels": [],
+        "created_at": 1778640762.692862,
+        "updated_at": 1778640762.692862,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -162,9 +144,9 @@
         }
       },
       {
-        "id": "ap-1fbf1193",
-        "title": "[P17.6] Shell UX: Reduce sidebar status noise and standardize navigation icons",
-        "body": "Observed from live WebUI audit: Sidebar mixes navigation, settings, system status, jobs, cron, docs, and emoji icons in one dense column. It works, but it reads as debug/admin UI and consumes too much attention.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Replace emoji navigation icons with a consistent icon system. If no icon dependency exists, either add lucide-react intentionally or create a small local icon wrapper consistent with the project style.\n3. Split sidebar into zones: project switcher, primary nav, settings nav, compact status summary.\n4. Move verbose System Status, Jobs, and Cron details behind collapsible panels or a status drawer; keep only high-signal badges visible by default.\n5. Preserve mobile drawer behavior and existing collapsed settings/status preferences.\n6. Add tooltips/aria labels for icon-only or compact controls.\n\nVerification:\n- Sidebar tests for nav labels, active route, collapsed sections, mobile drawer.\n- Manual screenshots desktop and mobile confirm no loss of critical status information.\n\nSpawn agents: a11y-architect -> typescript-reviewer -> code-reviewer.",
+        "id": "ap-4c258a88",
+        "title": "[P18.4] Projects UX: stale registry warning, cleanup preview, và default focus vào project hữu ích",
+        "body": "Walkthrough cho thấy registry có thể phình lớn với hundreds of Missing/Temp/Test entries, khiến người dùng khó thấy project thật. Nâng ProjectsPage để: (1) hiển thị banner tóm tắt khi stale/temp count cao, (2) nút Cleanup mở preview số item sẽ loại bỏ trước khi xác nhận, (3) filter mặc định ưu tiên Active/Existing hoặc ghi nhớ lựa chọn gần nhất, (4) copy rõ rằng cleanup không đụng project directory thật nếu chỉ dọn registry record. Reuse endpoint cleanup hiện có nếu đã có; nếu chưa đủ dữ liệu preview thì bổ sung endpoint dry-run/lightweight count. Verification: tests cho preview, confirm, cancel, và default filter; manual walkthrough với dataset có missing/temp entries. Spawn agents: planner → python-reviewer → typescript-reviewer → code-reviewer.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -175,15 +157,9 @@
           "urgent signals",
           "recently updated"
         ],
-        "labels": [
-          "navigation",
-          "p17",
-          "sidebar",
-          "visual-polish",
-          "webui"
-        ],
-        "created_at": 1778554357.984108,
-        "updated_at": 1778554357.984108,
+        "labels": [],
+        "created_at": 1778640762.801192,
+        "updated_at": 1778640762.801192,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -204,9 +180,9 @@
         }
       },
       {
-        "id": "ap-b6f3ecdb",
-        "title": "[P17.7] Settings UX: Add high-value filters for Providers, Models, and Agents",
-        "body": "Observed from live WebUI audit: Providers/Models/Agents pages contain useful data, but large lists are hard to operate. Provider page has 11 providers, Models has 59 models, Agents has 55 agents.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Providers: add filter chips Active, Configured, Not configured, Custom/router; preserve Verify all.\n3. Models: add provider filter, type filter built-in/custom, default-only filter, and capability/context search.\n4. Agents: add filters custom/built-in, model assigned/unassigned, permission mode, tools count; add search by name/description/source path.\n5. Keep filters client-side unless backend already supports query params.\n6. Empty filtered states should explain how to clear filters.\n\nVerification:\n- ProviderSettingsPage, ModelsSettingsPage, AgentsSettingsPage tests for filters/search.\n- Manual check with current localhost data: can quickly isolate active provider, custom router models, custom agents.\n\nSpawn agents: typescript-reviewer -> code-reviewer.",
+        "id": "ap-2777012e",
+        "title": "[P18.3] UI Semantics: chuẩn hóa màu và nhãn auth/runtime status trong shell + Control Center",
+        "body": "Status chip 'Access configured' đang dùng tone dễ bị hiểu như cảnh báo, trong khi nghĩa thực tế không nhất quán giữa sidebar và Control Center. Xây bảng semantic rõ cho auth/runtime state: configured, authenticated/ok, needs_setup, error; map từng state sang label + color nhất quán. Áp dụng cho Sidebar.tsx, Header nếu có badge liên quan, SettingsControlPage.tsx và Security settings. Không chỉ đổi màu; phải đổi copy để người dùng hiểu sự khác nhau giữa 'credentials saved' và 'usable right now'. Verification: snapshot/unit tests cover each semantic state; visual QA desktop cho sidebar/control center. Spawn agents: planner → typescript-reviewer → a11y-architect → code-reviewer.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -217,15 +193,9 @@
           "urgent signals",
           "recently updated"
         ],
-        "labels": [
-          "filters",
-          "p17",
-          "settings",
-          "ux",
-          "webui"
-        ],
-        "created_at": 1778554358.139193,
-        "updated_at": 1778554358.139193,
+        "labels": [],
+        "created_at": 1778640762.906451,
+        "updated_at": 1778640762.906451,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -246,9 +216,9 @@
         }
       },
       {
-        "id": "ap-a78c6a0f",
-        "title": "[P17.8] E2E: Visual regression smoke for WebUI audit findings",
-        "body": "Create regression coverage for the UI issues found during the 2026-05-12 live audit so they do not return.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Extend frontend/webui/e2e/webui.spec.ts or add a focused audit spec.\n3. Cover: header model dropdown non-empty when /api/models has active model group; mobile header has no horizontal overflow; Projects default hides temp-like pytest projects; Chat empty state appears; Autopilot attention-first filters render.\n4. Prefer route stubbing/fixtures for deterministic tests instead of relying on local user data.\n5. Save screenshots only when Playwright config already supports them; avoid committing generated screenshots unless project pattern requires it.\n\nVerification:\n- cd frontend/webui && npm run test:e2e passes or document exact blocker.\n- Existing unit/type tests still pass if touched.\n\nSpawn agents: e2e-runner -> code-reviewer.",
+        "id": "ap-93988944",
+        "title": "[P18.5] Autopilot UX: de-emphasize Completed/Terminal history để board active dễ scan",
+        "body": "Autopilot board hiện có thể chứa hơn 100 terminal cards, làm active work bị chìm. Giữ phân nhóm Completed/Terminal nhưng mặc định chỉ hiển thị recent N cards hoặc section collapsed; có nút Show more/View archive rõ ràng. Counts tổng vẫn phải chính xác. Không được làm mất khả năng truy cập card terminal cũ. Verification: tests cho collapsed default, expand/show more, count accuracy, và filter All/Terminal. Spawn agents: planner → typescript-reviewer → code-reviewer.",
         "status": "queued",
         "source_kind": "manual_idea",
         "source_ref": "",
@@ -259,15 +229,117 @@
           "urgent signals",
           "recently updated"
         ],
-        "labels": [
-          "e2e",
-          "p17",
-          "playwright",
-          "regression",
-          "webui"
+        "labels": [],
+        "created_at": 1778640781.195755,
+        "updated_at": 1778640781.195755,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-3b33cdcb",
+        "title": "[P18.8] UX Polish: full-path reveal/copy cho CWD và config locations trong control surfaces",
+        "body": "Control Center Live Status đang truncate CWD khá sớm; các path như project cwd, config directory, source file rất quan trọng với power user. Thêm pattern thống nhất cho long path: monospace truncation có tooltip/full reveal, nút copy rõ, và wrap hợp lý trên viewport hẹp. Áp dụng trước cho Control Center CWD, Security config directory, và các path xuất hiện trong Projects/Agents nếu component chung dùng được. Verification: component tests cho copy action và accessible label; visual QA desktop/mobile tránh overflow. Spawn agents: typescript-reviewer → a11y-architect → code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
         ],
-        "created_at": 1778554358.319424,
-        "updated_at": 1778554358.319424,
+        "labels": [],
+        "created_at": 1778640781.2284422,
+        "updated_at": 1778640781.2284422,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-289826d1",
+        "title": "[P18.6] Agents UX: compact mode, pinned operational agents, và linkage với autopilot policy",
+        "body": "Trang Agents đang mạnh nhưng khó scan khi có hàng chục agent. Thêm view mode compact/table ngoài card view, pin nhóm operational agents quan trọng (worker, reviewer, architect, verification hoặc policy-selected agents), và hiển thị badge 'Used by Autopilot' khi agent được policy/reference hiện tại sử dụng. Nếu policy map đang rải rác thì tạo helper/selectors read-only để UI tổng hợp. Verification: tests cover view toggle, pinned group, policy linkage badge, search/filter vẫn hoạt động. Spawn agents: planner → python-reviewer nếu cần helper backend → typescript-reviewer → code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778640781.3005571,
+        "updated_at": 1778640781.3005571,
+        "metadata": {
+          "last_note": "",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": []
+        }
+      },
+      {
+        "id": "ap-91f2de4c",
+        "title": "[P18.7] Models UX: active-first catalog, relation badges, và collapse provider không active",
+        "body": "Trang Models quá dài khi có nhiều provider/router. Sắp xếp lại theo hướng active-first: active provider/router mở mặc định và đứng trên cùng; provider không active collapsed mặc định; model row có relation badges như Default, Active profile, Used by agent nếu dữ liệu sẵn có. Search vẫn phải mở/đưa tới section phù hợp khi có match, không được giấu kết quả trong accordion đang collapsed. Verification: tests cho active provider ordering, default collapse, search auto-reveal, và badge rendering. Spawn agents: planner → typescript-reviewer → code-reviewer.",
+        "status": "queued",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [],
+        "created_at": 1778640781.3262541,
+        "updated_at": 1778640781.3262541,
         "metadata": {
           "last_note": "",
           "url": "",
@@ -6236,6 +6308,447 @@
         }
       },
       {
+        "id": "ap-755d6eae",
+        "title": "[P17.4] Projects UX: Hide stale pytest/temp projects and add cleanup action",
+        "body": "Observed from live WebUI audit: Projects page shows 194 projects, mostly /private/.../pytest... temp paths from tests. This makes real project switching noisy and risky.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Add backend project metadata flags: exists, is_temp_like, is_worktree_like, last_seen/created_at if available.\n3. Frontend default view should prioritize active, existing, user-created projects and hide temp-like pytest/private test directories behind a filter.\n4. Add filters: All, Active, Existing, Missing, Temp/Test, Worktrees.\n5. Add a safe cleanup action for stale missing/temp projects, with explicit confirmation and count preview.\n6. Never delete project directories from disk; cleanup only unregisters project records.\n\nVerification:\n- Backend tests for metadata classification and cleanup not deleting filesystem directories.\n- ProjectsPage tests for default hidden temp projects, filter visibility, cleanup confirmation.\n- Manual check: real projects remain visible; pytest temp projects are hidden by default.\n\nSpawn agents: python-reviewer -> typescript-reviewer -> code-reviewer.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [
+          "cleanup",
+          "p17",
+          "projects",
+          "ux",
+          "webui"
+        ],
+        "created_at": 1778554357.6511302,
+        "updated_at": 1778570550.785182,
+        "metadata": {
+          "last_note": "PR #160 merged manually after CI passed; cleaned stale local worktree/branch conflict.",
+          "url": "",
+          "execution_model": "oclaude-coder",
+          "assistant_summary_preview": "I'll analyze the critical issues and make the minimal fixes. Let me first examine the relevant files. Let me see more of the ProjectsPage to understand the `handleCleanupPreview` function: Let me run the verification commands to see the current state: All 4 critical issues are already fixed. Let ...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 12,
+          "max_attempts": 50,
+          "linked_pr_number": 160,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/160",
+          "head_branch": "autopilot/ap-755d6eae",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "Python tests (3.10)=FAILURE; Python tests (3.11)=FAILURE; Python quality=FAILURE",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "failed",
+              "returncode": 1
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-05a93e73",
+        "title": "[P17.5] Autopilot UX: Attention-first board and collapsed terminal history",
+        "body": "Observed from live WebUI audit: Autopilot has 179 total cards, active columns are empty, and terminal/completed history dominates the body text. Operators need immediate visibility into items that need action.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Add an attention strip above the board: Failed/Paused, Waiting CI, Review, Running, Queue counts.\n3. Default board should show non-terminal/attention states first; completed/merged cards are collapsed behind a Terminal history section.\n4. Add quick filters: Active, Needs attention, Waiting, Terminal, All.\n5. Empty active columns should suggest next action: Run Next, New idea, or open terminal history.\n6. Preserve existing card actions and policy tab.\n\nVerification:\n- PipelinePage tests cover status grouping, collapsed terminal section, filter behavior.\n- Playwright check with mixed fixture cards confirms failed/waiting cards appear above terminal cards.\n\nSpawn agents: ux-reviewer -> typescript-reviewer -> code-reviewer.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [
+          "autopilot",
+          "board",
+          "p17",
+          "ux",
+          "webui"
+        ],
+        "created_at": 1778554357.803732,
+        "updated_at": 1778573974.907905,
+        "metadata": {
+          "last_note": "PR #161 merged automatically",
+          "url": "",
+          "execution_model": "oclaude-coder",
+          "assistant_summary_preview": "Let me read the full PipelinePage.tsx to understand the current structure:Now I have a thorough understanding of the code. Let me plan and implement the changes: **Plan:** 1. Add `BoardFilter` type and `TERMINAL_STATUSES` constant 2. Add attention strip with counts above the board 3. Add quick fi...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 4,
+          "max_attempts": 50,
+          "linked_pr_number": 161,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/161",
+          "head_branch": "autopilot/ap-05a93e73",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-1fbf1193",
+        "title": "[P17.6] Shell UX: Reduce sidebar status noise and standardize navigation icons",
+        "body": "Observed from live WebUI audit: Sidebar mixes navigation, settings, system status, jobs, cron, docs, and emoji icons in one dense column. It works, but it reads as debug/admin UI and consumes too much attention.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Replace emoji navigation icons with a consistent icon system. If no icon dependency exists, either add lucide-react intentionally or create a small local icon wrapper consistent with the project style.\n3. Split sidebar into zones: project switcher, primary nav, settings nav, compact status summary.\n4. Move verbose System Status, Jobs, and Cron details behind collapsible panels or a status drawer; keep only high-signal badges visible by default.\n5. Preserve mobile drawer behavior and existing collapsed settings/status preferences.\n6. Add tooltips/aria labels for icon-only or compact controls.\n\nVerification:\n- Sidebar tests for nav labels, active route, collapsed sections, mobile drawer.\n- Manual screenshots desktop and mobile confirm no loss of critical status information.\n\nSpawn agents: a11y-architect -> typescript-reviewer -> code-reviewer.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [
+          "navigation",
+          "p17",
+          "sidebar",
+          "visual-polish",
+          "webui"
+        ],
+        "created_at": 1778554357.984108,
+        "updated_at": 1778576256.507977,
+        "metadata": {
+          "last_note": "PR #162 merged automatically",
+          "url": "",
+          "execution_model": "oclaude-coder",
+          "assistant_summary_preview": "I'll analyze the task and explore the codebase to understand the current sidebar implementation before making changes. Quick update: I found the sidebar implementation and can implement the UI changes, but GitNexus MCP tools are not available in this environment (`no MCP resources`), so I can’t r...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 50,
+          "linked_pr_number": 162,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/162",
+          "head_branch": "autopilot/ap-1fbf1193",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-b6f3ecdb",
+        "title": "[P17.7] Settings UX: Add high-value filters for Providers, Models, and Agents",
+        "body": "Observed from live WebUI audit: Providers/Models/Agents pages contain useful data, but large lists are hard to operate. Provider page has 11 providers, Models has 59 models, Agents has 55 agents.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Providers: add filter chips Active, Configured, Not configured, Custom/router; preserve Verify all.\n3. Models: add provider filter, type filter built-in/custom, default-only filter, and capability/context search.\n4. Agents: add filters custom/built-in, model assigned/unassigned, permission mode, tools count; add search by name/description/source path.\n5. Keep filters client-side unless backend already supports query params.\n6. Empty filtered states should explain how to clear filters.\n\nVerification:\n- ProviderSettingsPage, ModelsSettingsPage, AgentsSettingsPage tests for filters/search.\n- Manual check with current localhost data: can quickly isolate active provider, custom router models, custom agents.\n\nSpawn agents: typescript-reviewer -> code-reviewer.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [
+          "filters",
+          "p17",
+          "settings",
+          "ux",
+          "webui"
+        ],
+        "created_at": 1778554358.139193,
+        "updated_at": 1778578749.841689,
+        "metadata": {
+          "last_note": "PR #163 merged automatically",
+          "url": "",
+          "execution_model": "oclaude-coder",
+          "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase before making any changes. Let me read the rest of the AgentsSettingsPage and also check for API client types: I can proceed, but one constraint: GitNexus MCP tools are not available in this session (`list_mcp_resources` ...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 50,
+          "linked_pr_number": 163,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/163",
+          "head_branch": "autopilot/ap-b6f3ecdb",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-a78c6a0f",
+        "title": "[P17.8] E2E: Visual regression smoke for WebUI audit findings",
+        "body": "Create regression coverage for the UI issues found during the 2026-05-12 live audit so they do not return.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Extend frontend/webui/e2e/webui.spec.ts or add a focused audit spec.\n3. Cover: header model dropdown non-empty when /api/models has active model group; mobile header has no horizontal overflow; Projects default hides temp-like pytest projects; Chat empty state appears; Autopilot attention-first filters render.\n4. Prefer route stubbing/fixtures for deterministic tests instead of relying on local user data.\n5. Save screenshots only when Playwright config already supports them; avoid committing generated screenshots unless project pattern requires it.\n\nVerification:\n- cd frontend/webui && npm run test:e2e passes or document exact blocker.\n- Existing unit/type tests still pass if touched.\n\nSpawn agents: e2e-runner -> code-reviewer.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [
+          "e2e",
+          "p17",
+          "playwright",
+          "regression",
+          "webui"
+        ],
+        "created_at": 1778554358.319424,
+        "updated_at": 1778588007.479746,
+        "metadata": {
+          "last_note": "autopilot managed PR #164 CI passed, merged automatically",
+          "url": "",
+          "execution_model": "oclaude-coder",
+          "assistant_summary_preview": "The dialog heading in the actual component is `Delete Project` (not `Delete Project?`). The test uses `\"text=Delete Project?\"` with a question mark that doesn't exist. Let me also check what the delete button aria-label format is in the actual component.Now I understand the root causes: 1. **Dele...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 4,
+          "max_attempts": 50,
+          "linked_pr_number": 164,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/164",
+          "head_branch": "autopilot/ap-a78c6a0f",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "failed",
+              "returncode": 1
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-9485494a",
+        "title": "[P17.9] Auth: Password login with persisted local access and refresh tokens",
+        "body": "User request: replace the current startup-issued WebUI token flow with a simple local password login for a personal-machine service. No account management is required.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for the target symbol and report direct callers, affected processes, and risk.\n2. Add a password-only login flow for the WebUI. First-run/default password is `123456`; store only a password hash, never plaintext.\n3. Persist Harness-wide auth/config data under `~/.harness/` as the canonical user config directory. Include a narrow migration/compatibility check for existing `~/.openharness` config where needed, but do not keep adding new auth state there.\n4. Add backend endpoints for password login and token refresh. Successful login returns both an access token and refresh token.\n5. Existing authenticated API calls should accept the access token. When the app restarts, the browser should reuse the existing token when still valid, refresh it when possible, or show the password login screen when tokens are expired/invalid.\n6. Refresh tokens must be revocable/rotatable enough for a single-user local service: avoid storing raw refresh tokens, rotate on refresh if practical, and clear persisted client tokens on logout/auth failure.\n7. Keep the UI intentionally simple: password field, submit, error state, optional default-password warning/change-password affordance. Do not add users, roles, invitations, or account administration.\n8. Update tests for backend auth, token expiry/refresh, frontend login state, and restart/reuse behavior. Include a smoke path proving `?token=` bootstrap is no longer the primary required login path.\n\nAcceptance criteria:\n- Fresh install starts with password `123456` and allows login.\n- User can change the password after login, and the new password is stored under `~/.harness/` using a secure hash.\n- Login returns access and refresh tokens; access token protects existing `/api/*` routes.\n- After WebUI restart, an unexpired token works without re-login; expired access token can be refreshed; expired/invalid refresh token returns to password login.\n- No multi-account UI or data model is introduced.\n- `gitnexus_detect_changes()` is run before commit; expected impact is limited to WebUI auth/config/client flows and tests.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [
+          "area:auth",
+          "area:webui",
+          "kind:feature",
+          "priority:p1",
+          "security"
+        ],
+        "created_at": 1778562507.349563,
+        "updated_at": 1778634881.194205,
+        "metadata": {
+          "last_note": "Manually merged P17.9 into main at f88a496 after local verification passed.",
+          "url": "",
+          "execution_model": "oclaude-coder",
+          "assistant_summary_preview": "I'll analyze this task and implement a password-based login flow for the WebUI. Let me start by exploring the codebase structure to understand the current auth implementation. I found an in-progress auth store, but I need to inspect how it's wired through the backend and frontend before changing ...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 50,
+          "linked_pr_number": 165,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/165",
+          "head_branch": "autopilot/ap-9485494a",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "Manually merged into origin/main at f88a496",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "failed",
+              "returncode": 1
+            }
+          ]
+        }
+      },
+      {
+        "id": "ap-73e22f7f",
+        "title": "[P17.10] Shell UX: Redesign Settings sidebar into Control Center",
+        "body": "User request: improve the Settings entry and sidebar structure so MyHarness feels like a local control center instead of a flat collection of mixed settings/status links.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for the target symbol and report direct callers, affected processes, and risk.\n2. Keep the global sidebar focused on primary work areas: Chat, Autopilot, Projects, History, Settings/Control.\n3. Redesign Settings as a Control Center with clear internal sections: Workspace, Models, Providers, Agents, Automation, Security, Appearance.\n4. Add compact operational status near the Settings/Control entry or at the top of the Control Center: active project/cwd, active model/provider, Autopilot/Cron running state, auth/session state once password login exists.\n5. Move Automation/Cron out of generic settings treatment. It should be easy to see last run, next run, target cwd, scheduler running/stopped, and start/stop/apply actions.\n6. Reserve Security for password/session/token controls from the password-login work: change password, logout, token/session status, config path under ~/.harness/.\n7. Standardize sidebar icons with the app icon library, avoiding emoji/status clutter in navigation labels.\n8. Ensure the layout works on desktop and mobile without clipping, overflow, or nested card-heavy settings screens.\n\nAcceptance criteria:\n- Sidebar has a calmer primary navigation and does not mix unrelated status blocks with navigation links.\n- Settings opens a Control Center with grouped settings navigation and clear section ownership.\n- Automation/Cron status is visible enough that a stopped scheduler cannot look configured and healthy.\n- Security/Auth has a dedicated place for the password-login feature.\n- Mobile sidebar/settings layout remains usable at narrow widths.\n- Existing settings pages remain reachable or are deliberately migrated into the new grouping.\n- Add/update frontend tests and at least one visual smoke check for sidebar/settings navigation.\n- Run gitnexus_detect_changes() before commit; expected impact is limited to WebUI shell/settings components and tests.",
+        "status": "merged",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [
+          "area:settings",
+          "area:shell",
+          "area:webui",
+          "kind:ux",
+          "priority:p1"
+        ],
+        "created_at": 1778563238.633277,
+        "updated_at": 1778639129.5347788,
+        "metadata": {
+          "last_note": "PR #168 merged automatically",
+          "url": "",
+          "execution_model": "oclaude-coder",
+          "assistant_summary_preview": "I'll tackle this task systematically. Let me first explore the codebase to understand the current settings/sidebar structure. I’m locating the relevant shell/settings components and will run the required impact checks before editing any symbols. Now let me read the remaining relevant pages and te...",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 1,
+          "max_attempts": 50,
+          "linked_pr_number": 168,
+          "linked_pr_url": "https://github.com/hodtien/mharness/pull/168",
+          "head_branch": "autopilot/ap-73e22f7f",
+          "last_ci_conclusion": "success",
+          "last_ci_summary": "All reported remote checks passed.",
+          "last_failure_stage": "",
+          "last_failure_summary": "",
+          "verification_steps": [
+            {
+              "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "uv run ruff check src tests scripts",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+              "status": "success",
+              "returncode": 0
+            },
+            {
+              "command": "agent:code-reviewer (diff vs main)",
+              "status": "skipped",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      {
         "id": "ap-757c4465",
         "title": "[P2.1] Backend: GET /api/modes — trả về current modes",
         "body": "Tạo src/openharness/webui/server/routes/modes.py. GET /api/modes đọc AppState từ active session host (hoặc từ settings nếu chưa có session): permission_mode, fast_mode, vim_enabled, effort, passes, output_style, theme. Trả JSON object với tất cả các field.",
@@ -9126,6 +9639,49 @@
             }
           ]
         }
+      },
+      {
+        "id": "ap-29230e68",
+        "title": "[P17.11] Settings UX: Model catalog and Agent profile control center",
+        "body": "User request: clarify how MyHarness should manage Models versus Agents so users configure model capability once, then choose task-focused agents instead of juggling raw model choices everywhere.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for the target symbol and report direct callers, affected processes, and risk.\n2. Split the concepts clearly in the UI and data flow: Model = provider/model capability; Agent = task profile that uses a model plus prompt, tools, permission, effort, and routing policy.\n3. Build or redesign the Models page as a catalog grouped by provider. Show provider, model id, context window, streaming/tool support where known, key/config status, and probe/test result.\n4. Add high-value filters for Models: provider, configured/unconfigured, healthy/failing, capability/use-case.\n5. Build or redesign the Agents page as profile management: name, purpose, selected model, tools enabled, permission mode, effort/reasoning, prompt/instructions, and status warnings if the selected model/provider is broken.\n6. Add default routing by use case: Chat, Code, Review, Autopilot Worker, Planning, Fast/cheap tasks. Users should normally pick an Agent; the header model picker should behave as a temporary override.\n7. Include sensible default agents: Default Chat Agent, Code Agent, Review Agent, Autopilot Agent, Fast Agent.\n8. Add test/probe affordances so a user can verify a model/provider and run a small agent smoke test without leaving settings.\n\nAcceptance criteria:\n- Users can understand the difference between Models and Agents from the control surfaces without reading docs.\n- Existing provider/model configuration still works, but broken provider/model states are surfaced clearly.\n- Agent profiles can select models and show warnings when their model/provider is unavailable.\n- Default routing exists for Chat, Code, Review, Autopilot, Planning, and Fast tasks.\n- Header model selection no longer has to be the main persistent configuration path.\n- Add/update frontend tests for model filtering, agent profile display, routing defaults, and broken-model warnings.\n- Run gitnexus_detect_changes() before commit; expected impact is limited to WebUI model/provider/agent settings flows and tests.",
+        "status": "failed",
+        "source_kind": "manual_idea",
+        "source_ref": "",
+        "score": 120,
+        "score_reasons": [
+          "source=manual_idea",
+          "direct user-driven input",
+          "urgent signals",
+          "recently updated"
+        ],
+        "labels": [
+          "area:agents",
+          "area:models",
+          "area:settings",
+          "area:webui",
+          "kind:ux",
+          "priority:p1"
+        ],
+        "created_at": 1778563238.697985,
+        "updated_at": 1778640974.414197,
+        "metadata": {
+          "last_note": "preflight fatal failure: model 'cx/gpt-5.5' not registered in settings.agent_models or allowed_models",
+          "url": "",
+          "execution_model": "",
+          "assistant_summary_preview": "",
+          "human_gate_pending": false,
+          "verification_failed": false,
+          "attempt_count": 0,
+          "max_attempts": 0,
+          "linked_pr_number": null,
+          "linked_pr_url": "",
+          "head_branch": "",
+          "last_ci_conclusion": "",
+          "last_ci_summary": "",
+          "last_failure_stage": "preflight_fatal",
+          "last_failure_summary": "model 'cx/gpt-5.5' not registered in settings.agent_models or allowed_models",
+          "verification_steps": []
+        }
       }
     ],
     "rejected": [
@@ -10044,9 +10600,9 @@
   },
   "cards": [
     {
-      "id": "ap-755d6eae",
-      "title": "[P17.4] Projects UX: Hide stale pytest/temp projects and add cleanup action",
-      "body": "Observed from live WebUI audit: Projects page shows 194 projects, mostly /private/.../pytest... temp paths from tests. This makes real project switching noisy and risky.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Add backend project metadata flags: exists, is_temp_like, is_worktree_like, last_seen/created_at if available.\n3. Frontend default view should prioritize active, existing, user-created projects and hide temp-like pytest/private test directories behind a filter.\n4. Add filters: All, Active, Existing, Missing, Temp/Test, Worktrees.\n5. Add a safe cleanup action for stale missing/temp projects, with explicit confirmation and count preview.\n6. Never delete project directories from disk; cleanup only unregisters project records.\n\nVerification:\n- Backend tests for metadata classification and cleanup not deleting filesystem directories.\n- ProjectsPage tests for default hidden temp projects, filter visibility, cleanup confirmation.\n- Manual check: real projects remain visible; pytest temp projects are hidden by default.\n\nSpawn agents: python-reviewer -> typescript-reviewer -> code-reviewer.",
+      "id": "ap-19661243",
+      "title": "[P18.1] UX/State: thống nhất truth model cho Cron, Scheduler, và Autopilot Scheduling",
+      "body": "Hiện tại WebUI đang hiển thị mâu thuẫn: Sidebar có thể báo 'Cron 2/2 enabled', Control Center báo 'Scheduler running', trong khi Settings/Schedule lại báo 'Status Disabled'. Cần thiết kế lại contract dữ liệu và copy để tách rõ 3 khái niệm: (1) scheduler process/runtime có đang chạy hay không, (2) autopilot scheduling feature có enabled hay disabled, (3) cron entries đã được cài/đang enabled bao nhiêu. Cập nhật API payload nếu cần, rồi cập nhật Sidebar.tsx, SettingsControlPage.tsx, Cron/Schedule settings page và test để mọi nơi dùng cùng vocabulary, cùng màu semantic, không còn trạng thái tự mâu thuẫn. Verification: UI tests cover 3 state combinations chính; manual walkthrough trên /settings và sidebar cho thấy thông tin khớp nhau. Spawn agents: planner → python-reviewer → typescript-reviewer → code-reviewer.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
@@ -10057,15 +10613,9 @@
         "urgent signals",
         "recently updated"
       ],
-      "labels": [
-        "cleanup",
-        "p17",
-        "projects",
-        "ux",
-        "webui"
-      ],
-      "created_at": 1778554357.6511302,
-      "updated_at": 1778554357.6511302,
+      "labels": [],
+      "created_at": 1778640762.590828,
+      "updated_at": 1778640762.590828,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -10086,9 +10636,9 @@
       }
     },
     {
-      "id": "ap-05a93e73",
-      "title": "[P17.5] Autopilot UX: Attention-first board and collapsed terminal history",
-      "body": "Observed from live WebUI audit: Autopilot has 179 total cards, active columns are empty, and terminal/completed history dominates the body text. Operators need immediate visibility into items that need action.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Add an attention strip above the board: Failed/Paused, Waiting CI, Review, Running, Queue counts.\n3. Default board should show non-terminal/attention states first; completed/merged cards are collapsed behind a Terminal history section.\n4. Add quick filters: Active, Needs attention, Waiting, Terminal, All.\n5. Empty active columns should suggest next action: Run Next, New idea, or open terminal history.\n6. Preserve existing card actions and policy tab.\n\nVerification:\n- PipelinePage tests cover status grouping, collapsed terminal section, filter behavior.\n- Playwright check with mixed fixture cards confirms failed/waiting cards appear above terminal cards.\n\nSpawn agents: ux-reviewer -> typescript-reviewer -> code-reviewer.",
+      "id": "ap-d164205d",
+      "title": "[P18.2] Auth UX: login hint chỉ hiển thị đúng khi còn dùng default password",
+      "body": "Màn login hiện luôn hiển thị 'Default password: 123456. Change it after login.' ngay cả khi password đã đổi, gây hiểu nhầm. Dùng auth status hiện có để chỉ render warning này khi backend báo is_default_password=true; nếu password đã đổi thì ẩn hoàn toàn hoặc thay bằng copy trung tính không nêu mật khẩu. Cập nhật LoginScreen.tsx, client auth snapshot/status flow nếu cần, và test cho cả 2 trường hợp default/non-default. Verification: login smoke test xác nhận warning xuất hiện đúng khi default password còn hiệu lực và biến mất sau khi password custom đã được cấu hình. Spawn agents: typescript-reviewer → code-reviewer.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
@@ -10099,15 +10649,9 @@
         "urgent signals",
         "recently updated"
       ],
-      "labels": [
-        "autopilot",
-        "board",
-        "p17",
-        "ux",
-        "webui"
-      ],
-      "created_at": 1778554357.803732,
-      "updated_at": 1778554357.803732,
+      "labels": [],
+      "created_at": 1778640762.692862,
+      "updated_at": 1778640762.692862,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -10128,9 +10672,9 @@
       }
     },
     {
-      "id": "ap-1fbf1193",
-      "title": "[P17.6] Shell UX: Reduce sidebar status noise and standardize navigation icons",
-      "body": "Observed from live WebUI audit: Sidebar mixes navigation, settings, system status, jobs, cron, docs, and emoji icons in one dense column. It works, but it reads as debug/admin UI and consumes too much attention.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Replace emoji navigation icons with a consistent icon system. If no icon dependency exists, either add lucide-react intentionally or create a small local icon wrapper consistent with the project style.\n3. Split sidebar into zones: project switcher, primary nav, settings nav, compact status summary.\n4. Move verbose System Status, Jobs, and Cron details behind collapsible panels or a status drawer; keep only high-signal badges visible by default.\n5. Preserve mobile drawer behavior and existing collapsed settings/status preferences.\n6. Add tooltips/aria labels for icon-only or compact controls.\n\nVerification:\n- Sidebar tests for nav labels, active route, collapsed sections, mobile drawer.\n- Manual screenshots desktop and mobile confirm no loss of critical status information.\n\nSpawn agents: a11y-architect -> typescript-reviewer -> code-reviewer.",
+      "id": "ap-4c258a88",
+      "title": "[P18.4] Projects UX: stale registry warning, cleanup preview, và default focus vào project hữu ích",
+      "body": "Walkthrough cho thấy registry có thể phình lớn với hundreds of Missing/Temp/Test entries, khiến người dùng khó thấy project thật. Nâng ProjectsPage để: (1) hiển thị banner tóm tắt khi stale/temp count cao, (2) nút Cleanup mở preview số item sẽ loại bỏ trước khi xác nhận, (3) filter mặc định ưu tiên Active/Existing hoặc ghi nhớ lựa chọn gần nhất, (4) copy rõ rằng cleanup không đụng project directory thật nếu chỉ dọn registry record. Reuse endpoint cleanup hiện có nếu đã có; nếu chưa đủ dữ liệu preview thì bổ sung endpoint dry-run/lightweight count. Verification: tests cho preview, confirm, cancel, và default filter; manual walkthrough với dataset có missing/temp entries. Spawn agents: planner → python-reviewer → typescript-reviewer → code-reviewer.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
@@ -10141,15 +10685,9 @@
         "urgent signals",
         "recently updated"
       ],
-      "labels": [
-        "navigation",
-        "p17",
-        "sidebar",
-        "visual-polish",
-        "webui"
-      ],
-      "created_at": 1778554357.984108,
-      "updated_at": 1778554357.984108,
+      "labels": [],
+      "created_at": 1778640762.801192,
+      "updated_at": 1778640762.801192,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -10170,9 +10708,9 @@
       }
     },
     {
-      "id": "ap-b6f3ecdb",
-      "title": "[P17.7] Settings UX: Add high-value filters for Providers, Models, and Agents",
-      "body": "Observed from live WebUI audit: Providers/Models/Agents pages contain useful data, but large lists are hard to operate. Provider page has 11 providers, Models has 59 models, Agents has 55 agents.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Providers: add filter chips Active, Configured, Not configured, Custom/router; preserve Verify all.\n3. Models: add provider filter, type filter built-in/custom, default-only filter, and capability/context search.\n4. Agents: add filters custom/built-in, model assigned/unassigned, permission mode, tools count; add search by name/description/source path.\n5. Keep filters client-side unless backend already supports query params.\n6. Empty filtered states should explain how to clear filters.\n\nVerification:\n- ProviderSettingsPage, ModelsSettingsPage, AgentsSettingsPage tests for filters/search.\n- Manual check with current localhost data: can quickly isolate active provider, custom router models, custom agents.\n\nSpawn agents: typescript-reviewer -> code-reviewer.",
+      "id": "ap-2777012e",
+      "title": "[P18.3] UI Semantics: chuẩn hóa màu và nhãn auth/runtime status trong shell + Control Center",
+      "body": "Status chip 'Access configured' đang dùng tone dễ bị hiểu như cảnh báo, trong khi nghĩa thực tế không nhất quán giữa sidebar và Control Center. Xây bảng semantic rõ cho auth/runtime state: configured, authenticated/ok, needs_setup, error; map từng state sang label + color nhất quán. Áp dụng cho Sidebar.tsx, Header nếu có badge liên quan, SettingsControlPage.tsx và Security settings. Không chỉ đổi màu; phải đổi copy để người dùng hiểu sự khác nhau giữa 'credentials saved' và 'usable right now'. Verification: snapshot/unit tests cover each semantic state; visual QA desktop cho sidebar/control center. Spawn agents: planner → typescript-reviewer → a11y-architect → code-reviewer.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
@@ -10183,15 +10721,9 @@
         "urgent signals",
         "recently updated"
       ],
-      "labels": [
-        "filters",
-        "p17",
-        "settings",
-        "ux",
-        "webui"
-      ],
-      "created_at": 1778554358.139193,
-      "updated_at": 1778554358.139193,
+      "labels": [],
+      "created_at": 1778640762.906451,
+      "updated_at": 1778640762.906451,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -10212,9 +10744,9 @@
       }
     },
     {
-      "id": "ap-a78c6a0f",
-      "title": "[P17.8] E2E: Visual regression smoke for WebUI audit findings",
-      "body": "Create regression coverage for the UI issues found during the 2026-05-12 live audit so they do not return.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Extend frontend/webui/e2e/webui.spec.ts or add a focused audit spec.\n3. Cover: header model dropdown non-empty when /api/models has active model group; mobile header has no horizontal overflow; Projects default hides temp-like pytest projects; Chat empty state appears; Autopilot attention-first filters render.\n4. Prefer route stubbing/fixtures for deterministic tests instead of relying on local user data.\n5. Save screenshots only when Playwright config already supports them; avoid committing generated screenshots unless project pattern requires it.\n\nVerification:\n- cd frontend/webui && npm run test:e2e passes or document exact blocker.\n- Existing unit/type tests still pass if touched.\n\nSpawn agents: e2e-runner -> code-reviewer.",
+      "id": "ap-93988944",
+      "title": "[P18.5] Autopilot UX: de-emphasize Completed/Terminal history để board active dễ scan",
+      "body": "Autopilot board hiện có thể chứa hơn 100 terminal cards, làm active work bị chìm. Giữ phân nhóm Completed/Terminal nhưng mặc định chỉ hiển thị recent N cards hoặc section collapsed; có nút Show more/View archive rõ ràng. Counts tổng vẫn phải chính xác. Không được làm mất khả năng truy cập card terminal cũ. Verification: tests cho collapsed default, expand/show more, count accuracy, và filter All/Terminal. Spawn agents: planner → typescript-reviewer → code-reviewer.",
       "status": "queued",
       "source_kind": "manual_idea",
       "source_ref": "",
@@ -10225,15 +10757,117 @@
         "urgent signals",
         "recently updated"
       ],
-      "labels": [
-        "e2e",
-        "p17",
-        "playwright",
-        "regression",
-        "webui"
+      "labels": [],
+      "created_at": 1778640781.195755,
+      "updated_at": 1778640781.195755,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-3b33cdcb",
+      "title": "[P18.8] UX Polish: full-path reveal/copy cho CWD và config locations trong control surfaces",
+      "body": "Control Center Live Status đang truncate CWD khá sớm; các path như project cwd, config directory, source file rất quan trọng với power user. Thêm pattern thống nhất cho long path: monospace truncation có tooltip/full reveal, nút copy rõ, và wrap hợp lý trên viewport hẹp. Áp dụng trước cho Control Center CWD, Security config directory, và các path xuất hiện trong Projects/Agents nếu component chung dùng được. Verification: component tests cho copy action và accessible label; visual QA desktop/mobile tránh overflow. Spawn agents: typescript-reviewer → a11y-architect → code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
       ],
-      "created_at": 1778554358.319424,
-      "updated_at": 1778554358.319424,
+      "labels": [],
+      "created_at": 1778640781.2284422,
+      "updated_at": 1778640781.2284422,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-289826d1",
+      "title": "[P18.6] Agents UX: compact mode, pinned operational agents, và linkage với autopilot policy",
+      "body": "Trang Agents đang mạnh nhưng khó scan khi có hàng chục agent. Thêm view mode compact/table ngoài card view, pin nhóm operational agents quan trọng (worker, reviewer, architect, verification hoặc policy-selected agents), và hiển thị badge 'Used by Autopilot' khi agent được policy/reference hiện tại sử dụng. Nếu policy map đang rải rác thì tạo helper/selectors read-only để UI tổng hợp. Verification: tests cover view toggle, pinned group, policy linkage badge, search/filter vẫn hoạt động. Spawn agents: planner → python-reviewer nếu cần helper backend → typescript-reviewer → code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778640781.3005571,
+      "updated_at": 1778640781.3005571,
+      "metadata": {
+        "last_note": "",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": []
+      }
+    },
+    {
+      "id": "ap-91f2de4c",
+      "title": "[P18.7] Models UX: active-first catalog, relation badges, và collapse provider không active",
+      "body": "Trang Models quá dài khi có nhiều provider/router. Sắp xếp lại theo hướng active-first: active provider/router mở mặc định và đứng trên cùng; provider không active collapsed mặc định; model row có relation badges như Default, Active profile, Used by agent nếu dữ liệu sẵn có. Search vẫn phải mở/đưa tới section phù hợp khi có match, không được giấu kết quả trong accordion đang collapsed. Verification: tests cho active provider ordering, default collapse, search auto-reveal, và badge rendering. Spawn agents: planner → typescript-reviewer → code-reviewer.",
+      "status": "queued",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [],
+      "created_at": 1778640781.3262541,
+      "updated_at": 1778640781.3262541,
       "metadata": {
         "last_note": "",
         "url": "",
@@ -16191,6 +16825,447 @@
       }
     },
     {
+      "id": "ap-755d6eae",
+      "title": "[P17.4] Projects UX: Hide stale pytest/temp projects and add cleanup action",
+      "body": "Observed from live WebUI audit: Projects page shows 194 projects, mostly /private/.../pytest... temp paths from tests. This makes real project switching noisy and risky.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Add backend project metadata flags: exists, is_temp_like, is_worktree_like, last_seen/created_at if available.\n3. Frontend default view should prioritize active, existing, user-created projects and hide temp-like pytest/private test directories behind a filter.\n4. Add filters: All, Active, Existing, Missing, Temp/Test, Worktrees.\n5. Add a safe cleanup action for stale missing/temp projects, with explicit confirmation and count preview.\n6. Never delete project directories from disk; cleanup only unregisters project records.\n\nVerification:\n- Backend tests for metadata classification and cleanup not deleting filesystem directories.\n- ProjectsPage tests for default hidden temp projects, filter visibility, cleanup confirmation.\n- Manual check: real projects remain visible; pytest temp projects are hidden by default.\n\nSpawn agents: python-reviewer -> typescript-reviewer -> code-reviewer.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [
+        "cleanup",
+        "p17",
+        "projects",
+        "ux",
+        "webui"
+      ],
+      "created_at": 1778554357.6511302,
+      "updated_at": 1778570550.785182,
+      "metadata": {
+        "last_note": "PR #160 merged manually after CI passed; cleaned stale local worktree/branch conflict.",
+        "url": "",
+        "execution_model": "oclaude-coder",
+        "assistant_summary_preview": "I'll analyze the critical issues and make the minimal fixes. Let me first examine the relevant files. Let me see more of the ProjectsPage to understand the `handleCleanupPreview` function: Let me run the verification commands to see the current state: All 4 critical issues are already fixed. Let ...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 12,
+        "max_attempts": 50,
+        "linked_pr_number": 160,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/160",
+        "head_branch": "autopilot/ap-755d6eae",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "Python tests (3.10)=FAILURE; Python tests (3.11)=FAILURE; Python quality=FAILURE",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "failed",
+            "returncode": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-05a93e73",
+      "title": "[P17.5] Autopilot UX: Attention-first board and collapsed terminal history",
+      "body": "Observed from live WebUI audit: Autopilot has 179 total cards, active columns are empty, and terminal/completed history dominates the body text. Operators need immediate visibility into items that need action.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Add an attention strip above the board: Failed/Paused, Waiting CI, Review, Running, Queue counts.\n3. Default board should show non-terminal/attention states first; completed/merged cards are collapsed behind a Terminal history section.\n4. Add quick filters: Active, Needs attention, Waiting, Terminal, All.\n5. Empty active columns should suggest next action: Run Next, New idea, or open terminal history.\n6. Preserve existing card actions and policy tab.\n\nVerification:\n- PipelinePage tests cover status grouping, collapsed terminal section, filter behavior.\n- Playwright check with mixed fixture cards confirms failed/waiting cards appear above terminal cards.\n\nSpawn agents: ux-reviewer -> typescript-reviewer -> code-reviewer.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [
+        "autopilot",
+        "board",
+        "p17",
+        "ux",
+        "webui"
+      ],
+      "created_at": 1778554357.803732,
+      "updated_at": 1778573974.907905,
+      "metadata": {
+        "last_note": "PR #161 merged automatically",
+        "url": "",
+        "execution_model": "oclaude-coder",
+        "assistant_summary_preview": "Let me read the full PipelinePage.tsx to understand the current structure:Now I have a thorough understanding of the code. Let me plan and implement the changes: **Plan:** 1. Add `BoardFilter` type and `TERMINAL_STATUSES` constant 2. Add attention strip with counts above the board 3. Add quick fi...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 4,
+        "max_attempts": 50,
+        "linked_pr_number": 161,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/161",
+        "head_branch": "autopilot/ap-05a93e73",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-1fbf1193",
+      "title": "[P17.6] Shell UX: Reduce sidebar status noise and standardize navigation icons",
+      "body": "Observed from live WebUI audit: Sidebar mixes navigation, settings, system status, jobs, cron, docs, and emoji icons in one dense column. It works, but it reads as debug/admin UI and consumes too much attention.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Replace emoji navigation icons with a consistent icon system. If no icon dependency exists, either add lucide-react intentionally or create a small local icon wrapper consistent with the project style.\n3. Split sidebar into zones: project switcher, primary nav, settings nav, compact status summary.\n4. Move verbose System Status, Jobs, and Cron details behind collapsible panels or a status drawer; keep only high-signal badges visible by default.\n5. Preserve mobile drawer behavior and existing collapsed settings/status preferences.\n6. Add tooltips/aria labels for icon-only or compact controls.\n\nVerification:\n- Sidebar tests for nav labels, active route, collapsed sections, mobile drawer.\n- Manual screenshots desktop and mobile confirm no loss of critical status information.\n\nSpawn agents: a11y-architect -> typescript-reviewer -> code-reviewer.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [
+        "navigation",
+        "p17",
+        "sidebar",
+        "visual-polish",
+        "webui"
+      ],
+      "created_at": 1778554357.984108,
+      "updated_at": 1778576256.507977,
+      "metadata": {
+        "last_note": "PR #162 merged automatically",
+        "url": "",
+        "execution_model": "oclaude-coder",
+        "assistant_summary_preview": "I'll analyze the task and explore the codebase to understand the current sidebar implementation before making changes. Quick update: I found the sidebar implementation and can implement the UI changes, but GitNexus MCP tools are not available in this environment (`no MCP resources`), so I can’t r...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 50,
+        "linked_pr_number": 162,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/162",
+        "head_branch": "autopilot/ap-1fbf1193",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-b6f3ecdb",
+      "title": "[P17.7] Settings UX: Add high-value filters for Providers, Models, and Agents",
+      "body": "Observed from live WebUI audit: Providers/Models/Agents pages contain useful data, but large lists are hard to operate. Provider page has 11 providers, Models has 59 models, Agents has 55 agents.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Providers: add filter chips Active, Configured, Not configured, Custom/router; preserve Verify all.\n3. Models: add provider filter, type filter built-in/custom, default-only filter, and capability/context search.\n4. Agents: add filters custom/built-in, model assigned/unassigned, permission mode, tools count; add search by name/description/source path.\n5. Keep filters client-side unless backend already supports query params.\n6. Empty filtered states should explain how to clear filters.\n\nVerification:\n- ProviderSettingsPage, ModelsSettingsPage, AgentsSettingsPage tests for filters/search.\n- Manual check with current localhost data: can quickly isolate active provider, custom router models, custom agents.\n\nSpawn agents: typescript-reviewer -> code-reviewer.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [
+        "filters",
+        "p17",
+        "settings",
+        "ux",
+        "webui"
+      ],
+      "created_at": 1778554358.139193,
+      "updated_at": 1778578749.841689,
+      "metadata": {
+        "last_note": "PR #163 merged automatically",
+        "url": "",
+        "execution_model": "oclaude-coder",
+        "assistant_summary_preview": "I'll start by exploring the repository structure to understand the codebase before making any changes. Let me read the rest of the AgentsSettingsPage and also check for API client types: I can proceed, but one constraint: GitNexus MCP tools are not available in this session (`list_mcp_resources` ...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 50,
+        "linked_pr_number": 163,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/163",
+        "head_branch": "autopilot/ap-b6f3ecdb",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-a78c6a0f",
+      "title": "[P17.8] E2E: Visual regression smoke for WebUI audit findings",
+      "body": "Create regression coverage for the UI issues found during the 2026-05-12 live audit so they do not return.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for touched symbols and include blast radius in run report.\n2. Extend frontend/webui/e2e/webui.spec.ts or add a focused audit spec.\n3. Cover: header model dropdown non-empty when /api/models has active model group; mobile header has no horizontal overflow; Projects default hides temp-like pytest projects; Chat empty state appears; Autopilot attention-first filters render.\n4. Prefer route stubbing/fixtures for deterministic tests instead of relying on local user data.\n5. Save screenshots only when Playwright config already supports them; avoid committing generated screenshots unless project pattern requires it.\n\nVerification:\n- cd frontend/webui && npm run test:e2e passes or document exact blocker.\n- Existing unit/type tests still pass if touched.\n\nSpawn agents: e2e-runner -> code-reviewer.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [
+        "e2e",
+        "p17",
+        "playwright",
+        "regression",
+        "webui"
+      ],
+      "created_at": 1778554358.319424,
+      "updated_at": 1778588007.479746,
+      "metadata": {
+        "last_note": "autopilot managed PR #164 CI passed, merged automatically",
+        "url": "",
+        "execution_model": "oclaude-coder",
+        "assistant_summary_preview": "The dialog heading in the actual component is `Delete Project` (not `Delete Project?`). The test uses `\"text=Delete Project?\"` with a question mark that doesn't exist. Let me also check what the delete button aria-label format is in the actual component.Now I understand the root causes: 1. **Dele...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 4,
+        "max_attempts": 50,
+        "linked_pr_number": 164,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/164",
+        "head_branch": "autopilot/ap-a78c6a0f",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "failed",
+            "returncode": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-9485494a",
+      "title": "[P17.9] Auth: Password login with persisted local access and refresh tokens",
+      "body": "User request: replace the current startup-issued WebUI token flow with a simple local password login for a personal-machine service. No account management is required.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for the target symbol and report direct callers, affected processes, and risk.\n2. Add a password-only login flow for the WebUI. First-run/default password is `123456`; store only a password hash, never plaintext.\n3. Persist Harness-wide auth/config data under `~/.harness/` as the canonical user config directory. Include a narrow migration/compatibility check for existing `~/.openharness` config where needed, but do not keep adding new auth state there.\n4. Add backend endpoints for password login and token refresh. Successful login returns both an access token and refresh token.\n5. Existing authenticated API calls should accept the access token. When the app restarts, the browser should reuse the existing token when still valid, refresh it when possible, or show the password login screen when tokens are expired/invalid.\n6. Refresh tokens must be revocable/rotatable enough for a single-user local service: avoid storing raw refresh tokens, rotate on refresh if practical, and clear persisted client tokens on logout/auth failure.\n7. Keep the UI intentionally simple: password field, submit, error state, optional default-password warning/change-password affordance. Do not add users, roles, invitations, or account administration.\n8. Update tests for backend auth, token expiry/refresh, frontend login state, and restart/reuse behavior. Include a smoke path proving `?token=` bootstrap is no longer the primary required login path.\n\nAcceptance criteria:\n- Fresh install starts with password `123456` and allows login.\n- User can change the password after login, and the new password is stored under `~/.harness/` using a secure hash.\n- Login returns access and refresh tokens; access token protects existing `/api/*` routes.\n- After WebUI restart, an unexpired token works without re-login; expired access token can be refreshed; expired/invalid refresh token returns to password login.\n- No multi-account UI or data model is introduced.\n- `gitnexus_detect_changes()` is run before commit; expected impact is limited to WebUI auth/config/client flows and tests.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [
+        "area:auth",
+        "area:webui",
+        "kind:feature",
+        "priority:p1",
+        "security"
+      ],
+      "created_at": 1778562507.349563,
+      "updated_at": 1778634881.194205,
+      "metadata": {
+        "last_note": "Manually merged P17.9 into main at f88a496 after local verification passed.",
+        "url": "",
+        "execution_model": "oclaude-coder",
+        "assistant_summary_preview": "I'll analyze this task and implement a password-based login flow for the WebUI. Let me start by exploring the codebase structure to understand the current auth implementation. I found an in-progress auth store, but I need to inspect how it's wired through the backend and frontend before changing ...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 50,
+        "linked_pr_number": 165,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/165",
+        "head_branch": "autopilot/ap-9485494a",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "Manually merged into origin/main at f88a496",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "failed",
+            "returncode": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "ap-73e22f7f",
+      "title": "[P17.10] Shell UX: Redesign Settings sidebar into Control Center",
+      "body": "User request: improve the Settings entry and sidebar structure so MyHarness feels like a local control center instead of a flat collection of mixed settings/status links.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for the target symbol and report direct callers, affected processes, and risk.\n2. Keep the global sidebar focused on primary work areas: Chat, Autopilot, Projects, History, Settings/Control.\n3. Redesign Settings as a Control Center with clear internal sections: Workspace, Models, Providers, Agents, Automation, Security, Appearance.\n4. Add compact operational status near the Settings/Control entry or at the top of the Control Center: active project/cwd, active model/provider, Autopilot/Cron running state, auth/session state once password login exists.\n5. Move Automation/Cron out of generic settings treatment. It should be easy to see last run, next run, target cwd, scheduler running/stopped, and start/stop/apply actions.\n6. Reserve Security for password/session/token controls from the password-login work: change password, logout, token/session status, config path under ~/.harness/.\n7. Standardize sidebar icons with the app icon library, avoiding emoji/status clutter in navigation labels.\n8. Ensure the layout works on desktop and mobile without clipping, overflow, or nested card-heavy settings screens.\n\nAcceptance criteria:\n- Sidebar has a calmer primary navigation and does not mix unrelated status blocks with navigation links.\n- Settings opens a Control Center with grouped settings navigation and clear section ownership.\n- Automation/Cron status is visible enough that a stopped scheduler cannot look configured and healthy.\n- Security/Auth has a dedicated place for the password-login feature.\n- Mobile sidebar/settings layout remains usable at narrow widths.\n- Existing settings pages remain reachable or are deliberately migrated into the new grouping.\n- Add/update frontend tests and at least one visual smoke check for sidebar/settings navigation.\n- Run gitnexus_detect_changes() before commit; expected impact is limited to WebUI shell/settings components and tests.",
+      "status": "merged",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [
+        "area:settings",
+        "area:shell",
+        "area:webui",
+        "kind:ux",
+        "priority:p1"
+      ],
+      "created_at": 1778563238.633277,
+      "updated_at": 1778639129.5347788,
+      "metadata": {
+        "last_note": "PR #168 merged automatically",
+        "url": "",
+        "execution_model": "oclaude-coder",
+        "assistant_summary_preview": "I'll tackle this task systematically. Let me first explore the codebase to understand the current settings/sidebar structure. I’m locating the relevant shell/settings components and will run the required impact checks before editing any symbols. Now let me read the remaining relevant pages and te...",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 1,
+        "max_attempts": 50,
+        "linked_pr_number": 168,
+        "linked_pr_url": "https://github.com/hodtien/mharness/pull/168",
+        "head_branch": "autopilot/ap-73e22f7f",
+        "last_ci_conclusion": "success",
+        "last_ci_summary": "All reported remote checks passed.",
+        "last_failure_stage": "",
+        "last_failure_summary": "",
+        "verification_steps": [
+          {
+            "command": "uv run pytest -q tests/test_services/test_autopilot.py tests/test_autopilot/test_parallel_execution.py tests/test_swarm/test_worktree.py",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "uv run ruff check src tests scripts",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "cd frontend/webui && ([ -x ./node_modules/.bin/tsc ] || npm ci --no-audit --no-fund) && ./node_modules/.bin/tsc --noEmit",
+            "status": "success",
+            "returncode": 0
+          },
+          {
+            "command": "agent:code-reviewer (diff vs main)",
+            "status": "skipped",
+            "returncode": 0
+          }
+        ]
+      }
+    },
+    {
       "id": "ap-757c4465",
       "title": "[P2.1] Backend: GET /api/modes — trả về current modes",
       "body": "Tạo src/openharness/webui/server/routes/modes.py. GET /api/modes đọc AppState từ active session host (hoặc từ settings nếu chưa có session): permission_mode, fast_mode, vim_enabled, effort, passes, output_style, theme. Trả JSON object với tất cả các field.",
@@ -19081,6 +20156,49 @@
       }
     },
     {
+      "id": "ap-29230e68",
+      "title": "[P17.11] Settings UX: Model catalog and Agent profile control center",
+      "body": "User request: clarify how MyHarness should manage Models versus Agents so users configure model capability once, then choose task-focused agents instead of juggling raw model choices everywhere.\n\nScope:\n1. Before editing any function/class/method, run GitNexus impact analysis for the target symbol and report direct callers, affected processes, and risk.\n2. Split the concepts clearly in the UI and data flow: Model = provider/model capability; Agent = task profile that uses a model plus prompt, tools, permission, effort, and routing policy.\n3. Build or redesign the Models page as a catalog grouped by provider. Show provider, model id, context window, streaming/tool support where known, key/config status, and probe/test result.\n4. Add high-value filters for Models: provider, configured/unconfigured, healthy/failing, capability/use-case.\n5. Build or redesign the Agents page as profile management: name, purpose, selected model, tools enabled, permission mode, effort/reasoning, prompt/instructions, and status warnings if the selected model/provider is broken.\n6. Add default routing by use case: Chat, Code, Review, Autopilot Worker, Planning, Fast/cheap tasks. Users should normally pick an Agent; the header model picker should behave as a temporary override.\n7. Include sensible default agents: Default Chat Agent, Code Agent, Review Agent, Autopilot Agent, Fast Agent.\n8. Add test/probe affordances so a user can verify a model/provider and run a small agent smoke test without leaving settings.\n\nAcceptance criteria:\n- Users can understand the difference between Models and Agents from the control surfaces without reading docs.\n- Existing provider/model configuration still works, but broken provider/model states are surfaced clearly.\n- Agent profiles can select models and show warnings when their model/provider is unavailable.\n- Default routing exists for Chat, Code, Review, Autopilot, Planning, and Fast tasks.\n- Header model selection no longer has to be the main persistent configuration path.\n- Add/update frontend tests for model filtering, agent profile display, routing defaults, and broken-model warnings.\n- Run gitnexus_detect_changes() before commit; expected impact is limited to WebUI model/provider/agent settings flows and tests.",
+      "status": "failed",
+      "source_kind": "manual_idea",
+      "source_ref": "",
+      "score": 120,
+      "score_reasons": [
+        "source=manual_idea",
+        "direct user-driven input",
+        "urgent signals",
+        "recently updated"
+      ],
+      "labels": [
+        "area:agents",
+        "area:models",
+        "area:settings",
+        "area:webui",
+        "kind:ux",
+        "priority:p1"
+      ],
+      "created_at": 1778563238.697985,
+      "updated_at": 1778640974.414197,
+      "metadata": {
+        "last_note": "preflight fatal failure: model 'cx/gpt-5.5' not registered in settings.agent_models or allowed_models",
+        "url": "",
+        "execution_model": "",
+        "assistant_summary_preview": "",
+        "human_gate_pending": false,
+        "verification_failed": false,
+        "attempt_count": 0,
+        "max_attempts": 0,
+        "linked_pr_number": null,
+        "linked_pr_url": "",
+        "head_branch": "",
+        "last_ci_conclusion": "",
+        "last_ci_summary": "",
+        "last_failure_stage": "preflight_fatal",
+        "last_failure_summary": "model 'cx/gpt-5.5' not registered in settings.agent_models or allowed_models",
+        "verification_steps": []
+      }
+    },
+    {
       "id": "ap-dc457f5c",
       "title": "[P13.1] Backend: Thêm status pending và paused vào RepoTaskStatus",
       "body": "Thêm pending và paused vào RepoTaskStatus Literal trong TẤT CẢ files:\n1. src/openharness/autopilot/types.py\n2. src/openharness/services/cron_scheduler.py\n3. src/openharness/webui/server/routes/modes.py\n4. grep -rn RepoTaskStatus src/ để không bỏ sót\n\nQuy tắc pending: không phải active, không phải terminal, không đếm vào capacity.\nQuy tắc paused: không phải active, không phải terminal, có thể resume.\n\nCập nhật active_statuses và terminal_statuses trong pipeline.py và cron_scheduler.py.\n\nMetadata fields convention (dùng metadata dict):\n- retry_count, max_retries=5, retry_interval=60, last_retry_at, pending_reason, resume_available\n- paused_at, pause_reason\n\nTests: test_pending_not_active, test_pending_not_terminal, test_paused_not_active, test_paused_not_terminal.\nSpawn agents: code-reviewer.",
@@ -19990,245 +21108,251 @@
   ],
   "journal": [
     {
-      "timestamp": 1778555145.279159,
-      "kind": "run_finished",
-      "summary": "Agent run finished (attempt 2)",
-      "task_id": "ap-2defdaa6",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-2defdaa6-attempt-02-run.md",
-        "attempt_count": 2
-      }
-    },
-    {
-      "timestamp": 1778555145.29705,
+      "timestamp": 1778600533.397825,
       "kind": "status_verifying",
       "summary": "running verification gates",
-      "task_id": "ap-2defdaa6",
+      "task_id": "ap-9485494a",
       "metadata": {}
     },
     {
-      "timestamp": 1778555163.80635,
-      "kind": "branch_sync_done",
-      "summary": "Synced autopilot/ap-2defdaa6 onto origin/main.",
-      "task_id": "ap-2defdaa6",
-      "metadata": {
-        "base_branch": "main",
-        "head_branch": "autopilot/ap-2defdaa6",
-        "attempt_count": 1
-      }
-    },
-    {
-      "timestamp": 1778555176.2040331,
-      "kind": "status_waiting_ci",
-      "summary": "waiting for remote CI on PR #157",
-      "task_id": "ap-2defdaa6",
+      "timestamp": 1778600599.018581,
+      "kind": "status_failed",
+      "summary": "1 verification gate(s) failed",
+      "task_id": "ap-9485494a",
       "metadata": {}
     },
     {
-      "timestamp": 1778555284.704777,
-      "kind": "status_waiting_ci",
-      "summary": "remote CI status: success",
-      "task_id": "ap-2defdaa6",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1778555321.744598,
-      "kind": "status_merged",
-      "summary": "PR #157 merged automatically",
-      "task_id": "ap-2defdaa6",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1778555321.811904,
-      "kind": "merged",
-      "summary": "PR #157 merged automatically",
-      "task_id": "ap-2defdaa6",
-      "metadata": {
-        "pr_number": 157
-      }
-    },
-    {
-      "timestamp": 1778555324.6215522,
-      "kind": "merge_warning",
-      "summary": "post-merge pull failed: From https://github.com/hodtien/mharness\n * branch            main       -> FETCH_HEAD\nhint: Diverging branches can't be fast-forwarded, you need to either:\nhint:\nhint: \tgit merge --no-ff\nhint:\nhint: or:\nhint:\nhint: \tgit rebase\nhint:\nhint: Disable this message with \"git config set advice.diverging false\"\nfatal: Not possible to fast-forward, aborting.",
-      "task_id": "ap-2defdaa6",
-      "metadata": {
-        "pr_number": 157
-      }
-    },
-    {
-      "timestamp": 1778556725.5264168,
-      "kind": "status_preparing",
-      "summary": "preparing isolated worktree",
-      "task_id": "ap-0961d1c0",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1778556727.003916,
-      "kind": "status_running",
-      "summary": "autopilot execution started",
-      "task_id": "ap-0961d1c0",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1778557022.864577,
-      "kind": "run_finished",
-      "summary": "Agent run finished (attempt 1)",
-      "task_id": "ap-0961d1c0",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-0961d1c0-attempt-01-run.md",
-        "attempt_count": 1
-      }
-    },
-    {
-      "timestamp": 1778557022.894221,
-      "kind": "status_verifying",
-      "summary": "running verification gates",
-      "task_id": "ap-0961d1c0",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1778557046.488893,
-      "kind": "status_repairing",
-      "summary": "local verification failed; retrying",
-      "task_id": "ap-0961d1c0",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1778557046.539875,
+      "timestamp": 1778600599.132556,
       "kind": "verification_failed",
-      "summary": "Local verification failed, retrying (attempt 1)",
-      "task_id": "ap-0961d1c0",
-      "metadata": {
-        "attempt_count": 1
-      }
-    },
-    {
-      "timestamp": 1778557047.332482,
-      "kind": "status_repairing",
-      "summary": "repairing failed run",
-      "task_id": "ap-0961d1c0",
+      "summary": "1 verification gate(s) failed",
+      "task_id": "ap-9485494a",
       "metadata": {}
     },
     {
-      "timestamp": 1778557117.746175,
-      "kind": "run_finished",
-      "summary": "Agent run finished (attempt 2)",
-      "task_id": "ap-0961d1c0",
-      "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-0961d1c0-attempt-02-run.md",
-        "attempt_count": 2
-      }
-    },
-    {
-      "timestamp": 1778557117.771469,
-      "kind": "status_verifying",
-      "summary": "running verification gates",
-      "task_id": "ap-0961d1c0",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1778557178.7804632,
-      "kind": "branch_sync_done",
-      "summary": "Synced autopilot/ap-0961d1c0 onto origin/main.",
-      "task_id": "ap-0961d1c0",
-      "metadata": {
-        "base_branch": "main",
-        "head_branch": "autopilot/ap-0961d1c0",
-        "attempt_count": 1
-      }
-    },
-    {
-      "timestamp": 1778557188.031282,
-      "kind": "status_waiting_ci",
-      "summary": "waiting for remote CI on PR #158",
-      "task_id": "ap-0961d1c0",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1778557313.943577,
-      "kind": "status_waiting_ci",
-      "summary": "remote CI status: success",
-      "task_id": "ap-0961d1c0",
-      "metadata": {}
-    },
-    {
-      "timestamp": 1778557338.401543,
+      "timestamp": 1778634881.2044642,
       "kind": "status_merged",
-      "summary": "PR #158 merged automatically",
-      "task_id": "ap-0961d1c0",
+      "summary": "Manually merged P17.9 into main at f88a496 after local verification passed.",
+      "task_id": "ap-9485494a",
       "metadata": {}
     },
     {
-      "timestamp": 1778557338.4802282,
-      "kind": "merged",
-      "summary": "PR #158 merged automatically",
-      "task_id": "ap-0961d1c0",
-      "metadata": {
-        "pr_number": 158
-      }
-    },
-    {
-      "timestamp": 1778559264.309091,
+      "timestamp": 1778637337.22183,
       "kind": "status_preparing",
       "summary": "preparing isolated worktree",
-      "task_id": "ap-7d9c89cb",
+      "task_id": "ap-73e22f7f",
       "metadata": {}
     },
     {
-      "timestamp": 1778559265.880259,
+      "timestamp": 1778637338.618262,
       "kind": "status_running",
       "summary": "autopilot execution started",
-      "task_id": "ap-7d9c89cb",
+      "task_id": "ap-73e22f7f",
       "metadata": {}
     },
     {
-      "timestamp": 1778559711.805506,
+      "timestamp": 1778637457.9414048,
+      "kind": "status_failed",
+      "summary": "agent execution failed: [Errno 2] No such file or directory: '/Users/hodtien/.openharness/worktrees/autopilot+ap-73e2...",
+      "task_id": "ap-73e22f7f",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778637458.043094,
+      "kind": "run_failed",
+      "summary": "Agent execution failed (attempt 1)",
+      "task_id": "ap-73e22f7f",
+      "metadata": {
+        "error": "[Errno 2] No such file or directory: '/Users/hodtien/.openharness/worktrees/autopilot+ap-73e22f7f'",
+        "attempt_count": 1
+      }
+    },
+    {
+      "timestamp": 1778637524.248279,
+      "kind": "status_queued",
+      "summary": "queued",
+      "task_id": "ap-73e22f7f",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778637532.041358,
+      "kind": "status_queued",
+      "summary": "queued",
+      "task_id": "ap-73e22f7f",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778637535.893449,
+      "kind": "status_queued",
+      "summary": "queued",
+      "task_id": "ap-73e22f7f",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778638296.122467,
+      "kind": "status_preparing",
+      "summary": "preparing isolated worktree",
+      "task_id": "ap-73e22f7f",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778638297.561802,
+      "kind": "status_running",
+      "summary": "autopilot execution started",
+      "task_id": "ap-73e22f7f",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778638935.945152,
       "kind": "run_finished",
       "summary": "Agent run finished (attempt 1)",
-      "task_id": "ap-7d9c89cb",
+      "task_id": "ap-73e22f7f",
       "metadata": {
-        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-7d9c89cb-attempt-01-run.md",
+        "run_report_path": "/Users/hodtien/harness/my-harness/.openharness/autopilot/runs/ap-73e22f7f-attempt-01-run.md",
         "attempt_count": 1
       }
     },
     {
-      "timestamp": 1778559711.83006,
+      "timestamp": 1778638935.9688058,
       "kind": "status_verifying",
       "summary": "running verification gates",
-      "task_id": "ap-7d9c89cb",
+      "task_id": "ap-73e22f7f",
       "metadata": {}
     },
     {
-      "timestamp": 1778559728.225882,
+      "timestamp": 1778638944.692,
       "kind": "branch_sync_done",
-      "summary": "Synced autopilot/ap-7d9c89cb onto origin/main.",
-      "task_id": "ap-7d9c89cb",
+      "summary": "Synced autopilot/ap-73e22f7f onto origin/main.",
+      "task_id": "ap-73e22f7f",
       "metadata": {
         "base_branch": "main",
-        "head_branch": "autopilot/ap-7d9c89cb",
+        "head_branch": "autopilot/ap-73e22f7f",
         "attempt_count": 1
       }
     },
     {
-      "timestamp": 1778559736.876087,
+      "timestamp": 1778638953.190581,
       "kind": "status_waiting_ci",
-      "summary": "waiting for remote CI on PR #159",
-      "task_id": "ap-7d9c89cb",
+      "summary": "waiting for remote CI on PR #168",
+      "task_id": "ap-73e22f7f",
       "metadata": {}
     },
     {
-      "timestamp": 1778559845.8185742,
+      "timestamp": 1778639079.176307,
       "kind": "status_waiting_ci",
       "summary": "remote CI status: success",
-      "task_id": "ap-7d9c89cb",
+      "task_id": "ap-73e22f7f",
       "metadata": {}
     },
     {
-      "timestamp": 1778559915.42748,
+      "timestamp": 1778639129.553055,
       "kind": "status_merged",
-      "summary": "PR #159 merged automatically",
-      "task_id": "ap-7d9c89cb",
+      "summary": "PR #168 merged automatically",
+      "task_id": "ap-73e22f7f",
+      "metadata": {}
+    },
+    {
+      "timestamp": 1778639129.605999,
+      "kind": "merged",
+      "summary": "PR #168 merged automatically",
+      "task_id": "ap-73e22f7f",
+      "metadata": {
+        "pr_number": 168
+      }
+    },
+    {
+      "timestamp": 1778639132.5777762,
+      "kind": "merge_warning",
+      "summary": "post-merge pull failed: From https://github.com/hodtien/mharness\n * branch            main       -> FETCH_HEAD\nerror: Your local changes to the following files would be overwritten by merge:\n\tfrontend/webui/src/components/Sidebar.test.tsx\n\tfrontend/webui/src/components/Sidebar.tsx\nPlease commit your changes or stash them before you merge.\nAborting",
+      "task_id": "ap-73e22f7f",
+      "metadata": {
+        "pr_number": 168
+      }
+    },
+    {
+      "timestamp": 1778640762.600606,
+      "kind": "intake_added",
+      "summary": "Queued from manual_idea",
+      "task_id": "ap-19661243",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778640762.704128,
+      "kind": "intake_added",
+      "summary": "Queued from manual_idea",
+      "task_id": "ap-d164205d",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778640762.812059,
+      "kind": "intake_added",
+      "summary": "Queued from manual_idea",
+      "task_id": "ap-4c258a88",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778640762.917273,
+      "kind": "intake_added",
+      "summary": "Queued from manual_idea",
+      "task_id": "ap-2777012e",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778640781.211375,
+      "kind": "intake_added",
+      "summary": "Queued from manual_idea",
+      "task_id": "ap-93988944",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778640781.239655,
+      "kind": "intake_added",
+      "summary": "Queued from manual_idea",
+      "task_id": "ap-3b33cdcb",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778640781.312737,
+      "kind": "intake_added",
+      "summary": "Queued from manual_idea",
+      "task_id": "ap-289826d1",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778640781.337064,
+      "kind": "intake_added",
+      "summary": "Queued from manual_idea",
+      "task_id": "ap-91f2de4c",
+      "metadata": {
+        "source_ref": "",
+        "score": 120
+      }
+    },
+    {
+      "timestamp": 1778640974.4235961,
+      "kind": "status_failed",
+      "summary": "preflight fatal failure: model 'cx/gpt-5.5' not registered in settings.agent_models or allowed_models",
+      "task_id": "ap-29230e68",
       "metadata": {}
     }
   ],
@@ -20237,5 +21361,5 @@
     "verification": "/Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml",
     "release": "/Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
   },
-  "active_context": "# Active Repo Context\n\nGenerated at: 2026-05-12 04:25:15 UTC\n\n## Current Task Focus\n- [queued] [P17.4] Projects UX: Hide stale pytest/temp projects and add cleanup action (manual_idea, score=120)\n- Detail: Observed from live WebUI audit: Projects page shows 194 projects, mostly /private/.../pytest... temp paths from tests. This makes real project switching noisy and risky. Scope: 1. Before editing any function/class/met...\n\n## In Progress\n- None.\n\n## Next Up\n- [120] ap-755d6eae [P17.4] Projects UX: Hide stale pytest/temp projects and add cleanup action (manual_idea)\n- [120] ap-05a93e73 [P17.5] Autopilot UX: Attention-first board and collapsed terminal history (manual_idea)\n- [120] ap-1fbf1193 [P17.6] Shell UX: Reduce sidebar status noise and standardize navigation icons (manual_idea)\n- [120] ap-b6f3ecdb [P17.7] Settings UX: Add high-value filters for Providers, Models, and Agents (manual_idea)\n- [120] ap-a78c6a0f [P17.8] E2E: Visual regression smoke for WebUI audit findings (manual_idea)\n\n## Recently Completed\n- ap-7d9c89cb [P17.3] Chat UX: Operator empty state with actionable quick starts\n- ap-0961d1c0 [P17.2] Mobile UX: Prevent header overflow and clipped model controls\n- ap-2defdaa6 [P17.1] Bugfix: Header model picker uses active provider catalog\n- ap-881bd572 [P16.3] UI: Per-tab project isolation via URL param ?project=id\n- ap-d8e525e9 [P16.2a] Backend: cho phép PATCH /api/modes đổi active model\n\n## Recent Failures\n- [rejected] ap-445c26d3 [P16.3a] Backend: project context phải truyền theo request/session, không dùng global activate cho chat\n- [rejected] ap-c6657d82 GitHub PR #61: feat(tools): add structured GitTool with schema-enforced safety\n- [rejected] ap-87a69305 GitHub PR #62: feat(skills): add runtime skill activation\n- [rejected] ap-2a747fb4 GitHub PR #68: feat(memory): integrate optional PowerMem retrieval into system prompt\n- [rejected] ap-e28db734 GitHub PR #72: feat(memory): optional Dongtian memory retrieval for system prompt context\n\n## Recent Repo Journal\n- 05-12 04:14 status_preparing: preparing isolated worktree\n- 05-12 04:14 status_running: autopilot execution started\n- 05-12 04:21 run_finished: Agent run finished (attempt 1)\n- 05-12 04:21 status_verifying: running verification gates\n- 05-12 04:22 branch_sync_done: Synced autopilot/ap-7d9c89cb onto origin/main.\n- 05-12 04:22 status_waiting_ci: waiting for remote CI on PR #159\n- 05-12 04:24 status_waiting_ci: remote CI status: success\n- 05-12 04:25 status_merged: PR #159 merged automatically\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
+  "active_context": "# Active Repo Context\n\nGenerated at: 2026-05-13 02:56:14 UTC\n\n## Current Task Focus\n- [queued] [P18.1] UX/State: thống nhất truth model cho Cron, Scheduler, và Autopilot Scheduling (manual_idea, score=120)\n- Detail: Hiện tại WebUI đang hiển thị mâu thuẫn: Sidebar có thể báo 'Cron 2/2 enabled', Control Center báo 'Scheduler running', trong khi Settings/Schedule lại báo 'Status Disabled'. Cần thiết kế lại contract dữ liệu và copy đ...\n\n## In Progress\n- None.\n\n## Next Up\n- [120] ap-19661243 [P18.1] UX/State: thống nhất truth model cho Cron, Scheduler, và Autopilot Scheduling (manual_idea)\n- [120] ap-d164205d [P18.2] Auth UX: login hint chỉ hiển thị đúng khi còn dùng default password (manual_idea)\n- [120] ap-4c258a88 [P18.4] Projects UX: stale registry warning, cleanup preview, và default focus vào project hữu ích (manual_idea)\n- [120] ap-2777012e [P18.3] UI Semantics: chuẩn hóa màu và nhãn auth/runtime status trong shell + Control Center (manual_idea)\n- [120] ap-93988944 [P18.5] Autopilot UX: de-emphasize Completed/Terminal history để board active dễ scan (manual_idea)\n- [120] ap-3b33cdcb [P18.8] UX Polish: full-path reveal/copy cho CWD và config locations trong control surfaces (manual_idea)\n- [120] ap-289826d1 [P18.6] Agents UX: compact mode, pinned operational agents, và linkage với autopilot policy (manual_idea)\n- [120] ap-91f2de4c [P18.7] Models UX: active-first catalog, relation badges, và collapse provider không active (manual_idea)\n\n## Recently Completed\n- ap-73e22f7f [P17.10] Shell UX: Redesign Settings sidebar into Control Center\n- ap-9485494a [P17.9] Auth: Password login with persisted local access and refresh tokens\n- ap-a78c6a0f [P17.8] E2E: Visual regression smoke for WebUI audit findings\n- ap-b6f3ecdb [P17.7] Settings UX: Add high-value filters for Providers, Models, and Agents\n- ap-1fbf1193 [P17.6] Shell UX: Reduce sidebar status noise and standardize navigation icons\n\n## Recent Failures\n- [failed] ap-29230e68 [P17.11] Settings UX: Model catalog and Agent profile control center\n- [rejected] ap-445c26d3 [P16.3a] Backend: project context phải truyền theo request/session, không dùng global activate cho chat\n- [rejected] ap-c6657d82 GitHub PR #61: feat(tools): add structured GitTool with schema-enforced safety\n- [rejected] ap-87a69305 GitHub PR #62: feat(skills): add runtime skill activation\n- [rejected] ap-2a747fb4 GitHub PR #68: feat(memory): integrate optional PowerMem retrieval into system prompt\n\n## Recent Repo Journal\n- 05-13 02:52 intake_added: Queued from manual_idea\n- 05-13 02:52 intake_added: Queued from manual_idea\n- 05-13 02:52 intake_added: Queued from manual_idea\n- 05-13 02:53 intake_added: Queued from manual_idea\n- 05-13 02:53 intake_added: Queued from manual_idea\n- 05-13 02:53 intake_added: Queued from manual_idea\n- 05-13 02:53 intake_added: Queued from manual_idea\n- 05-13 02:56 status_failed: preflight fatal failure: model 'cx/gpt-5.5' not registered in settings.agent_models or allowed_models\n\n## Policies\n- Autopilot: /Users/hodtien/harness/my-harness/.openharness/autopilot/autopilot_policy.yaml\n- Verification: /Users/hodtien/harness/my-harness/.openharness/autopilot/verification_policy.yaml\n- Release: /Users/hodtien/harness/my-harness/.openharness/autopilot/release_policy.yaml"
 }

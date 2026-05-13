@@ -7217,6 +7217,50 @@ def test_preflight_model_resolve_chain(tmp_path: Path, monkeypatch) -> None:
     assert resolved3 == "agent-model", f"Expected agent-model, got {resolved3}"
 
 
+def test_preflight_accepts_active_profile_default_model(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    from openharness.config.settings import ProviderProfile
+
+    profile = ProviderProfile(
+        label="Claude Router",
+        provider="anthropic",
+        api_format="anthropic",
+        auth_source="test",
+        default_model="cx/gpt-5.5",
+        allowed_models=["oclaude-coder"],
+    )
+    monkeypatch.setattr(
+        "openharness.config.settings.load_settings",
+        lambda: type("Settings", (), {"profiles": {"claude-router": profile}})(),
+    )
+    monkeypatch.setattr(
+        "openharness.config.claude_bridge.read_claude_settings",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.get_active_provider",
+        lambda self: "anthropic",
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.list_profiles",
+        lambda self: {"claude-router": profile},
+    )
+    monkeypatch.setattr(
+        "openharness.auth.manager.AuthManager.get_active_profile",
+        lambda self: "claude-router",
+    )
+
+    model_check = store._check_model_available("cx/gpt-5.5")
+
+    assert model_check.status == "ok"
+    assert model_check.transient is False
+
+
 def test_preflight_permanent_vs_transient_classification(tmp_path: Path, monkeypatch) -> None:
     """Permanent failures (model not in agent_models) → fatal.
     Transient failures (model not in allowed_models) → pending."""
@@ -7274,14 +7318,12 @@ def test_preflight_permanent_vs_transient_classification(tmp_path: Path, monkeyp
 
     result = store.run_preflight(card)
 
-    # When all_agent_models is empty, the permanent fail check is skipped
-    # and we fall through to the transient check (model not in allowed_models of profile)
     model_check = next((c for c in result.checks if c.name == "model_available"), None)
     assert model_check is not None, "model_available check not found"
-    # With empty all_agent_models, the permanent fail is not triggered
-    # Instead it falls through to the transient check (error because unknown-model not in profile's allowed_models)
-    assert model_check.status == "error", f"Expected error (transient), got {model_check.status}: {model_check.reason}"
-    assert model_check.transient is True
+    # The profile default counts as a registered model, so an unrelated
+    # explicit override is now a permanent invalid-model failure.
+    assert model_check.status == "fail", f"Expected fail, got {model_check.status}: {model_check.reason}"
+    assert model_check.transient is False
 
 
 def test_preflight_permanent_model_not_in_settings(tmp_path: Path, monkeypatch) -> None:

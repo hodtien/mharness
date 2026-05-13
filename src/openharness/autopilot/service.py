@@ -1243,8 +1243,17 @@ class RepoAutopilotStore:
         try:
             from openharness.config.settings import load_settings
             settings = load_settings()
-            # Get all models from all profile's allowed_models
+            # Treat profile defaults/current selections as registered models too.
+            # allowed_models is an optional allow-list extension, not the sole
+            # source of valid profile-backed models.
             for profile in settings.profiles.values():
+                for configured in (
+                    getattr(profile, "default_model", None),
+                    getattr(profile, "last_model", None),
+                    getattr(profile, "resolved_model", None),
+                ):
+                    if configured:
+                        all_agent_models.add(configured)
                 for m in profile.allowed_models or []:
                     if m:
                         all_agent_models.add(m)
@@ -1289,6 +1298,22 @@ class RepoAutopilotStore:
             provider = auth.get_active_provider()
             profiles = auth.list_profiles()
             profile = profiles.get(auth.get_active_profile())
+            active_profile_models = {
+                configured
+                for configured in (
+                    getattr(profile, "default_model", None),
+                    getattr(profile, "last_model", None),
+                    getattr(profile, "resolved_model", None),
+                )
+                if configured
+            }
+            if model in active_profile_models:
+                return PreflightCheck(
+                    name="model_available",
+                    status="ok",
+                    reason=f"model {model} is configured by the active profile",
+                    detail=f"provider={provider}",
+                )
             if profile and profile.allowed_models:
                 if model in profile.allowed_models:
                     return PreflightCheck(
