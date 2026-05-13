@@ -1,12 +1,105 @@
 import type { BackendEvent, FrontendRequest } from "./types";
 
 const TOKEN_STORAGE_KEY = "oh_token";
+const REFRESH_TOKEN_STORAGE_KEY = "oh_refresh_token";
+const ACCESS_EXPIRES_STORAGE_KEY = "oh_access_expires_at";
+const REFRESH_EXPIRES_STORAGE_KEY = "oh_refresh_expires_at";
+const DEFAULT_PASSWORD_STORAGE_KEY = "oh_is_default_password";
 const TOKEN_COOKIE_NAME = "oh_token";
 
-function persistToken(token: string): void {
+export interface AuthSessionSnapshot {
+  authenticated: boolean;
+  isDefaultPassword: boolean;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  refresh_token: string;
+  access_expires_in: number;
+  refresh_expires_in: number;
+  is_default_password: boolean;
+}
+
+export type RefreshResponse = Omit<LoginResponse, "is_default_password"> & {
+  is_default_password?: boolean;
+};
+
+export interface AuthStatusResponse {
+  is_default_password?: boolean;
+}
+
+interface ApiRequestInit extends RequestInit {
+  auth?: boolean;
+  retryOnUnauthorized?: boolean;
+}
+
+class AuthenticationRequiredError extends Error {
+  constructor() {
+    super("Authentication required");
+    this.name = "AuthenticationRequiredError";
+  }
+}
+
+const authListeners = new Set<(snapshot: AuthSessionSnapshot) => void>();
+let refreshPromise: Promise<boolean> | null = null;
+
+function readDefaultPasswordState(): boolean {
+  return localStorage.getItem(DEFAULT_PASSWORD_STORAGE_KEY) === "true";
+}
+
+function notifyAuthChanged(authenticated: boolean): void {
+  const snapshot = { authenticated, isDefaultPassword: readDefaultPasswordState() };
+  authListeners.forEach((listener) => listener(snapshot));
+}
+
+export function subscribeAuthChanges(listener: (snapshot: AuthSessionSnapshot) => void): () => void {
+  authListeners.add(listener);
+  return () => authListeners.delete(listener);
+}
+
+function persistAccessToken(token: string): void {
   localStorage.setItem(TOKEN_STORAGE_KEY, token);
   const secure = window.location.protocol === "https:" ? "; Secure" : "";
   document.cookie = `${TOKEN_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; SameSite=Strict${secure}`;
+}
+
+function persistAuthTokens(tokens: RefreshResponse): AuthSessionSnapshot {
+  persistAccessToken(tokens.access_token);
+  localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, tokens.refresh_token);
+  localStorage.setItem(ACCESS_EXPIRES_STORAGE_KEY, String(Date.now() + tokens.access_expires_in * 1000));
+  localStorage.setItem(REFRESH_EXPIRES_STORAGE_KEY, String(Date.now() + tokens.refresh_expires_in * 1000));
+  if (typeof tokens.is_default_password === "boolean") {
+    localStorage.setItem(DEFAULT_PASSWORD_STORAGE_KEY, String(tokens.is_default_password));
+  }
+  const snapshot = { authenticated: true, isDefaultPassword: readDefaultPasswordState() };
+  notifyAuthChanged(true);
+  return snapshot;
+}
+
+function persistAuthStatus(status: AuthStatusResponse): void {
+  if (typeof status.is_default_password === "boolean") {
+    localStorage.setItem(DEFAULT_PASSWORD_STORAGE_KEY, String(status.is_default_password));
+    notifyAuthChanged(Boolean(localStorage.getItem(TOKEN_STORAGE_KEY)));
+  }
+}
+
+function readExpiry(storageKey: string): number | null {
+  const raw = localStorage.getItem(storageKey);
+  if (!raw) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function isExpiringSoon(storageKey: string): boolean {
+  const expiry = readExpiry(storageKey);
+  return expiry !== null && Date.now() + 5000 >= expiry;
+}
+
+function getRefreshToken(): string {
+  if (isExpiringSoon(REFRESH_EXPIRES_STORAGE_KEY)) {
+    return "";
+  }
+  return localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY) || "";
 }
 
 export function getToken(): string {
@@ -14,7 +107,7 @@ export function getToken(): string {
   const params = new URLSearchParams(window.location.search);
   const fromUrl = params.get("token");
   if (fromUrl) {
-    persistToken(fromUrl);
+    persistAccessToken(fromUrl);
     // Clean URL so the token isn't visible / leaked in history.
     params.delete("token");
     const cleaned = `${window.location.pathname}${
@@ -27,24 +120,100 @@ export function getToken(): string {
 }
 
 export function setToken(token: string): void {
-  persistToken(token);
+  persistAccessToken(token);
+  notifyAuthChanged(true);
 }
 
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
+  localStorage.removeItem(ACCESS_EXPIRES_STORAGE_KEY);
+  localStorage.removeItem(REFRESH_EXPIRES_STORAGE_KEY);
+  localStorage.removeItem(DEFAULT_PASSWORD_STORAGE_KEY);
   document.cookie = `${TOKEN_COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Strict`;
+  notifyAuthChanged(false);
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getToken();
-  const res = await fetch(path, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(init?.headers || {}),
-    },
-  });
+async function refreshAuthSessionOnce(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    clearToken();
+    return false;
+  }
+  try {
+    const res = await fetch("/api/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) {
+      clearToken();
+      return false;
+    }
+    persistAuthTokens((await res.json()) as RefreshResponse);
+    return true;
+  } catch {
+    clearToken();
+    return false;
+  }
+}
+
+export async function refreshAuthSession(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = refreshAuthSessionOnce().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+async function ensureFreshAccessToken(): Promise<void> {
+  if (getToken() && isExpiringSoon(ACCESS_EXPIRES_STORAGE_KEY)) {
+    await refreshAuthSession();
+  }
+}
+
+function buildHeaders(init: ApiRequestInit, token: string): Headers {
+  const headers = new Headers(init.headers);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return headers;
+}
+
+export async function apiRequest(path: string, init: ApiRequestInit = {}): Promise<Response> {
+  const { auth = true, retryOnUnauthorized = true, ...requestInit } = init;
+  if (auth) {
+    await ensureFreshAccessToken();
+  }
+  const makeRequest = () => {
+    const token = auth ? getToken() : "";
+    return fetch(path, {
+      ...requestInit,
+      headers: buildHeaders(init, token),
+    });
+  };
+
+  let res = await makeRequest();
+  if (auth && retryOnUnauthorized && res.status === 401) {
+    const refreshed = await refreshAuthSession();
+    if (!refreshed) {
+      throw new AuthenticationRequiredError();
+    }
+    res = await makeRequest();
+    if (res.status === 401) {
+      clearToken();
+      throw new AuthenticationRequiredError();
+    }
+  }
+  return res;
+}
+
+export async function apiFetch<T>(path: string, init?: ApiRequestInit): Promise<T> {
+  const res = await apiRequest(path, init);
   if (!res.ok) {
     throw new Error(`${res.status} ${res.statusText}: ${await res.text()}`);
   }
@@ -56,6 +225,27 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     return undefined as T;
   }
   return res.json() as Promise<T>;
+}
+
+export async function bootstrapAuthSession(): Promise<AuthSessionSnapshot> {
+  const accessToken = getToken();
+  if (!accessToken && getRefreshToken()) {
+    const refreshed = await refreshAuthSession();
+    return { authenticated: refreshed, isDefaultPassword: readDefaultPasswordState() };
+  }
+  if (!accessToken) {
+    return { authenticated: false, isDefaultPassword: false };
+  }
+  try {
+    const status = await api.authStatus();
+    persistAuthStatus(status);
+    return { authenticated: true, isDefaultPassword: readDefaultPasswordState() };
+  } catch (error) {
+    if (error instanceof AuthenticationRequiredError) {
+      return { authenticated: false, isDefaultPassword: false };
+    }
+    return { authenticated: true, isDefaultPassword: readDefaultPasswordState() };
+  }
 }
 
 export interface ModesPayload {
@@ -237,6 +427,32 @@ export interface ProjectUpdate {
 }
 
 export const api = {
+  login: async (password: string) => {
+    const result = await apiFetch<LoginResponse>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+      auth: false,
+      retryOnUnauthorized: false,
+    });
+    return persistAuthTokens(result);
+  },
+  authStatus: () => apiFetch<AuthStatusResponse>("/api/auth/status"),
+  logout: async () => {
+    try {
+      await apiFetch<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
+    } finally {
+      clearToken();
+    }
+  },
+  changePassword: async (oldPassword: string, newPassword: string) => {
+    const result = await apiFetch<{ ok: boolean }>("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+    });
+    localStorage.setItem(DEFAULT_PASSWORD_STORAGE_KEY, "false");
+    notifyAuthChanged(true);
+    return result;
+  },
   health: () => apiFetch<{ status: string; version: string }>("/api/health"),
   meta: () => apiFetch<{ cwd?: string; model?: string; permission_mode?: string }>("/api/meta"),
   createSession: (resumeId?: string, projectId?: string) => {
@@ -382,6 +598,7 @@ export function openWebSocket(
   let currentState: "connecting" | "open" | "closed" = "connecting";
   let manuallyClosed = false;
   let reconnectAttempts = 0;
+  let refreshedAuth = false;
   const MAX_RETRIES = 2;
 
   const attach = (socket: WebSocket) => {
@@ -417,6 +634,17 @@ export function openWebSocket(
         onStatus("closed");
       } else {
         onStatus("closed", `code=${ev.code}`);
+      }
+      if (!manuallyClosed && ev.code === 1008 && !refreshedAuth) {
+        refreshedAuth = true;
+        void refreshAuthSession().then((refreshed) => {
+          if (!refreshed || manuallyClosed) return;
+          currentState = "connecting";
+          onStatus("connecting", "refreshing auth");
+          ws = new WebSocket(url);
+          attach(ws);
+        });
+        return;
       }
       if (!manuallyClosed && ev.code !== 1000 && !NON_RETRYABLE_CLOSE_CODES.has(ev.code)) {
         reconnectAttempts++;

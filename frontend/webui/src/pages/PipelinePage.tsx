@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef, type ChangeEvent, type FormEvent } from "react";
-import { api, apiFetch, getToken } from "../api/client";
+import { api, apiFetch, apiRequest, getToken, refreshAuthSession } from "../api/client";
 import { useSession } from "../store/session";
 import {
   LOG_FILTERS,
@@ -269,12 +269,8 @@ function PolicyTab({ onSaved }: PolicyTabProps) {
     setSaving(true);
     setSaved(false);
     try {
-      const res = await fetch("/api/pipeline/policy", {
+      const res = await apiRequest("/api/pipeline/policy", {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`,
-        },
         body: JSON.stringify({ yaml_content: yamlContent }),
       });
       if (!res.ok) {
@@ -880,6 +876,7 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
     seenCountRef.current = 0;
 
     let attempt = 0;
+    let refreshedAuth = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
 
@@ -900,6 +897,15 @@ function LogsTab({ cardId, isActive }: LogsTabProps) {
         es.close();
         sourceRef.current = null;
         if (cancelled) return;
+        if (!refreshedAuth) {
+          refreshedAuth = true;
+          void refreshAuthSession().then((refreshed) => {
+            if (!refreshed || cancelled) return;
+            setStreamState("connecting");
+            connect();
+          });
+          return;
+        }
         attempt += 1;
         if (attempt > _SSE_MAX_RETRIES) {
           setStreamState("closed");

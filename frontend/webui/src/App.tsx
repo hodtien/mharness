@@ -1,8 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useSearchParams } from "react-router-dom";
-import { api, openWebSocket, type WsHandle } from "./api/client";
+import {
+  api,
+  bootstrapAuthSession,
+  openWebSocket,
+  subscribeAuthChanges,
+  type AuthSessionSnapshot,
+  type WsHandle,
+} from "./api/client";
 import { useSession, clearPermission, clearQuestion, clearSelect } from "./store/session";
 import Header from "./components/Header";
+import LoginScreen from "./components/LoginScreen";
 import PermissionModal from "./components/PermissionModal";
 import QuestionModal from "./components/QuestionModal";
 import SelectModal from "./components/SelectModal";
@@ -27,9 +35,17 @@ function RootRedirect() {
 
 interface LayoutProps {
   onInterrupt: () => void;
+  isDefaultPassword?: boolean;
+  onLogout?: () => void;
+  onPasswordChanged?: () => void;
 }
 
-export function AppLayout({ onInterrupt }: LayoutProps) {
+export function AppLayout({
+  onInterrupt,
+  isDefaultPassword = false,
+  onLogout = () => {},
+  onPasswordChanged = () => {},
+}: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -48,6 +64,9 @@ export function AppLayout({ onInterrupt }: LayoutProps) {
         <Header
           onToggleSidebar={toggleSidebar}
           onInterrupt={onInterrupt}
+          isDefaultPassword={isDefaultPassword}
+          onLogout={onLogout}
+          onPasswordChanged={onPasswordChanged}
         />
         <main className="flex flex-1 flex-col min-h-0">
           <Outlet />
@@ -61,6 +80,11 @@ export default function App() {
   const wsRef = useRef<WsHandle | null>(null);
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("project") ?? undefined;
+  const [auth, setAuth] = useState<AuthSessionSnapshot & { checking: boolean }>({
+    authenticated: false,
+    isDefaultPassword: false,
+    checking: true,
+  });
   const { setStatus, setSessionId, ingest, appendUser, setResumedFrom } = useSession();
 
   const setupSession = useCallback(
@@ -95,9 +119,47 @@ export default function App() {
   
 
   useEffect(() => {
+    let cancelled = false;
+    const unsubscribe = subscribeAuthChanges((snapshot) => {
+      setAuth({ ...snapshot, checking: false });
+      if (!snapshot.authenticated) {
+        wsRef.current?.close();
+        wsRef.current = null;
+        useSession.getState().reset();
+      }
+    });
+    bootstrapAuthSession()
+      .then((snapshot) => {
+        if (!cancelled) setAuth({ ...snapshot, checking: false });
+      })
+      .catch(() => {
+        if (!cancelled) setAuth({ authenticated: false, isDefaultPassword: false, checking: false });
+      });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!auth.authenticated) return;
     setupSession();
     return () => wsRef.current?.close();
-  }, [setupSession]);
+  }, [auth.authenticated, setupSession]);
+
+  const handleAuthenticated = useCallback((snapshot: AuthSessionSnapshot) => {
+    setAuth({ ...snapshot, checking: false });
+  }, []);
+
+  const handlePasswordChanged = useCallback(() => {
+    setAuth((current) => ({ ...current, isDefaultPassword: false }));
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
+    void api.logout();
+  }, []);
 
   const sendLine = useCallback(
     (text: string) => {
@@ -126,10 +188,31 @@ export default function App() {
     clearSelect();
   }, []);
 
+  if (auth.checking) {
+    return (
+      <div className="flex h-full items-center justify-center bg-[var(--bg)] text-sm text-[var(--text-dim)]">
+        Checking session...
+      </div>
+    );
+  }
+
+  if (!auth.authenticated) {
+    return <LoginScreen onAuthenticated={handleAuthenticated} />;
+  }
+
   return (
     <>
       <Routes>
-        <Route element={<AppLayout onInterrupt={sendInterrupt} />}>
+        <Route
+          element={
+            <AppLayout
+              onInterrupt={sendInterrupt}
+              isDefaultPassword={auth.isDefaultPassword}
+              onLogout={handleLogout}
+              onPasswordChanged={handlePasswordChanged}
+            />
+          }
+        >
           <Route path="/" element={<RootRedirect />} />
           <Route path="/chat" element={<ChatPage onSend={sendLine} />} />
           <Route path="/history" element={<HistoryPage onResume={reconnectWithSession} />} />

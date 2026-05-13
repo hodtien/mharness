@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from openharness.services.projects import ensure_default_project
 from openharness.webui.server.config import WebUIConfig
 from openharness.webui.server.routes import agents as agents_routes
+from openharness.webui.server.routes import auth as auth_routes
 from openharness.webui.server.routes import cron as cron_routes
 from openharness.webui.server.routes import health as health_routes
 from openharness.webui.server.routes import history as history_routes
@@ -154,6 +155,7 @@ def create_app(
     )
 
     app.include_router(health_routes.router)
+    app.include_router(auth_routes.router)
     app.include_router(agents_routes.router)
     app.include_router(sessions_routes.router)
     app.include_router(tasks_routes.router)

@@ -159,6 +159,46 @@ function json(data: unknown, status = 200) {
  * Call this from every test's `page.route(...)` or as a `beforeEach` hook.
  */
 async function stubAppShell(page: Page) {
+  await page.addInitScript(`
+    window.localStorage.setItem("oh_token", "e2e-access-token");
+    window.localStorage.setItem("oh_refresh_token", "e2e-refresh-token");
+    window.localStorage.setItem("oh_access_expires_at", String(Date.now() + 60 * 60 * 1000));
+    window.localStorage.setItem("oh_refresh_expires_at", String(Date.now() + 7 * 24 * 60 * 60 * 1000));
+    window.localStorage.setItem("oh_is_default_password", "false");
+  `);
+
+  await page.route("/api/auth/status", async (route: Route) => {
+    await route.fulfill(json({
+      authenticated: true,
+      is_default_password: false,
+      access_expires_in: 3600,
+      refresh_expires_in: 604800,
+    }));
+  });
+
+  await page.route("/api/auth/refresh", async (route: Route) => {
+    await route.fulfill(json({
+      access_token: "e2e-access-token-refreshed",
+      refresh_token: "e2e-refresh-token-refreshed",
+      access_expires_in: 3600,
+      refresh_expires_in: 604800,
+    }));
+  });
+
+  await page.route("/api/auth/login", async (route: Route) => {
+    await route.fulfill(json({
+      access_token: "e2e-access-token",
+      refresh_token: "e2e-refresh-token",
+      access_expires_in: 3600,
+      refresh_expires_in: 604800,
+      is_default_password: false,
+    }));
+  });
+
+  await page.route("/api/auth/logout", async (route: Route) => {
+    await route.fulfill(json({ ok: true }));
+  });
+
   // Stub the session creation endpoint
   await page.route("/api/sessions", async (route: Route) => {
     if (route.request().method() === "POST") {
@@ -171,6 +211,12 @@ async function stubAppShell(page: Page) {
   // Stub the cron jobs list (used by Sidebar)
   await page.route("/api/cron/jobs", async (route: Route) => {
     await route.fulfill(json({ jobs: [] }));
+  });
+
+  // Stub the project selector used by the sidebar. A missing stub returns 401
+  // from a live dev server and correctly sends the auth shell back to login.
+  await page.route("/api/projects", async (route: Route) => {
+    await route.fulfill(json(SAMPLE_PROJECTS));
   });
 
   // Stub recent history for the Sessions dropdown
@@ -225,6 +271,20 @@ async function stubPipelineRoutes(page: Page) {
 
   await page.route("**/api/pipeline/cards/*/model**", async (route: Route) => {
     await route.fulfill(json({ ok: true }));
+  });
+
+  await page.route("/api/models*", async (route: Route) => {
+    await route.fulfill(json({
+      openai: [
+        {
+          id: "gpt-5.5",
+          label: "GPT-5.5",
+          context_window: 256000,
+          is_default: true,
+          is_custom: false,
+        },
+      ],
+    }));
   });
 }
 
@@ -303,6 +363,11 @@ async function stubSettingsRoutes(page: Page) {
   });
 }
 
+async function gotoAuthed(page: Page, path: string) {
+  const separator = path.includes("?") ? "&" : "?";
+  await page.goto(`${path}${separator}token=e2e-access-token`);
+}
+
 // ─── 1. Navigation & Page Headers ────────────────────────────────────────────
 
 test.describe("1. Navigation & Page Headers", () => {
@@ -315,7 +380,7 @@ test.describe("1. Navigation & Page Headers", () => {
   });
 
   test("each sidebar nav link renders the corresponding page with an h1", async ({ page }) => {
-    await page.goto("/chat");
+    await gotoAuthed(page, "/chat");
     // Wait for the shell to mount (sidebar should be visible)
     await expect(page.locator('[aria-label="Primary"]')).toBeVisible({ timeout: 10_000 });
 
@@ -344,7 +409,7 @@ test.describe("1. Navigation & Page Headers", () => {
       "/settings/agents",
       "/settings/cron",
     ]) {
-      await page.goto(path);
+      await gotoAuthed(page, path);
       await expect(page.locator('[aria-label="Primary"]')).toBeVisible({ timeout: 10_000 });
       await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
     }
@@ -352,7 +417,7 @@ test.describe("1. Navigation & Page Headers", () => {
 
   test("desktop sidebar collapses and restores on toggle", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/chat");
+    await gotoAuthed(page, "/chat");
 
     const sidebar = page.locator('[data-testid="sidebar-desktop"]');
     await expect(sidebar).toBeVisible({ timeout: 10_000 });
@@ -427,7 +492,7 @@ test.describe("2. Chat Tool Card Collapse/Expand", () => {
   });
 
   test("tool result card expands to show output on click", async ({ page }) => {
-    await page.goto("/chat");
+    await gotoAuthed(page, "/chat");
     await expect(page.locator('[aria-label="Primary"]')).toBeVisible({ timeout: 10_000 });
 
     const toggle = page.locator("button:has-text('result · bash_ide')").first();
@@ -441,7 +506,7 @@ test.describe("2. Chat Tool Card Collapse/Expand", () => {
   });
 
   test("tool result card collapses again after a second click", async ({ page }) => {
-    await page.goto("/chat");
+    await gotoAuthed(page, "/chat");
     await expect(page.locator('[aria-label="Primary"]')).toBeVisible({ timeout: 10_000 });
 
     const toggle = page.locator("button:has-text('result · bash_ide')").first();
@@ -464,7 +529,7 @@ test.describe("3. Autopilot Board: Hierarchy & New Idea", () => {
   });
 
   test("renders all kanban column headings", async ({ page }) => {
-    await page.goto("/autopilot");
+    await gotoAuthed(page, "/autopilot");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
     for (const col of ["Queue", "In Progress", "Review", "Completed", "Failed", "Rejected"]) {
@@ -473,14 +538,14 @@ test.describe("3. Autopilot Board: Hierarchy & New Idea", () => {
   });
 
   test("displays sample cards in the board", async ({ page }) => {
-    await page.goto("/autopilot");
+    await gotoAuthed(page, "/autopilot");
     await expect(page.locator("text=Add login form").first()).toBeVisible({ timeout: 10_000 });
     await expect(page.locator("text=Fix auth bug").first()).toBeVisible({ timeout: 5_000 });
     await expect(page.locator("text=Add documentation").first()).toBeVisible({ timeout: 5_000 });
   });
 
   test("New idea button opens the dialog", async ({ page }) => {
-    await page.goto("/autopilot");
+    await gotoAuthed(page, "/autopilot");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
     await page.locator('button:has-text("New idea")').first().click();
@@ -488,7 +553,7 @@ test.describe("3. Autopilot Board: Hierarchy & New Idea", () => {
   });
 
   test("New idea dialog: submit button disabled while title is empty", async ({ page }) => {
-    await page.goto("/autopilot");
+    await gotoAuthed(page, "/autopilot");
     await page.locator('button:has-text("New idea")').first().click();
     const dialog = page.locator('[role="dialog"][aria-label="New idea"]');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
@@ -498,7 +563,7 @@ test.describe("3. Autopilot Board: Hierarchy & New Idea", () => {
   });
 
   test("New idea dialog: submit button enables when title is filled", async ({ page }) => {
-    await page.goto("/autopilot");
+    await gotoAuthed(page, "/autopilot");
     await page.locator('button:has-text("New idea")').first().click();
     const dialog = page.locator('[role="dialog"][aria-label="New idea"]');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
@@ -509,7 +574,7 @@ test.describe("3. Autopilot Board: Hierarchy & New Idea", () => {
   });
 
   test("New idea dialog closes on Cancel", async ({ page }) => {
-    await page.goto("/autopilot");
+    await gotoAuthed(page, "/autopilot");
     await page.locator('button:has-text("New idea")').first().click();
     const dialog = page.locator('[role="dialog"][aria-label="New idea"]');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
@@ -519,7 +584,7 @@ test.describe("3. Autopilot Board: Hierarchy & New Idea", () => {
   });
 
   test("New idea dialog closes on Escape key", async ({ page }) => {
-    await page.goto("/autopilot");
+    await gotoAuthed(page, "/autopilot");
     await page.locator('button:has-text("New idea")').first().click();
     const dialog = page.locator('[role="dialog"][aria-label="New idea"]');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
@@ -529,7 +594,7 @@ test.describe("3. Autopilot Board: Hierarchy & New Idea", () => {
   });
 
   test("clicking a card opens a drawer with tabs", async ({ page }) => {
-    await page.goto("/autopilot");
+    await gotoAuthed(page, "/autopilot");
     await expect(page.locator("text=Add login form").first()).toBeVisible({ timeout: 10_000 });
 
     await page.locator("text=Add login form").first().click();
@@ -547,7 +612,7 @@ test.describe("4. Semantic Log Feed Filtering", () => {
   });
 
   test("log filter pills are rendered in the Logs tab", async ({ page }) => {
-    await page.goto("/autopilot");
+    await gotoAuthed(page, "/autopilot");
     await expect(page.locator("text=Add login form").first()).toBeVisible({ timeout: 10_000 });
 
     // Open a card drawer
@@ -556,7 +621,7 @@ test.describe("4. Semantic Log Feed Filtering", () => {
     // Click the Logs tab
     const logsTab = page.locator('[role="tab"]:has-text("Logs")');
     await expect(logsTab).toBeVisible({ timeout: 5_000 });
-    await logsTab.click();
+    await logsTab.click({ force: true });
 
     // Filter pills must be present — they are rendered from LOG_FILTERS without SSE data.
     const pills = page.locator('[aria-label="Filter log segments"] button');
@@ -566,13 +631,13 @@ test.describe("4. Semantic Log Feed Filtering", () => {
   });
 
   test("log filter pills toggle aria-pressed attribute", async ({ page }) => {
-    await page.goto("/autopilot");
+    await gotoAuthed(page, "/autopilot");
     await expect(page.locator("text=Fix auth bug").first()).toBeVisible({ timeout: 10_000 });
 
     await page.locator("text=Fix auth bug").first().click();
     const logsTab = page.locator('[role="tab"]:has-text("Logs")');
     await expect(logsTab).toBeVisible({ timeout: 5_000 });
-    await logsTab.click();
+    await logsTab.click({ force: true });
 
     const pills = page.locator('[aria-label="Filter log segments"] button');
     const count = await pills.count();
@@ -597,7 +662,7 @@ test.describe("5. Jobs Filters & Row Expansion", () => {
   });
 
   test("Jobs page renders PageHeader and filter toolbar", async ({ page }) => {
-    await page.goto("/tasks");
+    await gotoAuthed(page, "/tasks");
     await expect(page.locator("h1:has-text('Background Jobs')")).toBeVisible({ timeout: 10_000 });
 
     await expect(page.locator('input[placeholder*="Search jobs"]')).toBeVisible({ timeout: 5_000 });
@@ -606,7 +671,7 @@ test.describe("5. Jobs Filters & Row Expansion", () => {
   });
 
   test("status filter shows only matching tasks", async ({ page }) => {
-    await page.goto("/tasks");
+    await gotoAuthed(page, "/tasks");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
     // Select "Running" status filter
@@ -620,7 +685,7 @@ test.describe("5. Jobs Filters & Row Expansion", () => {
   });
 
   test("search input filters task rows", async ({ page }) => {
-    await page.goto("/tasks");
+    await gotoAuthed(page, "/tasks");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
     const searchInput = page.locator('input[placeholder*="Search jobs"]');
@@ -631,7 +696,7 @@ test.describe("5. Jobs Filters & Row Expansion", () => {
   });
 
   test("clear filters button appears when filters are active and restores list", async ({ page }) => {
-    await page.goto("/tasks");
+    await gotoAuthed(page, "/tasks");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
     const searchInput = page.locator('input[placeholder*="Search jobs"]');
@@ -646,7 +711,7 @@ test.describe("5. Jobs Filters & Row Expansion", () => {
   });
 
   test("expand button shows log preview row and collapse re-hides it", async ({ page }) => {
-    await page.goto("/tasks");
+    await gotoAuthed(page, "/tasks");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
     const expandBtn = page.locator('button[aria-label="Expand row"]').first();
@@ -665,7 +730,7 @@ test.describe("5. Jobs Filters & Row Expansion", () => {
   });
 
   test("clicking a task row opens the detail drawer", async ({ page }) => {
-    await page.goto("/tasks");
+    await gotoAuthed(page, "/tasks");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
     // Click the row (not the expand button)
@@ -685,7 +750,7 @@ test.describe("6. Projects Active/Delete Safety UX", () => {
   });
 
   test("Projects page renders h1 and active badge on the active project", async ({ page }) => {
-    await page.goto("/projects");
+    await gotoAuthed(page, "/projects");
     await expect(page.locator("h1:has-text('Projects')")).toBeVisible({ timeout: 10_000 });
 
     // "active" badge should be present next to the active project
@@ -693,7 +758,7 @@ test.describe("6. Projects Active/Delete Safety UX", () => {
   });
 
   test("Delete button opens the confirmation dialog with project name", async ({ page }) => {
-    await page.goto("/projects");
+    await gotoAuthed(page, "/projects");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
     // Click delete for "My Project"
@@ -706,7 +771,7 @@ test.describe("6. Projects Active/Delete Safety UX", () => {
   });
 
   test("Confirmation Cancel does not delete the project", async ({ page }) => {
-    await page.goto("/projects");
+    await gotoAuthed(page, "/projects");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
     await page.locator('button[aria-label="Delete project My Project"]').click();
@@ -736,7 +801,7 @@ test.describe("6. Projects Active/Delete Safety UX", () => {
       await route.fulfill(json(SAMPLE_PROJECTS));
     });
 
-    await page.goto("/projects");
+    await gotoAuthed(page, "/projects");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole("tab", { name: "All" }).click();
@@ -753,7 +818,7 @@ test.describe("6. Projects Active/Delete Safety UX", () => {
   });
 
   test("Activate button is not shown on the already-active project", async ({ page }) => {
-    await page.goto("/projects");
+    await gotoAuthed(page, "/projects");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
     // The active project card should not have an Activate button
@@ -823,7 +888,7 @@ test.describe("7. Audit Regression Smoke (2026-05-12)", () => {
       window.WebSocket = MockWebSocket;
     }, { readyEvent: READY_EVENT });
 
-    await page.goto("/chat");
+    await gotoAuthed(page, "/chat");
 
     // The RuntimeSummary model chip in the mobile header shows the current model.
     const mobileModelChip = page.locator('button[aria-label="Open runtime controls"]');
@@ -852,7 +917,7 @@ test.describe("7. Audit Regression Smoke (2026-05-12)", () => {
 
   test("mobile header does not horizontally overflow viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/chat");
+    await gotoAuthed(page, "/chat");
 
     const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     expect(hasOverflow).toBe(false);
@@ -861,7 +926,7 @@ test.describe("7. Audit Regression Smoke (2026-05-12)", () => {
   test("Projects default view hides temp-like pytest projects", async ({ page }) => {
     // The default viewFilter is "active" (see ProjectsPage.tsx line 71).
     // pytest-temp-project has a temp-like name and is NOT active, so it should be hidden.
-    await page.goto("/projects");
+    await gotoAuthed(page, "/projects");
     await expect(page.locator("h1:has-text('Projects')")).toBeVisible({ timeout: 10_000 });
 
     // Active project "My Project" is visible.
@@ -902,13 +967,13 @@ test.describe("7. Audit Regression Smoke (2026-05-12)", () => {
       window.WebSocket = MockWebSocket;
     }, { readyEvent: READY_EVENT });
 
-    await page.goto("/chat");
+    await gotoAuthed(page, "/chat");
     await expect(page.locator("text=Resume recent session")).toBeVisible({ timeout: 10_000 });
     await expect(page.locator("text=Open Autopilot board")).toBeVisible({ timeout: 5_000 });
   });
 
   test("Autopilot attention-first filters render", async ({ page }) => {
-    await page.goto("/autopilot");
+    await gotoAuthed(page, "/autopilot");
     await expect(page.locator('button:has-text("Needs attention")')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('button:has-text("Active")')).toBeVisible({ timeout: 5_000 });
     await expect(page.locator('button:has-text("Waiting")')).toBeVisible({ timeout: 5_000 });
@@ -927,7 +992,7 @@ test.describe("8. Settings Help Text & Save Feedback", () => {
   });
 
   test("Modes page renders PageHeader, permission-mode radio cards, and auto-save hint", async ({ page }) => {
-    await page.goto("/settings/modes");
+    await gotoAuthed(page, "/settings/modes");
     await expect(page.locator("h1:has-text('Modes')")).toBeVisible({ timeout: 10_000 });
 
     // Help text for each permission mode
@@ -951,7 +1016,7 @@ test.describe("8. Settings Help Text & Save Feedback", () => {
       }
     });
 
-    await page.goto("/settings/modes");
+    await gotoAuthed(page, "/settings/modes");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
 
     // Click the "Plan" label (permission mode radio)
@@ -965,23 +1030,23 @@ test.describe("8. Settings Help Text & Save Feedback", () => {
   });
 
   test("Provider settings page renders PageHeader and Providers h1", async ({ page }) => {
-    await page.goto("/settings/provider");
+    await gotoAuthed(page, "/settings/provider");
     await expect(page.locator("h1:has-text('Providers')")).toBeVisible({ timeout: 10_000 });
   });
 
   test("Models settings page renders PageHeader with h1 and Add custom model button", async ({ page }) => {
-    await page.goto("/settings/models");
+    await gotoAuthed(page, "/settings/models");
     await expect(page.locator("h1:has-text('Models')")).toBeVisible({ timeout: 10_000 });
     await expect(page.locator("button:has-text('Add custom model')").first()).toBeVisible({ timeout: 5_000 });
   });
 
   test("Agents settings page renders PageHeader", async ({ page }) => {
-    await page.goto("/settings/agents");
+    await gotoAuthed(page, "/settings/agents");
     await expect(page.locator("h1:has-text('Agents')")).toBeVisible({ timeout: 10_000 });
   });
 
   test("Schedule settings page renders PageHeader and Scan / Tick cron inputs", async ({ page }) => {
-    await page.goto("/settings/cron");
+    await gotoAuthed(page, "/settings/cron");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
     await expect(page.locator("#scan-cron")).toBeVisible({ timeout: 5_000 });
     await expect(page.locator("#tick-cron")).toBeVisible({ timeout: 5_000 });

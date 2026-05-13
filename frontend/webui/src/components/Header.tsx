@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, type ModelProfile } from "../api/client";
 import { useSession } from "../store/session";
+import ChangePasswordModal from "./ChangePasswordModal";
 
 type PermissionMode = "default" | "plan" | "full_auto";
 
@@ -330,9 +331,18 @@ export function PermissionModeChip() {
 interface Props {
   onToggleSidebar: () => void;
   onInterrupt: () => void;
+  isDefaultPassword?: boolean;
+  onLogout?: () => void;
+  onPasswordChanged?: () => void;
 }
 
-export default function Header({ onToggleSidebar, onInterrupt }: Props) {
+export default function Header({
+  onToggleSidebar,
+  onInterrupt,
+  isDefaultPassword = false,
+  onLogout = () => {},
+  onPasswordChanged = () => {},
+}: Props) {
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("project");
   const historyTo = projectId ? `/history?project=${encodeURIComponent(projectId)}` : "/history";
@@ -342,6 +352,7 @@ export default function Header({ onToggleSidebar, onInterrupt }: Props) {
   const tasks = useSession((s) => s.tasks);
   const appState = useSession((s) => s.appState);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
 
   const dotColor = CONNECTION_COLORS[connectionStatus] ?? CONNECTION_COLORS.closed;
 
@@ -394,6 +405,32 @@ export default function Header({ onToggleSidebar, onInterrupt }: Props) {
             <span>Stop{runningCount > 0 ? ` (${runningCount})` : ""}</span>
           </button>
         )}
+
+        {isDefaultPassword && (
+          <button
+            type="button"
+            onClick={() => setChangePasswordOpen(true)}
+            className="hidden shrink-0 items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-200 hover:bg-amber-500/20 md:inline-flex"
+          >
+            Default password
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setChangePasswordOpen(true)}
+          className="hidden shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1 text-xs text-[var(--text-dim)] hover:text-[var(--text)] sm:inline-flex"
+        >
+          Password
+        </button>
+
+        <button
+          type="button"
+          onClick={onLogout}
+          className="shrink-0 rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1 text-xs text-[var(--text-dim)] hover:text-[var(--text)]"
+        >
+          Logout
+        </button>
       </div>
 
       {mobileMenuOpen && (
@@ -412,6 +449,22 @@ export default function Header({ onToggleSidebar, onInterrupt }: Props) {
               </span>
             )}
             {currentModel && <ModelPicker />}
+            {isDefaultPassword && (
+              <button
+                type="button"
+                onClick={() => setChangePasswordOpen(true)}
+                className="inline-flex min-h-9 items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-3 text-xs text-amber-200 hover:bg-amber-500/20"
+              >
+                Default password
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setChangePasswordOpen(true)}
+              className="inline-flex min-h-9 items-center rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 text-xs text-[var(--text-dim)] hover:text-[var(--text)]"
+            >
+              Password
+            </button>
           </div>
         </div>
       )}
@@ -421,6 +474,11 @@ export default function Header({ onToggleSidebar, onInterrupt }: Props) {
           {errorBanner}
         </div>
       )}
+      <ChangePasswordModal
+        open={changePasswordOpen}
+        onClose={() => setChangePasswordOpen(false)}
+        onChanged={onPasswordChanged}
+      />
     </div>
   );
 }

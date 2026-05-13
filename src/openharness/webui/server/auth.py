@@ -12,6 +12,7 @@ from typing import Awaitable, Callable
 from fastapi import HTTPException, Request, WebSocket, status
 
 from openharness.webui.server.config import WebUIConfig
+from openharness.webui.server.auth_store import is_access_token_valid
 
 
 def _extract_header_or_cookie_token(request: Request | WebSocket) -> str | None:
@@ -34,7 +35,7 @@ def _extract_http_token(request: Request) -> str | None:
 def make_http_auth_dependency(config: WebUIConfig) -> Callable[[Request], Awaitable[None]]:
     async def _check(request: Request) -> None:
         token = _extract_http_token(request)
-        if token is None or not secrets.compare_digest(token, config.token):
+        if token is None or not _is_valid_token(token, config.token):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or missing token",
@@ -47,4 +48,8 @@ def check_ws_token(ws: WebSocket, config: WebUIConfig) -> bool:
     token = _extract_header_or_cookie_token(ws)
     if token is None:
         return False
-    return secrets.compare_digest(token, config.token)
+    return _is_valid_token(token, config.token)
+
+
+def _is_valid_token(token: str, legacy_token: str) -> bool:
+    return is_access_token_valid(token) or secrets.compare_digest(token, legacy_token)

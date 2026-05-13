@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 
 from fastapi import Cookie, Depends, Header, HTTPException, Query, Request, status
 
+from openharness.webui.server.auth_store import is_access_token_valid
+
 if TYPE_CHECKING:  # pragma: no cover - type-only imports
     from openharness.bridge.manager import BridgeSessionManager
     from openharness.tasks.manager import BackgroundTaskManager
@@ -88,12 +90,14 @@ def _bearer_candidate(authorization: str | None) -> str | None:
 
 
 def _require_matching_token(candidate: str | None, token: str) -> None:
-    if candidate is None or not secrets.compare_digest(candidate, token):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    if candidate is not None:
+        if is_access_token_valid(candidate) or secrets.compare_digest(candidate, token):
+            return
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or missing token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def get_task_manager() -> "BackgroundTaskManager":
