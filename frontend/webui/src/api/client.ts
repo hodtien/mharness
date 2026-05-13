@@ -364,6 +364,7 @@ export interface CronConfigResponse {
   timezone: string;
   install_mode: string;
   project_path: string;
+  scheduler_running: boolean;
   scan_cron_description: string;
   tick_cron_description: string;
   next_scan_runs: string[];

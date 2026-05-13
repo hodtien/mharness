@@ -264,11 +264,28 @@ async def execute_job(job: dict[str, Any]) -> dict[str, Any]:
 # Scheduler loop
 # ---------------------------------------------------------------------------
 
+def _is_autopilot_job(job: dict[str, Any]) -> bool:
+    """Return True if the job is an autopilot scheduling job.
+
+    Autopilot jobs are identified by having a non-empty project_id or a name
+    prefixed with 'autopilot.'.
+    """
+    return bool(job.get("project_id")) or str(job.get("name", "")).startswith("autopilot.")
+
+
 def _jobs_due(jobs: list[dict[str, Any]], now: datetime) -> list[dict[str, Any]]:
-    """Return jobs whose next_run is at or before *now*."""
+    """Return jobs whose next_run is at or before *now*.
+
+    Autopilot jobs are skipped when the autopilot scheduling feature is disabled.
+    """
+    from openharness.config.settings import load_settings
+
+    enabled = load_settings().cron_schedule.enabled
     due: list[dict[str, Any]] = []
     for job in jobs:
         if not job.get("enabled", True):
+            continue
+        if _is_autopilot_job(job) and not enabled:
             continue
         schedule = job.get("schedule", "")
         if not validate_cron_expression(schedule):

@@ -221,7 +221,7 @@ export default function CronSettingsPage() {
     <div className="flex flex-1 flex-col overflow-hidden">
       <PageHeader
         title="Autopilot Schedule"
-        description="Configure how often OpenHarness scans for new ideas and ticks autopilot jobs."
+        description="Configure the scheduling feature, the scheduler runtime, and the cron entries used for autopilot scans and ticks."
         metadata={[
           ...(config
             ? [
@@ -234,9 +234,14 @@ export default function CronSettingsPage() {
                   value: config.tick_cron_description || config.tick_cron,
                 },
                 {
-                  label: "Status",
+                  label: "Feature",
                   value: config.enabled ? "Enabled" : "Disabled",
                   accent: (config.enabled ? "cyan" : "none") as "cyan" | "none",
+                },
+                {
+                  label: "Scheduler",
+                  value: config.scheduler_running ? "Running" : "Stopped",
+                  accent: (config.scheduler_running ? "cyan" : "none") as "cyan" | "none",
                 },
               ]
             : []),
@@ -253,9 +258,9 @@ export default function CronSettingsPage() {
         <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-base font-semibold text-[var(--text)]">Enable Autopilot Scheduling</h2>
+              <h2 className="text-base font-semibold text-[var(--text)]">Autopilot Scheduling Feature</h2>
               <p className="mt-1 text-xs text-[var(--text-dim)]">
-                When disabled, scheduled scans and ticks are paused.
+                Turns autopilot scheduling on or off. When disabled, the scheduler should not install or run jobs.
               </p>
             </div>
             <label className="relative inline-flex cursor-pointer items-center">

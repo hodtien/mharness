@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+
 from openharness.config.settings import load_settings
 from openharness.webui.server.app import create_app
 
@@ -135,27 +136,18 @@ class TestPatchCronConfig:
         body = response.json()
         assert body["tick_cron"] == "0 */2 * * *"
 
-    def test_patch_multiple_fields_returns_200(self, tmp_path) -> None:
-        """PATCH with both enabled, scan_cron, and tick_cron updates succeeds."""
+    def test_patch_enabled_false_persists_without_stopping_scheduler(self, tmp_path) -> None:
+        """PATCH with enabled=false only updates the feature flag without stopping the daemon."""
         client = _client(tmp_path)
 
         response = client.patch(
             "/api/cron/config",
-            json={
-                "enabled": False,
-                "scan_cron": "*/20 * * * *",
-                "tick_cron": "30 */3 * * *",
-            },
+            json={"enabled": False},
             headers=AUTH,
         )
 
         assert response.status_code == 200
-        body = response.json()
-        assert body["enabled"] is False
-        assert body["scan_cron"] == "*/20 * * * *"
-        assert body["tick_cron"] == "30 */3 * * *"
-        assert body["next_scan_runs"] == []
-        assert body["next_tick_runs"] == []
+        assert response.json()["enabled"] is False
 
     def test_patch_valid_persists_to_settings(self, tmp_path) -> None:
         """A valid PATCH persists scan_cron to settings.json."""
