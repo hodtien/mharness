@@ -311,7 +311,14 @@ def action_pipeline_card(
             )
         return _serialize_card(claimed.model_dump(mode="json"))
     new_status = _ACTION_TO_STATUS[body.action]
-    card = store.update_status(card_id, status=new_status)
+    metadata_updates: dict[str, Any] | None = None
+    if body.action == "reset":
+        metadata_updates = {"attempt_count": 0, "last_note": None}
+    card = store.update_status(
+        card_id,
+        status=new_status,
+        metadata_updates=metadata_updates,
+    )
     return _serialize_card(card.model_dump(mode="json"))
 
 

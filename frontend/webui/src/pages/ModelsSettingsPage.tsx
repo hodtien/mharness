@@ -49,6 +49,9 @@ export default function ModelsSettingsPage() {
   const [search, setSearch] = useState("");
   const [providerFilter, setProviderFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "built-in" | "custom">("all");
+  const [configFilter, setConfigFilter] = useState<"all" | "configured" | "unconfigured">("all");
+  const [healthFilter, setHealthFilter] = useState<"all" | "healthy" | "failing">("all");
+  const [capabilityFilter, setCapabilityFilter] = useState<"all" | "long-context" | "fast" | "vision" | "tools" | "code">("all");
   const [defaultOnly, setDefaultOnly] = useState(false);
 
   const reload = async () => {
@@ -90,6 +93,12 @@ export default function ModelsSettingsPage() {
     return map;
   }, [providers]);
 
+  const providerStatus = useMemo(() => {
+    const map: Record<string, ProviderProfile> = {};
+    for (const p of providers) map[p.id] = p;
+    return map;
+  }, [providers]);
+
   const filteredProviderEntries = useMemo(() => {
     const query = search.trim().toLowerCase();
     const entries = Object.entries(models).map(([providerId, items]) => {
@@ -98,6 +107,17 @@ export default function ModelsSettingsPage() {
       // Provider filter
       if (providerFilter !== "all" && providerId !== providerFilter) {
         filtered = [];
+      }
+
+      const provider = providerStatus[providerId];
+      const isConfigured = Boolean(provider?.has_credentials);
+      const isHealthy = Boolean(provider?.is_active && provider?.has_credentials);
+      if (configFilter === "configured" && !isConfigured) filtered = [];
+      if (configFilter === "unconfigured" && isConfigured) filtered = [];
+      if (healthFilter === "healthy" && !isHealthy) filtered = [];
+      if (healthFilter === "failing" && isHealthy) filtered = [];
+      if (capabilityFilter !== "all") {
+        filtered = filtered.filter((model) => modelMatchesCapability(model, capabilityFilter));
       }
 
       // Text search
@@ -120,7 +140,7 @@ export default function ModelsSettingsPage() {
       return [providerId, [...custom, ...builtIn]] as [string, ModelProfile[]];
     });
     return entries.filter(([, items]) => items.length > 0);
-  }, [models, search, providerFilter, typeFilter, defaultOnly]);
+  }, [models, search, providerFilter, providerStatus, configFilter, healthFilter, capabilityFilter, typeFilter, defaultOnly]);
 
   if (loading) {
     return (
@@ -253,7 +273,7 @@ export default function ModelsSettingsPage() {
     <div className="flex flex-1 flex-col overflow-hidden">
       <PageHeader
         title="Models"
-        description="Browse the built-in catalog and manage custom models per provider profile. Search by model id or label to find capabilities quickly, then use each provider section to inspect built-in vs. custom entries."
+        description="Models are provider/model capabilities: credentials, model id, context, streaming/tools support, and probe health. Configure capability here once, then select task-focused Agents elsewhere."
         primaryAction={
           <button
             type="button"
@@ -289,10 +309,10 @@ export default function ModelsSettingsPage() {
                 className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] py-2 pl-10 pr-4 text-sm text-[var(--text)] placeholder-[var(--text-dim)] outline-none focus:border-cyan-400/50"
               />
             </div>
-            {(search || providerFilter !== "all" || typeFilter !== "all" || defaultOnly) && (
+            {(search || providerFilter !== "all" || configFilter !== "all" || healthFilter !== "all" || capabilityFilter !== "all" || typeFilter !== "all" || defaultOnly) && (
               <button
                 type="button"
-                onClick={() => { setSearch(""); setProviderFilter("all"); setTypeFilter("all"); setDefaultOnly(false); }}
+                onClick={() => { setSearch(""); setProviderFilter("all"); setConfigFilter("all"); setHealthFilter("all"); setCapabilityFilter("all"); setTypeFilter("all"); setDefaultOnly(false); }}
                 className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs text-[var(--text-dim)] hover:border-[var(--text-dim)]"
               >
                 Clear all
@@ -314,6 +334,41 @@ export default function ModelsSettingsPage() {
                   {providerLabels[pid] ?? pid}
                 </option>
               ))}
+            </select>
+
+
+            <select
+              value={configFilter}
+              onChange={(e) => setConfigFilter(e.target.value as "all" | "configured" | "unconfigured")}
+              className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text)] outline-none focus:border-cyan-400/50"
+              aria-label="Filter by configuration status"
+            >
+              <option value="all">Any config</option>
+              <option value="configured">Configured</option>
+              <option value="unconfigured">Unconfigured</option>
+            </select>
+            <select
+              value={healthFilter}
+              onChange={(e) => setHealthFilter(e.target.value as "all" | "healthy" | "failing")}
+              className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text)] outline-none focus:border-cyan-400/50"
+              aria-label="Filter by health"
+            >
+              <option value="all">Any health</option>
+              <option value="healthy">Healthy</option>
+              <option value="failing">Failing/unready</option>
+            </select>
+            <select
+              value={capabilityFilter}
+              onChange={(e) => setCapabilityFilter(e.target.value as "all" | "long-context" | "fast" | "vision" | "tools" | "code")}
+              className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text)] outline-none focus:border-cyan-400/50"
+              aria-label="Filter by capability"
+            >
+              <option value="all">Any use case</option>
+              <option value="long-context">Long context</option>
+              <option value="fast">Fast/cheap</option>
+              <option value="vision">Vision</option>
+              <option value="tools">Tool use</option>
+              <option value="code">Code</option>
             </select>
 
             {/* Type filter chips */}
@@ -349,7 +404,7 @@ export default function ModelsSettingsPage() {
               <p className="text-sm font-medium text-[var(--text)]">No models match your filters.</p>
               <p className="mt-1 text-xs text-[var(--text-dim)]">
                 Try different filters or{" "}
-                <button type="button" className="text-cyan-400 hover:underline" onClick={() => { setSearch(""); setProviderFilter("all"); setTypeFilter("all"); setDefaultOnly(false); }}>
+                <button type="button" className="text-cyan-400 hover:underline" onClick={() => { setSearch(""); setProviderFilter("all"); setConfigFilter("all"); setHealthFilter("all"); setCapabilityFilter("all"); setTypeFilter("all"); setDefaultOnly(false); }}>
                   clear all filters
                 </button>
                 .
@@ -402,6 +457,7 @@ export default function ModelsSettingsPage() {
                       ) : (
                         <ModelsTable
                           providerId={providerId}
+                          provider={providerStatus[providerId]}
                           models={items}
                           onEdit={(model) => openEdit(providerId, model)}
                           onDelete={(model) =>
@@ -457,13 +513,40 @@ export default function ModelsSettingsPage() {
   );
 }
 
+function modelMatchesCapability(model: ModelProfile, capability: "long-context" | "fast" | "vision" | "tools" | "code") {
+  const id = model.id.toLowerCase();
+  if (capability === "long-context") return Boolean(model.context_window && model.context_window >= 100000);
+  if (capability === "fast") return /fast|flash|mini|haiku/.test(id);
+  if (capability === "vision") return /vision|4o|opus|sonnet/.test(id);
+  if (capability === "tools") return /tool|gpt|claude|sonnet|opus|haiku/.test(id);
+  return /code|coder|gpt|claude|sonnet|opus/.test(id);
+}
+
+function getCapabilityBadges(model: ModelProfile): Array<{ label: string; variant?: "default" | "highlight" }> {
+  const badges: Array<{ label: string; variant?: "default" | "highlight" }> = [];
+  if (modelMatchesCapability(model, "long-context")) badges.push({ label: "long ctx", variant: "highlight" });
+  if (modelMatchesCapability(model, "fast")) badges.push({ label: "fast", variant: "highlight" });
+  if (modelMatchesCapability(model, "vision")) badges.push({ label: "vision", variant: "highlight" });
+  if (modelMatchesCapability(model, "tools")) badges.push({ label: "tools", variant: "highlight" });
+  return badges;
+}
+
+function ProviderStatusBadge({ provider }: { provider?: ProviderProfile }) {
+  if (!provider) return <span className="text-xs text-[var(--text-dim)]">Unknown</span>;
+  if (!provider.has_credentials) return <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-100">Key missing</span>;
+  if (!provider.is_active) return <span className="rounded-full border border-red-400/40 bg-red-400/10 px-2 py-0.5 text-xs text-red-200">Probe failing</span>;
+  return <span className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-xs text-emerald-200">Healthy</span>;
+}
+
 function ModelsTable({
   providerId,
+  provider,
   models,
   onEdit,
   onDelete,
 }: {
   providerId: string;
+  provider?: ProviderProfile;
   models: ModelProfile[];
   onEdit: (model: ModelProfile) => void;
   onDelete: (model: ModelProfile) => void;
@@ -487,6 +570,7 @@ function ModelsTable({
           <tr className="text-left text-xs uppercase tracking-wide text-[var(--text-dim)]">
             <th className="px-5 py-2 font-medium">Model id</th>
             <th className="px-5 py-2 font-medium">Label</th>
+            <th className="px-5 py-2 font-medium">Provider status</th>
             <th className="px-5 py-2 font-medium">Capabilities</th>
             <th className="px-5 py-2 font-medium">Context window</th>
             <th className="px-5 py-2 font-medium">Default</th>
@@ -495,8 +579,8 @@ function ModelsTable({
           </tr>
         </thead>
         <tbody>
-          <ModelSectionRows models={customModels} onEdit={onEdit} onDelete={onDelete} providerId={providerId} />
-          <ModelSectionRows models={builtInModels} onEdit={onEdit} onDelete={onDelete} providerId={providerId} />
+          <ModelSectionRows models={customModels} onEdit={onEdit} onDelete={onDelete} providerId={providerId} provider={provider} />
+          <ModelSectionRows models={builtInModels} onEdit={onEdit} onDelete={onDelete} providerId={providerId} provider={provider} />
         </tbody>
       </table>
     </div>
@@ -516,30 +600,19 @@ function ModelSectionRows({
   onEdit,
   onDelete,
   providerId,
+  provider,
 }: {
   models: ModelProfile[];
   onEdit: (model: ModelProfile) => void;
   onDelete: (model: ModelProfile) => void;
   providerId: string;
+  provider?: ProviderProfile;
 }) {
   return (
     <>
       {models.map((model) => {
         const ctx = model.context_window;
-        const badges: Array<{ label: string; variant?: "default" | "highlight" }> = [];
-
-        if (ctx && ctx >= 100000) {
-          badges.push({ label: "long ctx", variant: "highlight" });
-        }
-        if (/\bfast\b/i.test(model.id) || /\bflash\b/i.test(model.id)) {
-          badges.push({ label: "fast", variant: "highlight" });
-        }
-        if (/vision/i.test(model.id) || /-\d(?:\.\d+)?-vision/i.test(model.id)) {
-          badges.push({ label: "vision", variant: "highlight" });
-        }
-        if (/-\d(?:\.\d+)?-tools/i.test(model.id) || /-tool/i.test(model.id)) {
-          badges.push({ label: "tools", variant: "highlight" });
-        }
+        const badges = getCapabilityBadges(model);
 
         return (
           <tr
@@ -548,6 +621,9 @@ function ModelSectionRows({
           >
             <td className="px-5 py-2 font-mono text-xs">{model.id}</td>
             <td className="px-5 py-2">{model.label}</td>
+            <td className="px-5 py-2">
+              <ProviderStatusBadge provider={provider} />
+            </td>
             <td className="px-5 py-2">
               <div className="flex flex-wrap gap-1">
                 {badges.map((b) => (

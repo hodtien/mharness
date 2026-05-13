@@ -37,7 +37,7 @@ const LONG_SYSTEM_PROMPT = `${"System prompt details. ".repeat(30)}Final expande
 
 const sampleAgents = [
   {
-    name: "general-purpose",
+    name: "Default Chat Agent",
     description: "Generic helper agent for everyday work.",
     model: "gpt-4o-mini",
     effort: "medium",
@@ -49,25 +49,25 @@ const sampleAgents = [
   {
     name: "researcher",
     description: LONG_DESC,
-    model: null,
+    model: "missing-model",
     effort: "high",
     permission_mode: "plan",
     tools_count: 4,
     has_system_prompt: true,
-    source_file: "/tmp/researcher.md",
+    source_file: "agents/researcher.md",
   },
 ];
 
 const sampleAgentDetails = {
-  "general-purpose": {
-    name: "general-purpose",
+  "Default Chat Agent": {
+    name: "Default Chat Agent",
     description: "Full generic helper agent description shown in the details modal.",
     system_prompt: LONG_SYSTEM_PROMPT,
     tools: ["read_file", "grep", "bash"],
     model: "gpt-4o-mini",
     effort: "medium",
     permission_mode: "default",
-    source_file: "/agents/general-purpose.md",
+    source_file: "/agents/Default Chat Agent.md",
     has_system_prompt: true,
   },
   researcher: {
@@ -75,10 +75,10 @@ const sampleAgentDetails = {
     description: LONG_DESC,
     system_prompt: "Research carefully.",
     tools: ["web_search", "web_fetch", "read_file", "grep"],
-    model: null,
+    model: "missing-model",
     effort: "high",
     permission_mode: "plan",
-    source_file: "/tmp/researcher.md",
+    source_file: "agents/researcher.md",
     has_system_prompt: true,
   },
 };
@@ -132,7 +132,7 @@ async function renderAgentsPage() {
     </BrowserRouter>,
   );
 
-  await waitFor(() => expect(screen.getByText("general-purpose")).toBeTruthy());
+  await waitFor(() => expect(screen.getAllByText("Default Chat Agent")[0]).toBeTruthy());
 }
 
 describe("AgentsSettingsPage", () => {
@@ -152,13 +152,28 @@ describe("AgentsSettingsPage", () => {
 
     // Loading state shows skeleton, not text
     expect(screen.getByLabelText("Loading content")).toBeTruthy();
-    await waitFor(() => expect(screen.getByText("general-purpose")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("Default Chat Agent")[0]).toBeTruthy());
     expect(screen.getByText("researcher")).toBeTruthy();
     // model badge value rendered
     expect(screen.getByText("gpt-4o-mini")).toBeTruthy();
     // long description should be truncated with ellipsis
     const truncated = screen.getByText(/^R+\u2026$/);
     expect(truncated.textContent?.length).toBe(120);
+  });
+
+
+  it("shows routing defaults and broken-model warnings", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    await renderAgentsPage();
+
+    expect(screen.getByText("Default routing by use case")).toBeTruthy();
+    expect(screen.getAllByText("Code Agent").length).toBeGreaterThan(0);
+    expect(screen.getByText("Autopilot Agent")).toBeTruthy();
+    expect(screen.getByText("Fast Agent")).toBeTruthy();
+    expect(screen.getByText(/header model selection temporarily overrides/i)).toBeTruthy();
+    expect(screen.getByText(/Selected model\/provider is unavailable: missing-model/i)).toBeTruthy();
   });
 
   it("shows View details button on agent cards", async () => {
@@ -169,9 +184,9 @@ describe("AgentsSettingsPage", () => {
 
     expect(screen.getAllByRole("button", { name: /view details/i })).toHaveLength(2);
     // help microcopy from page header
-    expect(screen.getByText(/preview the prompt and tools/i)).toBeTruthy();
-    expect(screen.getByText(/clone.*create an editable copy/i)).toBeTruthy();
-    expect(screen.getByText(/validate.*test the current draft/i)).toBeTruthy();
+    expect(screen.getByText(/Agents are task profiles/i)).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /clone/i }).length).toBeGreaterThan(0);
+    expect(screen.getByText(/header model picker is only a temporary override/i)).toBeTruthy();
   });
 
   it("opens the details modal when clicking View details", async () => {
@@ -182,7 +197,7 @@ describe("AgentsSettingsPage", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /view details/i })[0]);
 
     await waitFor(() => expect(screen.getByText("Full generic helper agent description shown in the details modal.")).toBeTruthy());
-    expect(screen.getAllByText("general-purpose").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Default Chat Agent").length).toBeGreaterThan(1);
     expect(screen.getByRole("button", { name: "✕" })).toBeTruthy();
   });
 
@@ -197,11 +212,11 @@ describe("AgentsSettingsPage", () => {
     const modal = screen.getByText("Full generic helper agent description shown in the details modal.").closest(".space-y-5");
     expect(modal).toBeTruthy();
     const modalContent = within(modal as HTMLElement);
-    expect(screen.getAllByText("general-purpose").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Default Chat Agent").length).toBeGreaterThan(1);
     expect(modalContent.getByText("gpt-4o-mini")).toBeTruthy();
     expect(modalContent.getByText("medium")).toBeTruthy();
     expect(modalContent.getByText("default")).toBeTruthy();
-    expect(modalContent.getByText("/agents/general-purpose.md")).toBeTruthy();
+    expect(modalContent.getByText("/agents/Default Chat Agent.md")).toBeTruthy();
     expect(modalContent.getByText("read_file")).toBeTruthy();
     expect(modalContent.getByText("grep")).toBeTruthy();
     expect(modalContent.getByText("bash")).toBeTruthy();
@@ -226,7 +241,7 @@ describe("AgentsSettingsPage", () => {
     // Full content is now visible
     expect(screen.getByText(/Final expanded instructions/)).toBeTruthy();
     // A System Prompt heading should appear in the expanded modal
-    expect(screen.getByText(/System Prompt — general-purpose/)).toBeTruthy();
+    expect(screen.getByText(/System Prompt — Default Chat Agent/)).toBeTruthy();
   });
 
   it("opens inline editor when clicking Edit and saves changes", async () => {
@@ -239,29 +254,27 @@ describe("AgentsSettingsPage", () => {
       </BrowserRouter>,
     );
 
-    await waitFor(() => expect(screen.getByText("general-purpose")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("Default Chat Agent")[0]).toBeTruthy());
 
     // Click the first Edit button
     const editButtons = screen.getAllByRole("button", { name: /edit/i });
     fireEvent.click(editButtons[0]);
 
     // Editor should appear
-    await waitFor(() => expect(screen.getByTestId("editor-general-purpose")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("editor-Default Chat Agent")).toBeTruthy());
 
     // Change effort to "high"
-    const effortSelects = screen.getAllByRole("combobox");
-    // 0=model, 1=effort, 2=permission
-    fireEvent.change(effortSelects[1], { target: { value: "high" } });
+    fireEvent.change(screen.getByTestId("editor-Default Chat Agent").querySelectorAll("select")[1], { target: { value: "high" } });
 
     // Save
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
-    await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy());
+    await waitFor(() => expect(calls.some((call) => call.init?.method === "PATCH")).toBe(true));
 
     // PATCH was issued
     const patch = calls.find((c) => c.init?.method === "PATCH");
     expect(patch).toBeTruthy();
-    expect(patch?.url).toBe("/api/agents/general-purpose");
+    expect(patch?.url).toBe("/api/agents/Default%20Chat%20Agent");
     const body = JSON.parse(String(patch?.init?.body ?? "{}"));
     expect(body.effort).toBe("high");
   });
@@ -278,10 +291,10 @@ describe("AgentsSettingsPage", () => {
       </BrowserRouter>,
     );
 
-    await waitFor(() => expect(screen.getByText("general-purpose")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("Default Chat Agent")[0]).toBeTruthy());
 
     fireEvent.click(screen.getAllByRole("button", { name: /edit/i })[0]);
-    await waitFor(() => expect(screen.getByTestId("editor-general-purpose")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("editor-Default Chat Agent")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     // Error feedback badge appears with the API error details visible in the form

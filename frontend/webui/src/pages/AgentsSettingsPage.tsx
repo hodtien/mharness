@@ -7,6 +7,14 @@ import PageHeader from "../components/PageHeader";
 
 const EFFORT_OPTIONS = ["low", "medium", "high"] as const;
 const PERMISSION_OPTIONS = ["default", "acceptEdits", "bypassPermissions", "plan", "dontAsk"] as const;
+const ROUTING_DEFAULTS = [
+  { useCase: "Chat", agent: "Default Chat Agent" },
+  { useCase: "Code", agent: "Code Agent" },
+  { useCase: "Review", agent: "Review Agent" },
+  { useCase: "Autopilot Worker", agent: "Autopilot Agent" },
+  { useCase: "Planning", agent: "Code Agent" },
+  { useCase: "Fast/cheap tasks", agent: "Fast Agent" },
+];
 
 
 function truncate(text: string, maxLen: number): string {
@@ -67,12 +75,14 @@ export default function AgentsSettingsPage() {
     };
   }, []);
 
-  const flatModelOptions: Array<{ provider: string; id: string; label: string }> = [];
+  const flatModelOptions: Array<{ provider: string; id: string; label: string; healthy: boolean }> = [];
   for (const [provider, models] of Object.entries(allModels)) {
     for (const m of models) {
-      flatModelOptions.push({ provider, id: m.id, label: m.label || m.id });
+      flatModelOptions.push({ provider, id: m.id, label: m.label || m.id, healthy: true });
     }
   }
+  const modelIds = new Set(flatModelOptions.map((model) => model.id));
+  const missingModel = (model?: string | null) => Boolean(model && !modelIds.has(model));
 
   const startEdit = (agent: AgentProfile) => {
     const init = {
@@ -212,11 +222,24 @@ export default function AgentsSettingsPage() {
     <div className="flex flex-1 flex-col overflow-hidden">
       <PageHeader
         title="Agents"
-        description="Configure each agent's model, effort level, and permission mode. Use View details to preview the prompt and tools, Clone to create an editable copy, and Validate to test the current draft before saving."
+        description="Agents are task profiles: purpose, selected model, tools, permission, effort, prompt/instructions, and routing policy. Pick an Agent for normal work; the header model picker is only a temporary override."
         metadata={[{ label: "Agents", value: String(agents.length) }]}
       />
       <div className="flex flex-1 flex-col overflow-y-auto p-6">
       <div className="w-full max-w-5xl space-y-6">
+
+        <section className="rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-4">
+          <h2 className="text-sm font-semibold text-cyan-100">Default routing by use case</h2>
+          <p className="mt-1 text-xs text-[var(--text-dim)]">Configure model capability once on Models, then route work to an Agent profile. Header model selection temporarily overrides the chosen agent model for the current session.</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            {ROUTING_DEFAULTS.map((route) => (
+              <div key={route.useCase} className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wide text-[var(--text-dim)]">{route.useCase}</div>
+                <div className="text-xs font-medium text-[var(--text)]">{route.agent}</div>
+              </div>
+            ))}
+          </div>
+        </section>
 
         {error && (
           <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
@@ -303,6 +326,7 @@ export default function AgentsSettingsPage() {
           {filteredAgents.map((agent) => {
             const isEditing = editing === agent.name;
             const isUserOwned = !!agent.source_file;
+            const hasBrokenModel = missingModel(agent.model);
             return (
               <div
                 key={agent.name}
@@ -374,7 +398,13 @@ export default function AgentsSettingsPage() {
                       ) : (
                         <Badge label="Tools" value="all" dim />
                       )}
-                      {agent.has_system_prompt && <Badge label="sys" value="prompt" dim />}
+                      {agent.has_system_prompt && <Badge label="prompt" value="set" dim />}
+                    </div>
+                  )}
+
+                  {!isEditing && hasBrokenModel && (
+                    <div className="mt-3 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                      Selected model/provider is unavailable: {agent.model}. Choose a healthy model or fix provider credentials.
                     </div>
                   )}
 
@@ -398,7 +428,7 @@ export default function AgentsSettingsPage() {
                           <option value="">— none —</option>
                           {flatModelOptions.map((opt) => (
                             <option key={`${opt.provider}:${opt.id}`} value={opt.id}>
-                              {opt.label} ({opt.provider})
+                              {opt.label} ({opt.provider}){opt.healthy ? "" : " — unavailable"}
                             </option>
                           ))}
                         </select>
@@ -462,7 +492,7 @@ export default function AgentsSettingsPage() {
                             disabled={saveBusy || validateBusy}
                             className="rounded-lg border border-cyan-400/40 bg-[var(--panel-2)] px-4 py-2 text-sm text-cyan-400 hover:bg-cyan-500/10 disabled:opacity-60"
                           >
-                            {validateBusy ? "Checking…" : "Validate"}
+                            {validateBusy ? "Testing…" : "Smoke test"}
                           </button>
                           <button
                             type="button"
@@ -517,6 +547,12 @@ export default function AgentsSettingsPage() {
                     <Label>Description</Label>
                     <p className="text-sm text-[var(--text)]">{detailData.description}</p>
                   </div>
+
+                  {missingModel(detailData.model) && (
+                    <div className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                      Selected model/provider is unavailable: {detailData.model}. Run a model probe or select another model before using this agent.
+                    </div>
+                  )}
 
                   {/* Model / Effort / Permission */}
                   <div className="grid grid-cols-3 gap-4">
@@ -574,7 +610,7 @@ export default function AgentsSettingsPage() {
                   {detailData.has_system_prompt && (
                     <div>
                       <div className="mb-1 flex items-center justify-between">
-                        <Label>System Prompt</Label>
+                        <Label>Prompt / Instructions</Label>
                         {(detailData.system_prompt ?? "").length > 0 && (
                           <button
                             type="button"
