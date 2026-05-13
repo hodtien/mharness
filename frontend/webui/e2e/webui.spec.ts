@@ -1052,3 +1052,80 @@ test.describe("8. Settings Help Text & Save Feedback", () => {
     await expect(page.locator("#tick-cron")).toBeVisible({ timeout: 5_000 });
   });
 });
+
+// ─── 8. Login Screen default-password warning ──────────────────────────────────
+
+test.describe("8. Login Screen default-password warning", () => {
+  test.beforeEach(async ({ page }) => {
+    // Set up a clean state — no existing token so the login screen is shown.
+    await page.addInitScript(`
+      window.localStorage.clear();
+    `);
+    await stubPipelineRoutes(page);
+    await stubTasksRoutes(page);
+    await stubProjectsRoutes(page);
+    await stubSettingsRoutes(page);
+  });
+
+  test("shows the default-password warning when backend reports is_default_password: true", async ({ page }) => {
+    await page.route("/api/auth/login", async (route: Route) => {
+      await route.fulfill(json({
+        access_token: "e2e-access-token",
+        refresh_token: "e2e-refresh-token",
+        access_expires_in: 3600,
+        refresh_expires_in: 604800,
+        is_default_password: true,
+      }));
+    });
+    await page.goto("/chat");
+    await expect(page.getByRole("heading", { name: /OpenHarness/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Default password:/i)).toBeVisible();
+    await expect(page.getByText("123456")).toBeVisible();
+  });
+
+  test("hides the warning and shows a neutral hint when password has been changed", async ({ page }) => {
+    await page.route("/api/auth/login", async (route: Route) => {
+      await route.fulfill(json({
+        access_token: "e2e-access-token",
+        refresh_token: "e2e-refresh-token",
+        access_expires_in: 3600,
+        refresh_expires_in: 604800,
+        is_default_password: false,
+      }));
+    });
+    await page.goto("/chat");
+    await expect(page.getByRole("heading", { name: /OpenHarness/i })).toBeVisible({ timeout: 10_000 });
+    // Warning must not be present
+    await expect(page.queryByText(/Default password:/i)).toBeNull();
+    // Neutral hint must be present instead
+    await expect(page.getByText(/Sign in to continue\./i)).toBeVisible();
+  });
+
+  test("warning disappears after successful login with a custom password", async ({ page }) => {
+    let loginRequestBody: string | undefined;
+    await page.route("/api/auth/login", async (route: Route) => {
+      loginRequestBody = route.request().postData();
+      await route.fulfill(json({
+        access_token: "e2e-access-token",
+        refresh_token: "e2e-refresh-token",
+        access_expires_in: 3600,
+        refresh_expires_in: 604800,
+        is_default_password: false,
+      }));
+    });
+    await page.goto("/chat");
+    await expect(page.getByRole("heading", { name: /OpenHarness/i })).toBeVisible({ timeout: 10_000 });
+
+    // Simulate backend still reporting default password on initial load
+    await page.evaluate(() => {
+      localStorage.setItem("oh_is_default_password", "true");
+    });
+    await page.reload();
+    await expect(page.getByText(/Default password:/i)).toBeVisible();
+
+    // Login with a non-default password
+    await page.getByRole("textbox", { name: /password/i }).fill("my-secret-password");
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await expect(page.getByText(/Default password:/i)).not.toBeVisible({ timeout: 5_000 });
+  });
+});
