@@ -67,8 +67,30 @@ export default function ProjectsPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmDeleteName, setConfirmDeleteName] = useState<string>("");
 
-  // View filter (default: hide temp-like projects)
-  const [viewFilter, setViewFilter] = useState<ViewFilter>("active");
+  // View filter (default: hide temp-like projects, persisted across reloads)
+  const [viewFilter, setViewFilter] = useState<ViewFilter>(() => {
+    try {
+      const saved = localStorage.getItem("oh_projects_filter");
+      if (saved && Object.keys(FILTER_LABELS).includes(saved)) {
+        return saved as ViewFilter;
+      }
+    } catch {
+      // localStorage unavailable (e.g. SSR), fall through to default
+    }
+    return "active";
+  });
+
+  // Persist filter selection when it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem("oh_projects_filter", viewFilter);
+    } catch {
+      // ignore storage errors
+    }
+  }, [viewFilter]);
+
+  // Stale banner state (dismissible per session)
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // Client-side search filter
   const [searchQuery, setSearchQuery] = useState("");
@@ -336,6 +358,31 @@ export default function ProjectsPage() {
       <div className="flex flex-1 flex-col overflow-y-auto p-6">
         <div className="w-full max-w-5xl space-y-6">
           {error && <ErrorBanner message={`Failed to load projects${error ? `: ${error}` : "."}`} />}
+
+          {/* Stale registry warning banner */}
+          {!bannerDismissed && projects.length > 0 && tempCount + missingCount >= 3 && (
+            <div className="rounded-lg border border-orange-400/40 bg-orange-500/10 px-4 py-3 text-sm">
+              <div className="flex items-start gap-3">
+                <span aria-hidden className="mt-0.5 shrink-0 text-base">⚠️</span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-orange-200">
+                    Your registry has {tempCount + missingCount} stale entries ({missingCount} missing, {tempCount} temp).
+                  </p>
+                  <p className="mt-1 text-orange-300/80">
+                    Use the <strong>Cleanup</strong> button to remove registry records — your actual project directories are not affected.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Dismiss warning"
+                  onClick={() => setBannerDismissed(true)}
+                  className="shrink-0 rounded px-2 py-1 text-xs text-orange-400 hover:bg-orange-400/20"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
 
           {projects.length === 0 && (
             <EmptyState
