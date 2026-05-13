@@ -22,6 +22,7 @@ RepoTaskStatus = Literal[
     "repairing",
     "completed",
     "merged",
+    "done",
     "failed",
     "rejected",
     "killed",
