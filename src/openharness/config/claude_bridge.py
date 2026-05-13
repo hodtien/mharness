@@ -229,6 +229,23 @@ def apply_claude_bridge(settings: Settings, *, activate: bool = False) -> Settin
     export_claude_auth_env(claude)
 
     profiles = settings.merged_profiles()
+    saved_profile = profiles.get(CLAUDE_BRIDGE_PROFILE)
+    if saved_profile is not None:
+        profile = profile.model_copy(
+            update={
+                "default_model": saved_profile.default_model,
+                "last_model": (
+                    (saved_profile.last_model or "").strip()
+                    or profile.last_model
+                ),
+                "allowed_models": sorted(
+                    {
+                        *profile.allowed_models,
+                        *saved_profile.allowed_models,
+                    }
+                ),
+            }
+        )
     profiles[CLAUDE_BRIDGE_PROFILE] = profile
 
     updates: dict[str, Any] = {"profiles": profiles}

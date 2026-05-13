@@ -22,7 +22,7 @@ from openharness.config.claude_bridge import (
     write_agent_model,
     write_claude_model,
 )
-from openharness.config.settings import Settings
+from openharness.config.settings import ProviderProfile, Settings
 
 
 def _fixture_payload() -> dict:
@@ -137,6 +137,32 @@ class TestApplyClaudeBridge:
         base = Settings()
         merged = apply_claude_bridge(base)
         assert CLAUDE_BRIDGE_PROFILE not in merged.merged_profiles()
+
+    def test_preserves_saved_router_model_preferences(self, claude_file: Path):
+        saved_profile = ProviderProfile(
+            label="Claude Router (~/.claude/settings.json)",
+            provider="anthropic",
+            api_format="anthropic",
+            auth_source="anthropic_api_key",
+            default_model="cx/gpt-5.5",
+            last_model="cc/claude-sonnet-4-6",
+            base_url="http://stale-router.example/v1",
+            credential_slot=CLAUDE_BRIDGE_PROFILE,
+            allowed_models=["cx/gpt-5.5"],
+        )
+        base = Settings(profiles={CLAUDE_BRIDGE_PROFILE: saved_profile})
+
+        merged = apply_claude_bridge(base)
+        profile = merged.merged_profiles()[CLAUDE_BRIDGE_PROFILE]
+
+        assert profile.default_model == "cx/gpt-5.5"
+        assert profile.last_model == "cc/claude-sonnet-4-6"
+        assert profile.base_url == "http://localhost:20128/v1"
+        assert profile.allowed_models == [
+            "claude-architect",
+            "claude-sonnet-4-6",
+            "cx/gpt-5.5",
+        ]
 
 
 class TestWriteClaudeModel:
