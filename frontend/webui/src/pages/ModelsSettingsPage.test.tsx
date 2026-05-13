@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import ModelsSettingsPage from "./ModelsSettingsPage";
 
@@ -84,14 +84,15 @@ function setupFetch(extra: Record<string, () => object> = {}) {
 }
 
 describe("ModelsSettingsPage", () => {
+  afterEach(() => cleanup());
   it("renders loading state then provider accordions", async () => {
     mockLocalStorage();
     setupFetch();
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
-    await waitFor(() => expect(screen.getByText("OpenAI")).toBeTruthy());
-    expect(screen.getByText("Anthropic")).toBeTruthy();
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+    expect(screen.getAllByText("Anthropic")[0]).toBeTruthy();
   });
 
   it("shows model rows with built-in and custom badges", async () => {
@@ -104,7 +105,7 @@ describe("ModelsSettingsPage", () => {
     expect(screen.getAllByText("gpt-custom").length).toBeGreaterThan(0);
     expect(screen.getByText("custom")).toBeTruthy();
     expect(screen.getAllByText("built-in").length).toBeGreaterThan(0);
-    expect(screen.getByText("vision")).toBeTruthy();
+    expect(screen.getAllByText("vision").length).toBeGreaterThan(0);
   });
 
   it("shows context window and default badge", async () => {
@@ -116,7 +117,7 @@ describe("ModelsSettingsPage", () => {
     await waitFor(() => expect(screen.getAllByText(/128,000|128000/).length).toBeGreaterThan(0));
     expect(screen.getAllByText(/200,000|200000/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/✓ default/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/search by model id or label/i)).toBeTruthy();
+    expect(screen.getByText(/Models are provider\/model capabilities/i)).toBeTruthy();
   });
 
   it("hides delete button for built-in models, shows for custom", async () => {
@@ -137,7 +138,7 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
-    await waitFor(() => expect(screen.getByText("OpenAI")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
 
     const heading = screen.getByRole("button", { name: /openai/i });
     // Currently open — table row visible
@@ -167,20 +168,43 @@ describe("ModelsSettingsPage", () => {
     });
   });
 
+
+  it("filters models by configuration, health, and capability", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by configuration status/i }), { target: { value: "configured" } });
+    await waitFor(() => expect(screen.queryAllByText("OpenAI").find((el) => el.tagName !== "OPTION") ?? null).toBeNull());
+    expect(screen.getAllByText("Anthropic")[0]).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by configuration status/i }), { target: { value: "all" } });
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "failing" } });
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+    expect(screen.queryAllByText("Anthropic").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "all" } });
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by capability/i }), { target: { value: "vision" } });
+    await waitFor(() => expect(screen.getAllByText("vision").length).toBeGreaterThan(0));
+  });
+
   it("filters models by provider", async () => {
     mockLocalStorage();
     setupFetch();
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
-    await waitFor(() => expect(screen.getByText("OpenAI")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
 
     // Click provider filter and select Anthropic
     const providerSelect = screen.getByRole("combobox", { name: /filter by provider/i });
     fireEvent.change(providerSelect, { target: { value: "claude-api" } });
 
-    await waitFor(() => expect(screen.queryByText("OpenAI")).toBeNull());
-    expect(screen.getByText("Anthropic")).toBeTruthy();
+    await waitFor(() => expect(screen.queryAllByText("OpenAI").find((el) => el.tagName !== "OPTION") ?? null).toBeNull());
+    expect(screen.getAllByText("Anthropic")[0]).toBeTruthy();
   });
 
   it("filters models by type (built-in/custom)", async () => {
@@ -192,11 +216,11 @@ describe("ModelsSettingsPage", () => {
     await waitFor(() => expect(screen.getAllByText("gpt-custom").length).toBeGreaterThan(0));
 
     // Click "Custom" filter
-    fireEvent.click(screen.getByRole("button", { name: /custom/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^custom$/i }));
 
     await waitFor(() => expect(screen.queryAllByText("gpt-custom").length).toBeGreaterThan(0));
     // Built-in models should be hidden
-    await waitFor(() => expect(screen.queryAllByText(/built-in/i).length).toBe(0));
+    await waitFor(() => expect(screen.queryAllByText("built-in").length).toBe(0));
   });
 
   it("filters models by default-only", async () => {
@@ -205,13 +229,13 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
-    await waitFor(() => expect(screen.getByText("gpt-4o-mini")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("gpt-4o-mini")[0]).toBeTruthy());
 
     // Click "Default only" filter
     fireEvent.click(screen.getByRole("button", { name: /default only/i }));
 
-    await waitFor(() => expect(screen.queryByText("gpt-custom")).toBeNull());
-    expect(screen.getByText("gpt-4o-mini")).toBeTruthy();
+    await waitFor(() => expect(screen.queryAllByText("gpt-custom")[0] ?? null).toBeNull());
+    expect(screen.getAllByText("gpt-4o-mini")[0]).toBeTruthy();
   });
 
   it("shows empty filtered state with clear link", async () => {
@@ -220,7 +244,7 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
-    await waitFor(() => expect(screen.getByText("OpenAI")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
 
     // Apply filters that match nothing
     fireEvent.change(screen.getByPlaceholderText(/filter by model id or label/i), { target: { value: "nonexistent-model-xyz" } });
