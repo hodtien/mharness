@@ -154,34 +154,39 @@ class TestSchedulerLoop:
         await run_scheduler_loop(once=True)
 
     @pytest.mark.asyncio
-    async def test_disabled_global_flag_skips_execution(self, tmp_path, monkeypatch) -> None:
-        """When cron_schedule.enabled=false, the scheduler skips job execution."""
-        upsert_cron_job({"name": "test-disabled-guard", "schedule": "* * * * *", "command": "echo should-not-run"})
-        jobs = load_cron_jobs()
-        now = datetime.now(timezone.utc)
-        jobs[0]["next_run"] = (now - timedelta(minutes=1)).isoformat()
+    async def test_disabled_feature_skips_autopilot_jobs_but_not_regular_jobs(self, tmp_path, monkeypatch) -> None:
+        """When cron_schedule.enabled=false, autopilot jobs are skipped but regular cron jobs still run."""
+        from openharness.config.settings import load_settings, save_settings
         from openharness.services.cron import save_cron_jobs
 
+        regular_job = {"name": "test-regular-job", "schedule": "* * * * *", "command": "echo regular"}
+        autopilot_job = {
+            "name": "autopilot.tick.test",
+            "schedule": "* * * * *",
+            "command": "echo autopilot",
+            "project_id": "project-test",
+        }
+        upsert_cron_job(regular_job)
+        upsert_cron_job(autopilot_job)
+        jobs = load_cron_jobs()
+        now = datetime.now(timezone.utc)
+        for job in jobs:
+            job["next_run"] = (now - timedelta(minutes=1)).isoformat()
         save_cron_jobs(jobs)
 
-        # Set global enabled=False
-        from openharness.config.settings import load_settings, save_settings
-
         settings = load_settings()
-        settings = settings.model_copy(update={"cron_schedule": settings.cron_schedule.model_copy(update={"enabled": False})})
-        save_settings(settings)
+        save_settings(settings.model_copy(update={"cron_schedule": settings.cron_schedule.model_copy(update={"enabled": False})}))
 
         try:
             await run_scheduler_loop(once=True)
         finally:
-            # Restore
             settings = load_settings()
-            settings = settings.model_copy(update={"cron_schedule": settings.cron_schedule.model_copy(update={"enabled": True})})
-            save_settings(settings)
+            save_settings(settings.model_copy(update={"cron_schedule": settings.cron_schedule.model_copy(update={"enabled": True})}))
 
-        # History should be empty — no jobs ran
-        entries = load_history(job_name="test-disabled-guard")
-        assert len(entries) == 0, "Scheduler should not run jobs when enabled=false"
+        regular_entries = load_history(job_name="test-regular-job")
+        autopilot_entries = load_history(job_name="autopilot.tick.test")
+        assert len(regular_entries) == 1
+        assert len(autopilot_entries) == 0
 
     @pytest.mark.asyncio
     async def test_autopilot_jobs_use_project_path_and_isolate_projects(self) -> None:

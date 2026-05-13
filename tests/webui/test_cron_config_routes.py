@@ -11,7 +11,6 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from unittest.mock import patch
 
 from openharness.config.settings import load_settings
 from openharness.webui.server.app import create_app
@@ -137,50 +136,18 @@ class TestPatchCronConfig:
         body = response.json()
         assert body["tick_cron"] == "0 */2 * * *"
 
-    def test_patch_enabled_false_calls_stop_scheduler(self, tmp_path) -> None:
-        """PATCH with enabled=false calls stop_scheduler() to halt the daemon."""
+    def test_patch_enabled_false_persists_without_stopping_scheduler(self, tmp_path) -> None:
+        """PATCH with enabled=false only updates the feature flag without stopping the daemon."""
         client = _client(tmp_path)
 
-        with patch("openharness.webui.server.routes.cron.stop_scheduler") as mock_stop:
-            response = client.patch(
-                "/api/cron/config",
-                json={"enabled": False},
-                headers=AUTH,
-            )
+        response = client.patch(
+            "/api/cron/config",
+            json={"enabled": False},
+            headers=AUTH,
+        )
 
-            assert response.status_code == 200
-            assert response.json()["enabled"] is False
-            mock_stop.assert_called_once()
-
-    def test_patch_enabled_true_calls_start_daemon(self, tmp_path) -> None:
-        """PATCH with enabled=true calls start_daemon() when not already running."""
-        client = _client(tmp_path)
-
-        with patch("openharness.webui.server.routes.cron.is_scheduler_running", return_value=False):
-            with patch("openharness.services.cron_scheduler.start_daemon") as mock_start:
-                response = client.patch(
-                    "/api/cron/config",
-                    json={"enabled": True},
-                    headers=AUTH,
-                )
-
-                assert response.status_code == 200
-                mock_start.assert_called_once()
-
-    def test_patch_enabled_true_does_not_restart_if_already_running(self, tmp_path) -> None:
-        """PATCH with enabled=true does not call start_daemon if already running."""
-        client = _client(tmp_path)
-
-        with patch("openharness.webui.server.routes.cron.is_scheduler_running", return_value=True):
-            with patch("openharness.services.cron_scheduler.start_daemon") as mock_start:
-                response = client.patch(
-                    "/api/cron/config",
-                    json={"enabled": True},
-                    headers=AUTH,
-                )
-
-                assert response.status_code == 200
-                mock_start.assert_not_called()
+        assert response.status_code == 200
+        assert response.json()["enabled"] is False
 
     def test_patch_valid_persists_to_settings(self, tmp_path) -> None:
         """A valid PATCH persists scan_cron to settings.json."""

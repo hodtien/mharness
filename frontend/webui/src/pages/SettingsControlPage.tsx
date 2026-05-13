@@ -119,7 +119,6 @@ const SECTIONS: ControlSection[] = [
 interface OperationalStatusProps {
   appState: AppStatePayload | null;
   cronConfig: CronConfigResponse | null;
-  cron: Array<Record<string, unknown>>;
   tasksRunning: number;
   tasksFailed: number;
 }
@@ -127,7 +126,6 @@ interface OperationalStatusProps {
 function OperationalStatus({
   appState,
   cronConfig,
-  cron,
   tasksRunning,
   tasksFailed,
 }: OperationalStatusProps) {
@@ -161,8 +159,8 @@ function OperationalStatus({
         />
         <StatusRow
           label="Scheduler"
-          value={schedulerRunning ? "running" : cron.length > 0 ? "stopped" : "no jobs"}
-          tone={schedulerRunning ? "success" : cron.length > 0 ? "danger" : "neutral"}
+          value={schedulerRunning ? "running" : "stopped"}
+          tone={schedulerRunning ? "success" : "neutral"}
         />
         <StatusRow
           label="MCP"
@@ -263,14 +261,13 @@ function SectionCard({
 // ─── Automation Status Callout ─────────────────────────────────────────────────
 
 function AutomationCallout({
-  cron,
+  schedulerRunning,
+  cronLength,
 }: {
-  cron: Array<Record<string, unknown>>;
+  schedulerRunning: boolean;
+  cronLength: number;
 }) {
-  const enabledCron = cron.filter((j) => Boolean(j.enabled)).length;
-  const stopped = cron.length > 0 && enabledCron === 0;
-
-  if (!stopped) return null;
+  if (schedulerRunning || cronLength === 0) return null;
 
   return (
     <div
@@ -282,8 +279,8 @@ function AutomationCallout({
         <div>
           <div className="font-medium">Scheduler stopped</div>
           <div className="mt-0.5 text-xs text-amber-200/70">
-            {cron.length} cron job{cron.length !== 1 ? "s" : ""} configured but none are enabled.
-            Go to <strong>Automation → Schedule</strong> to enable scheduling.
+            {cronLength} cron job{cronLength !== 1 ? "s" : ""} configured but the scheduler process is not running.
+            Go to <strong>Automation → Schedule</strong> to enable the scheduler.
           </div>
         </div>
       </div>
@@ -330,13 +327,15 @@ export default function SettingsControlPage() {
           <OperationalStatus
             appState={appState}
             cronConfig={cronConfig}
-            cron={cron}
             tasksRunning={tasksRunning}
             tasksFailed={tasksFailed}
           />
 
           {/* Automation stopped alert */}
-          <AutomationCallout cron={cron} />
+          <AutomationCallout
+            schedulerRunning={cronConfig?.scheduler_running ?? false}
+            cronLength={cron.length}
+          />
 
           {/* Settings sections grid */}
           <div className="grid gap-4 sm:grid-cols-2">
