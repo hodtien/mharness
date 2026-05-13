@@ -29,6 +29,7 @@ export default function ProjectSelector() {
   const [data, setData] = useState<ProjectsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activatingProjectId, setActivatingProjectId] = useState<string | null>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click.
@@ -68,13 +69,22 @@ export default function ProjectSelector() {
     (p) => p.id === activeProjectId,
   );
 
-  const handleSelect = (projectId: string) => {
+  const handleSelect = async (projectId: string) => {
     setOpen(false);
     if (projectId === activeProjectId) return;
-    // Navigate to current path with updated ?project= param, preserving other params.
-    const next = new URLSearchParams(searchParams);
-    next.set("project", projectId);
-    navigate(`?${next.toString()}`, { replace: false });
+    setActivatingProjectId(projectId);
+    setError(null);
+    try {
+      await api.activateProject(projectId);
+      setData((prev) => (prev ? { ...prev, active_project_id: projectId } : prev));
+      const next = new URLSearchParams(searchParams);
+      next.set("project", projectId);
+      navigate(`?${next.toString()}`, { replace: false });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setActivatingProjectId(null);
+    }
   };
 
   return (
@@ -123,7 +133,8 @@ export default function ProjectSelector() {
                   <li key={project.id} role="option" aria-selected={isActive}>
                     <button
                       type="button"
-                      onClick={() => handleSelect(project.id)}
+                      disabled={activatingProjectId !== null}
+                      onClick={() => void handleSelect(project.id)}
                       className={
                         "flex w-full flex-col items-start gap-0.5 border-b border-[var(--border)] px-3 py-2 text-left text-[13px] transition last:border-b-0 " +
                         (isActive

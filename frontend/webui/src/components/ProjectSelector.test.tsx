@@ -27,13 +27,21 @@ const MOCK_RESPONSE: ProjectsResponse = {
 function mockFetch(response: ProjectsResponse = MOCK_RESPONSE) {
   vi.stubGlobal(
     "fetch",
-    vi.fn((url: string) => {
+    vi.fn((url: string, init?: RequestInit) => {
       if (url === "/api/projects") {
         return Promise.resolve({
           ok: true,
           status: 200,
           headers: { get: () => null },
           json: () => Promise.resolve(response),
+        });
+      }
+      if (url.startsWith("/api/projects/") && url.endsWith("/activate") && init?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: () => Promise.resolve({ ok: true }),
         });
       }
       return Promise.reject(new Error(`unexpected url: ${url}`));
@@ -120,5 +128,33 @@ describe("ProjectSelector", () => {
 
     const manageLink = await screen.findByRole("link", { name: /manage projects/i });
     expect(manageLink.getAttribute("href")).toContain("project=proj-001");
+  });
+
+  it("activates the selected project before updating the URL", async () => {
+    mockFetch();
+
+    render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <ProjectSelector />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(screen.getByText("CLI Tool")).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button"));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /my app/i }));
+    });
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/projects/proj-001/activate",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    expect(screen.getByRole("button").textContent).toContain("My App");
   });
 });
