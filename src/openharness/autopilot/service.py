@@ -365,6 +365,13 @@ def _source_ref_number(source_ref: str, prefix: str) -> int | None:
         return None
 
 
+def _metadata_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value or default)
+    except (TypeError, ValueError):
+        return default
+
+
 def _bilingual_lines(zh: str, en: str) -> str:
     return f"{zh}\n{en}".strip()
 
@@ -786,7 +793,7 @@ class RepoAutopilotStore:
         if status == "queued" and previous_status in {"failed", "rejected", "killed", "pending"}:
             preserved_failure_stage = card.metadata.get("last_failure_stage")
             preserved_failure_summary = card.metadata.get("last_failure_summary")
-            preserved_attempt_count = int(card.metadata.get("attempt_count", 0) or 0)
+            preserved_attempt_count = _metadata_int(card.metadata.get("attempt_count"))
             for key in (
                 "worker_id",
                 "pending_reason",
@@ -1685,7 +1692,6 @@ class RepoAutopilotStore:
         working_cwd = self._cwd
         current_run_report = self._runs_dir / f"{card.id}-run.md"
         current_verification_report = self._runs_dir / f"{card.id}-verification.md"
-        existing_attempts = int(card.metadata.get("attempt_count", 0) or 0)
         try:
             if use_worktree:
                 worktree_info = await worktree_manager.create_worktree(
@@ -1694,7 +1700,7 @@ class RepoAutopilotStore:
                     branch=head_branch,
                 )
                 working_cwd = worktree_info.path
-            self.update_status(
+            card = self.update_status(
                 card.id,
                 status="preparing",
                 note="preparing isolated worktree" if use_worktree else "preparing local execution",
@@ -1710,6 +1716,7 @@ class RepoAutopilotStore:
                     "linked_pr_number": linked_pr_number,
                 },
             )
+            existing_attempts = _metadata_int(card.metadata.get("attempt_count"))
 
             if issue_number is not None and existing_attempts == 0:
                 self._comment_on_issue(

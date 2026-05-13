@@ -8130,7 +8130,19 @@ Findings:
             "last_failure_summary": "agent:code-reviewer (diff vs main) rc=1",
         },
     )
+    stale_card = card.model_copy(update={"status": "queued"})
     store.update_status(card.id, status="queued")
+    original_get_card = store.get_card
+    get_card_calls = 0
+
+    def fake_get_card(card_id: str) -> RepoTaskCard | None:
+        nonlocal get_card_calls
+        get_card_calls += 1
+        if get_card_calls == 1 and card_id == card.id:
+            return stale_card
+        return original_get_card(card_id)
+
+    monkeypatch.setattr(store, "get_card", fake_get_card)
 
     captured_prompt: dict[str, str] = {}
 
