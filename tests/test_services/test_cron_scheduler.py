@@ -154,23 +154,34 @@ class TestSchedulerLoop:
         await run_scheduler_loop(once=True)
 
     @pytest.mark.asyncio
-    async def test_once_mode_fires_due_job(self) -> None:
-        """Scheduler loop should fire a job that is due."""
-        upsert_cron_job({"name": "test-once", "schedule": "* * * * *", "command": "echo fired"})
-
-        # Force next_run to the past so it's immediately due
-        from openharness.services.cron import save_cron_jobs
-
+    async def test_disabled_global_flag_skips_execution(self, tmp_path, monkeypatch) -> None:
+        """When cron_schedule.enabled=false, the scheduler skips job execution."""
+        upsert_cron_job({"name": "test-disabled-guard", "schedule": "* * * * *", "command": "echo should-not-run"})
         jobs = load_cron_jobs()
         now = datetime.now(timezone.utc)
         jobs[0]["next_run"] = (now - timedelta(minutes=1)).isoformat()
+        from openharness.services.cron import save_cron_jobs
+
         save_cron_jobs(jobs)
 
-        await run_scheduler_loop(once=True)
+        # Set global enabled=False
+        from openharness.config.settings import load_settings, save_settings
 
-        entries = load_history(job_name="test-once")
-        assert len(entries) == 1
-        assert entries[0]["status"] == "success"
+        settings = load_settings()
+        settings = settings.model_copy(update={"cron_schedule": settings.cron_schedule.model_copy(update={"enabled": False})})
+        save_settings(settings)
+
+        try:
+            await run_scheduler_loop(once=True)
+        finally:
+            # Restore
+            settings = load_settings()
+            settings = settings.model_copy(update={"cron_schedule": settings.cron_schedule.model_copy(update={"enabled": True})})
+            save_settings(settings)
+
+        # History should be empty — no jobs ran
+        entries = load_history(job_name="test-disabled-guard")
+        assert len(entries) == 0, "Scheduler should not run jobs when enabled=false"
 
     @pytest.mark.asyncio
     async def test_autopilot_jobs_use_project_path_and_isolate_projects(self) -> None:

@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from openharness.config.settings import CronScheduleConfig, load_settings, save_settings
 from openharness.services.cron import load_cron_jobs, preview_cron_next_runs
-from openharness.services.cron_scheduler import is_scheduler_running
+from openharness.services.cron_scheduler import is_scheduler_running, stop_scheduler
 from openharness.webui.server.state import require_token
 
 router = APIRouter(
@@ -165,6 +165,17 @@ def patch_cron_config(payload: CronConfigPatch) -> CronConfigResponse:
         update={"cron_schedule": proposed}
     )
     save_settings(settings)
+
+    # Side-effects: stop or start the scheduler daemon based on enabled flag
+    if payload.enabled is False:
+        stop_scheduler()
+    elif payload.enabled is True and not is_scheduler_running():
+        from openharness.services.cron_scheduler import start_daemon
+
+        try:
+            start_daemon()
+        except RuntimeError:
+            pass  # already running — ignore
 
     # Trigger installation if in auto mode and cron is enabled
     install_result: InstallResult | None = None

@@ -304,6 +304,19 @@ async def run_scheduler_loop(*, once: bool = False) -> None:
 
     try:
         while not shutdown.is_set():
+            # Guard: respect the global enabled flag — skip this tick when disabled
+            from openharness.config.settings import load_settings
+
+            if not load_settings().cron_schedule.enabled:
+                logger.debug("Scheduling disabled — skipping tick")
+                if once:
+                    break
+                try:
+                    await asyncio.wait_for(shutdown.wait(), timeout=TICK_INTERVAL_SECONDS)
+                except asyncio.TimeoutError:
+                    pass
+                continue
+
             now = datetime.now(timezone.utc)
             jobs = load_cron_jobs()
             due = _jobs_due(jobs, now)
