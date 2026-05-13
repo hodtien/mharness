@@ -198,7 +198,7 @@ export default function App() {
   }
 
   if (!auth.authenticated) {
-    return <LoginScreen onAuthenticated={handleAuthenticated} />;
+    return <LoginScreen onAuthenticated={handleAuthenticated} isDefaultPassword={auth.isDefaultPassword} />;
   }
 
   return (

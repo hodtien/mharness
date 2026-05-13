@@ -3,9 +3,11 @@ import { api, type AuthSessionSnapshot } from "../api/client";
 
 interface LoginScreenProps {
   onAuthenticated: (snapshot: AuthSessionSnapshot) => void;
+  /** Show the default password warning only when true (backend confirmed default password is still in use). */
+  isDefaultPassword?: boolean;
 }
 
-export default function LoginScreen({ onAuthenticated }: LoginScreenProps) {
+export default function LoginScreen({ onAuthenticated, isDefaultPassword = false }: LoginScreenProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -53,9 +55,15 @@ export default function LoginScreen({ onAuthenticated }: LoginScreenProps) {
             </div>
           ) : null}
 
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-            Default password: <span className="font-mono">123456</span>. Change it after login.
-          </div>
+          {isDefaultPassword ? (
+            <div role="alert" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              Default password: <span className="font-mono">123456</span>. Change it after login.
+            </div>
+          ) : (
+            <div className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs text-[var(--text-dim)]">
+              Sign in to continue.
+            </div>
+          )}
 
           <button
             type="submit"
