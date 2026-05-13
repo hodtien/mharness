@@ -54,7 +54,7 @@ const sampleAgents = [
     permission_mode: "plan",
     tools_count: 4,
     has_system_prompt: true,
-    source_file: "/tmp/researcher.md",
+    source_file: "agents/researcher.md",
   },
 ];
 
@@ -78,7 +78,7 @@ const sampleAgentDetails = {
     model: "missing-model",
     effort: "high",
     permission_mode: "plan",
-    source_file: "/tmp/researcher.md",
+    source_file: "agents/researcher.md",
     has_system_prompt: true,
   },
 };
