@@ -1159,21 +1159,27 @@ class RepoAutopilotStore:
         passed = not fatal and not transient
         return PreflightResult(passed=passed, checks=checks, fatal=fatal, transient=transient)
 
-    def _resolve_model_for_card(self, card: RepoTaskCard, execution: dict[str, Any]) -> str | None:
+    def _resolve_model_for_card(
+        self,
+        card: RepoTaskCard,
+        execution: dict[str, Any],
+        *,
+        explicit_model: str | None = None,
+    ) -> str | None:
         """Resolve the effective model for a card.
 
         Resolves model in order of precedence:
-        1. card.model (explicit model override)
-        2. card.metadata["execution_model"]
-        3. policies.autopilot.execution.implement_agent → agent_models
-        4. policies.autopilot.execution.default_model
+        1. explicit model override
+        2. card.model
+        3. policies.autopilot.execution.default_model
+        4. policies.autopilot.execution.implement_agent → agent_models
         """
         implement_agent = _safe_text(execution.get("implement_agent"))
         model = (
-            card.model
-            or (card.metadata or {}).get("execution_model")
-            or (implement_agent and _resolve_agent_model(implement_agent))
+            _safe_text(explicit_model)
+            or card.model
             or _safe_text(execution.get("default_model"))
+            or (implement_agent and _resolve_agent_model(implement_agent))
             or None
         )
         return model
@@ -1446,14 +1452,11 @@ class RepoAutopilotStore:
         execution = dict(policies.get("autopilot", {}).get("execution", {}))
         _stale_ttl_hours = float(execution.get("stream_registry_stale_hours", 1))
         set_registry_stale_seconds(_stale_ttl_hours * 3600)
-        _implement_agent = _safe_text(execution.get("implement_agent"))
         _review_agent = _safe_text(execution.get("review_agent"))
-        effective_model = (
-            model
-            or card.model
-            or (_implement_agent and _resolve_agent_model(_implement_agent))
-            or _safe_text(execution.get("default_model"))
-            or None
+        effective_model = self._resolve_model_for_card(
+            card,
+            execution,
+            explicit_model=model,
         )
         effective_review_model = (
             _review_agent and _resolve_agent_model(_review_agent)

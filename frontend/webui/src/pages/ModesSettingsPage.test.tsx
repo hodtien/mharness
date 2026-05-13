@@ -24,6 +24,9 @@ function mockGetModes(data: object) {
     if (url === "/api/modes" && (!init?.method || init.method === "GET")) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(data) });
     }
+    if (url === "/api/models" && (!init?.method || init.method === "GET")) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }
     if (url === "/api/modes" && init?.method === "PATCH") {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(data) });
     }
@@ -69,6 +72,71 @@ describe("ModesSettingsPage", () => {
     expect(screen.getByText(/minimize interruptions/i)).toBeTruthy();
     expect(screen.getByText(/lower effort.*faster/i)).toBeTruthy();
     expect(screen.getByText(/more passes.*improve quality/i)).toBeTruthy();
+  });
+
+  it("allows selecting the runtime model from configured models", async () => {
+    mockLocalStorage();
+    const patchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/models") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            "claude-router": [
+              { id: "cc/claude-sonnet-4-6", label: "Claude Sonnet" },
+              { id: "cx/gpt-5.5", label: "GPT-5.5" },
+            ],
+          }),
+        });
+      }
+      if (url === "/api/modes" && init?.method === "PATCH") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            permission_mode: "default",
+            model: "cx/gpt-5.5",
+            fast_mode: false,
+            vim_enabled: false,
+            notifications_enabled: true,
+            auto_compact_threshold_tokens: 160000,
+            effort: "low",
+            passes: 1,
+            output_style: "default",
+            theme: "default",
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          permission_mode: "default",
+          model: "cc/claude-sonnet-4-6",
+          fast_mode: false,
+          vim_enabled: false,
+          notifications_enabled: true,
+          auto_compact_threshold_tokens: 160000,
+          effort: "low",
+          passes: 1,
+          output_style: "default",
+          theme: "default",
+        }),
+      });
+    });
+    vi.stubGlobal("fetch", patchMock);
+
+    render(<BrowserRouter><ModesSettingsPage /></BrowserRouter>);
+
+    const modelSelect = await screen.findByLabelText("Runtime model");
+    fireEvent.change(modelSelect, { target: { value: "cx/gpt-5.5" } });
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith(
+        "/api/modes",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ model: "cx/gpt-5.5" }),
+        }),
+      );
+    });
   });
 
   it("calls PATCH when fast mode toggle changes", async () => {

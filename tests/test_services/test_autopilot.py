@@ -4108,6 +4108,76 @@ def test_card_model_none_falls_back_to_policy(tmp_path: Path) -> None:
     assert used_models[0] == "oc-default-model"
 
 
+def test_policy_default_model_precedes_implement_agent_model(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+
+    from openharness.config.paths import get_project_autopilot_policy_path
+
+    policy_path = get_project_autopilot_policy_path(repo)
+    policy_path.parent.mkdir(parents=True, exist_ok=True)
+    policy_path.write_text(
+        "execution:\n"
+        "  default_model: cx/gpt-5.5\n"
+        "  implement_agent: gan-generator\n"
+        "  max_turns: 12\n"
+        "  permission_mode: full_auto\n"
+        "  host_mode: self_hosted\n"
+        "  use_worktree: false\n"
+        "  base_branch: main\n"
+        "  max_attempts: 3\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service._resolve_agent_model",
+        lambda agent_key: "oclaude-coder" if agent_key == "gan-generator" else None,
+    )
+
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Use policy default before implement agent",
+        body="fallback test",
+    )
+    used_models = []
+
+    async def capture_model_prompt(
+        self, prompt: str, *, model, max_turns, permission_mode, cwd=None, **kwargs
+    ):
+        used_models.append(model)
+        return "done"
+
+    store._run_agent_prompt = MethodType(capture_model_prompt, store)
+    store._check_cwd_exists = lambda: PreflightCheck(name="cwd_exists", status="ok", reason="ok")
+    store._check_model_available = lambda m: PreflightCheck(name="model_available", status="ok", reason="ok")
+    store._check_auth_status = lambda: PreflightCheck(name="auth_ok", status="ok", reason="ok")
+    store._check_github_available = lambda: PreflightCheck(name="github_available", status="ok", reason="ok")
+
+    def fake_verification(self, policies, *, cwd=None):
+        return [
+            RepoVerificationStep(
+                command="uv run pytest -q",
+                returncode=0,
+                status="success",
+                stdout="1 passed",
+            )
+        ]
+
+    store._run_verification_steps = MethodType(fake_verification, store)
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+
+    assert result.status == "completed"
+    assert used_models[0] == "cx/gpt-5.5"
+    reloaded = store.get_card(card.id)
+    assert reloaded is not None
+    assert reloaded.metadata["execution_model"] == "cx/gpt-5.5"
+
+
 def test_update_card_model(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -7102,7 +7172,7 @@ def test_preflight_checks_recorded_in_metadata(tmp_path: Path) -> None:
 
 
 def test_preflight_model_resolve_chain(tmp_path: Path, monkeypatch) -> None:
-    """Model is resolved in priority order: card.model > metadata.execution_model > agent_models > default_model."""
+    """Model is resolved in priority order: explicit > card.model > default_model > agent_models."""
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
@@ -7115,27 +7185,36 @@ def test_preflight_model_resolve_chain(tmp_path: Path, monkeypatch) -> None:
         encoding="utf-8",
     )
 
+    monkeypatch.setattr(
+        "openharness.autopilot.service._resolve_agent_model",
+        lambda agent_key: "agent-model" if agent_key == "test" else None,
+    )
     execution = {"default_model": "fallback", "implement_agent": "test"}
 
-    # Test 1: card.model takes precedence
+    # Test 1: explicit runtime model takes precedence
+    card0, _ = store.enqueue_card(source_kind="manual_idea", title="Test 0")
+    card0.model = "card-model"
+    resolved0 = store._resolve_model_for_card(card0, execution, explicit_model="explicit-model")
+    assert resolved0 == "explicit-model", f"Expected explicit-model, got {resolved0}"
+
+    # Test 2: card.model takes precedence over policy
     card1, _ = store.enqueue_card(source_kind="manual_idea", title="Test 1")
     # Directly set the model on the card object (simulating what update_card_model does)
     card1.model = "priority-model"
     resolved1 = store._resolve_model_for_card(card1, execution)
     assert resolved1 == "priority-model", f"Expected priority-model, got {resolved1}"
 
-    # Test 2: metadata.execution_model is used when card.model is None
+    # Test 3: default_model is used before implement_agent
     card2, _ = store.enqueue_card(source_kind="manual_idea", title="Test 2")
-    card2.metadata["execution_model"] = "meta-model"
     card2.model = None  # Explicitly clear card.model
     resolved2 = store._resolve_model_for_card(card2, execution)
-    assert resolved2 == "meta-model", f"Expected meta-model, got {resolved2}"
+    assert resolved2 == "fallback", f"Expected fallback, got {resolved2}"
 
-    # Test 3: default_model is used when no card.model or metadata
+    # Test 4: implement_agent model is used when no explicit/card/default model exists
     card3, _ = store.enqueue_card(source_kind="manual_idea", title="Test 3")
     # card3.model is already None (no override set)
-    resolved3 = store._resolve_model_for_card(card3, execution)
-    assert resolved3 == "fallback", f"Expected fallback, got {resolved3}"
+    resolved3 = store._resolve_model_for_card(card3, {"default_model": "", "implement_agent": "test"})
+    assert resolved3 == "agent-model", f"Expected agent-model, got {resolved3}"
 
 
 def test_preflight_permanent_vs_transient_classification(tmp_path: Path, monkeypatch) -> None:

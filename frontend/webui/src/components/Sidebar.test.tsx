@@ -112,6 +112,20 @@ describe("Sidebar", () => {
     expect(screen.getByTestId("sidebar-mobile")).toBeTruthy();
   });
 
+  it("labels the sidebar status model as runtime", () => {
+    useSession.setState({
+      appState: {
+        model: "cc/claude-sonnet-4-6",
+        provider: "anthropic",
+      },
+    });
+
+    renderSidebar({ open: false, collapsed: false });
+
+    expect(screen.getByText("Runtime")).toBeTruthy();
+    expect(screen.queryByText("Model")).toBeNull();
+  });
+
   it("calls onClose when the mobile backdrop is clicked", () => {
     const onClose = vi.fn();
     renderSidebar({ open: true, collapsed: false, onClose });

@@ -106,7 +106,7 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
         {!statusCollapsed && (
           <div className="sidebar-status-group">
             <StatusField
-              label="Model"
+              label="Runtime"
               value={appState?.model ?? "—"}
             />
             <StatusField

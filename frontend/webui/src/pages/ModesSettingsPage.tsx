@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { api, type ModesPayload, type ModesPatch } from "../api/client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api, type ModelProfile, type ModesPayload, type ModesPatch } from "../api/client";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import ErrorBanner from "../components/ErrorBanner";
 import { toast } from "../store/toast";
@@ -39,6 +39,7 @@ const themes = ["default", "dark", "light", "system"];
 
 export default function ModesSettingsPage() {
   const [modes, setModes] = useState<ModesPayload | null>(null);
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [passesInput, setPassesInput] = useState("1");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,12 +49,19 @@ export default function ModesSettingsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .getModes()
-      .then((data) => {
+    Promise.all([
+      api.getModes(),
+      api.listModels().catch(() => ({} as Record<string, ModelProfile[]>)),
+    ])
+      .then(([data, modelGroups]) => {
         if (cancelled) return;
         setModes(data);
         setPassesInput(String(data.passes));
+        const ids = Object.values(modelGroups)
+          .flatMap((items) => (Array.isArray(items) ? items : []))
+          .map((item) => item.id)
+          .filter(Boolean);
+        setModelOptions(Array.from(new Set(ids)).sort());
       })
       .catch((err) => {
         if (!cancelled) setError(String(err));
@@ -73,8 +81,9 @@ export default function ModesSettingsPage() {
     setError(null);
     try {
       const updated = await api.patchModes(patch);
-      setModes(updated);
-      if (patch.passes !== undefined) setPassesInput(String(updated.passes));
+      const next = modes ? { ...modes, ...updated } : updated;
+      setModes(next);
+      if (patch.passes !== undefined) setPassesInput(String(next.passes));
       showSaved();
       toast.success("Modes updated.");
     } catch (err) {
@@ -101,6 +110,11 @@ export default function ModesSettingsPage() {
       void patchModes({ passes: parsed });
     }, 300);
   };
+
+  const runtimeModelOptions = useMemo(
+    () => uniqueOption(modelOptions, modes?.model ?? ""),
+    [modelOptions, modes?.model],
+  );
 
   if (loading) {
     return (
@@ -145,6 +159,18 @@ export default function ModesSettingsPage() {
             {error}
           </div>
         )}
+
+        <Section
+          title="Runtime model"
+          description="Choose the model used by new runtime sessions and the sidebar status badge."
+        >
+          <Select
+            ariaLabel="Runtime model"
+            value={modes.model ?? ""}
+            options={runtimeModelOptions}
+            onChange={(model) => updateMode({ model })}
+          />
+        </Section>
 
         <Section title="Permission Mode" description="Choose how much confirmation OpenHarness should request.">
           <div className="grid gap-3 sm:grid-cols-3">
@@ -334,9 +360,20 @@ function Section({ title, description, children }: { title: string; description?
   );
 }
 
-function Select({ value, options, onChange }: { value: string; options: string[]; onChange: (value: string) => void }) {
+function Select({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+}: {
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+  ariaLabel?: string;
+}) {
   return (
     <select
+      aria-label={ariaLabel}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[var(--text)] outline-none focus:border-cyan-400/60"
