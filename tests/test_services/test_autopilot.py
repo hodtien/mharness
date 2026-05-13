@@ -1566,6 +1566,188 @@ def test_autopilot_run_card_repairs_after_local_verification_failure(
     assert verification_calls["count"] == 2
 
 
+def test_autopilot_run_card_uses_architect_plan_for_reviewer_repair(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Repair with architect",
+        body="reviewer feedback should be converted into an architect repair plan",
+    )
+
+    policies = store.load_policies()
+    policies["verification"]["code_review"]["enabled"] = False
+    policies["autopilot"]["github"]["auto_merge"]["mode"] = "always"
+
+    verification_calls = {"count": 0}
+    agent_calls: list[dict[str, Any]] = []
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None, agent_id=None):
+        return SimpleNamespace(path=worktree)
+
+    async def fake_remove_worktree(self, slug):
+        return True
+
+    async def fake_run_agent_prompt(
+        self,
+        prompt: str,
+        *,
+        model,
+        max_turns,
+        permission_mode,
+        cwd=None,
+        phase=None,
+        system_prompt=None,
+        **kwargs,
+    ):
+        agent_calls.append(
+            {"phase": phase, "model": model, "prompt": prompt, "system_prompt": system_prompt}
+        )
+        if phase == "repair_architect":
+            return (
+                "Architect repair plan:\n"
+                "1. Fix the missing status transition before retry.\n"
+                "2. Add a focused regression test."
+            )
+        return f"worker attempt {len([c for c in agent_calls if c['phase'] == 'implement'])}"
+
+    def fake_run_verification_steps(self, policies, *, cwd=None):
+        verification_calls["count"] += 1
+        if verification_calls["count"] == 1:
+            return [
+                RepoVerificationStep(
+                    command="agent:code-reviewer (diff vs main)",
+                    returncode=1,
+                    status="failed",
+                    stdout=(
+                        "Severity: HIGH\n"
+                        "Findings:\n"
+                        "  - src/openharness/autopilot/service.py:2000 correctness "
+                        "Missing retry transition\n"
+                        "Summary: Worker must repair reviewer finding."
+                    ),
+                    stderr="severity=high",
+                )
+            ]
+        return [RepoVerificationStep(command="uv run pytest -q", returncode=0, status="success")]
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        return (
+            "success",
+            "All reported remote checks passed.",
+            {"url": "https://example/pr/24", "labels": [], "isDraft": False},
+            [],
+        )
+
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=0,
+            status="success",
+            stdout="Severity: NONE",
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.load_policies",
+        lambda self: policies,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt",
+        fake_run_agent_prompt,
+    )
+    monkeypatch.setattr(
+        "openharness.coordinator.agent_definitions.get_agent_definition",
+        lambda name: SimpleNamespace(system_prompt="ARCHITECT SYSTEM PROMPT")
+        if name == "architect"
+        else None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        fake_run_verification_steps,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_commit_all",
+        lambda self, cwd, message: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
+            True,
+            "branch_push_done",
+            f"Pushed {head_branch}.",
+        ),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
+        lambda self, card, *, head_branch, base_branch, run_report_path, verification_report_path: {
+            "number": 24,
+            "url": "https://example/pr/24",
+        },
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+
+    assert result.status == "merged"
+    architect_calls = [call for call in agent_calls if call["phase"] == "repair_architect"]
+    assert len(architect_calls) == 1
+    assert architect_calls[0]["model"] == "claude-architect"
+    assert architect_calls[0]["system_prompt"] == "ARCHITECT SYSTEM PROMPT"
+    assert "Severity: HIGH" in architect_calls[0]["prompt"]
+    second_worker_prompt = [call["prompt"] for call in agent_calls if call["phase"] == "implement"][1]
+    assert "Architect repair plan:" in second_worker_prompt
+    assert "Fix the missing status transition before retry" in second_worker_prompt
+    assert (store._runs_dir / f"{card.id}-attempt-01-repair-architect.md").exists()
+
+
 def test_autopilot_run_card_stops_repeated_local_verification_failure(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -6410,6 +6592,86 @@ Findings:
     assert "repo_ok reports true" in prompt
 
 
+def test_repair_prompt_injects_architect_plan_on_remote_review_failure(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Test card",
+        body="Original task description",
+    )
+    verification_report = runs_dir / f"{card.id}-attempt-01-verification.md"
+    verification_report.write_text(
+        """# Verification Report: test-card
+
+## FAILED :: agent:code-reviewer (PR #7 diff vs main)
+
+### stdout
+```text
+Severity: MEDIUM
+Findings:
+  - src/pipeline.py:44 correctness Missing retry metadata
+```
+""",
+        encoding="utf-8",
+    )
+    plan_report = runs_dir / f"{card.id}-attempt-01-repair-architect.md"
+    plan_report.write_text(
+        "# Repair Architect Plan\n\nFix retry metadata before re-running the worker.\n",
+        encoding="utf-8",
+    )
+
+    prompt = store._prepare_repair_prompt(
+        card,
+        store.load_policies(),
+        attempt_count=2,
+        prior_summary="Previous attempt summary",
+        failure_stage="remote_review_failed",
+        failure_summary="severity=medium",
+    )
+
+    assert "Previous attempt #1 failed code review" in prompt
+    assert "Severity: MEDIUM" in prompt
+    assert "Missing retry metadata" in prompt
+    assert "Repair Architect Plan" in prompt
+    assert "Fix retry metadata" in prompt
+
+
+def test_repair_architect_system_prompt_falls_back_to_claude_agents(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    claude_agents = tmp_path / ".claude" / "agents"
+    claude_agents.mkdir(parents=True)
+    (claude_agents / "architect.md").write_text(
+        """---
+name: architect
+description: Repair architect
+---
+Use the global Claude architect prompt.
+""",
+        encoding="utf-8",
+    )
+    store = RepoAutopilotStore(repo)
+
+    monkeypatch.setattr(
+        "openharness.coordinator.agent_definitions.get_agent_definition",
+        lambda name: None,
+    )
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+
+    assert store._repair_architect_system_prompt("architect") == (
+        "Use the global Claude architect prompt."
+    )
+
+
 def test_repair_prompt_no_feedback_injection_on_first_attempt(tmp_path: Path) -> None:
     """Test that feedback is not injected on first attempt (attempt_count=1)."""
     repo = tmp_path / "repo"
@@ -6539,6 +6801,40 @@ Summary: High priority issues found.
     assert "Severity: HIGH" in feedback
     assert "N+1 query detected" in feedback
     assert "Large function should be split" in feedback
+
+
+def test_extract_reviewer_feedback_handles_medium_and_low_severity(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card_id = "test-card-low"
+
+    verification_report = runs_dir / f"{card_id}-attempt-01-verification.md"
+    verification_report.write_text(
+        """# Verification Report
+
+## FAILED :: agent:code-reviewer (diff vs main)
+
+### stdout
+```text
+Severity: LOW
+Findings:
+  - src/ui.ts:12 maintainability Button label is ambiguous
+  - src/ui.ts:18 style Missing accessible name
+Summary: Low priority reviewer issues found.
+```
+""",
+        encoding="utf-8",
+    )
+
+    feedback = store._extract_reviewer_feedback(card_id)
+
+    assert "Severity: LOW" in feedback
+    assert "Button label is ambiguous" in feedback
+    assert "Missing accessible name" in feedback
 
 
 # -----------------------------------------------------------------------

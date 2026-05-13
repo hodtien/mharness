@@ -136,7 +136,7 @@ _DEFAULT_AUTOPILOT_POLICY = {
         },
         "remote_code_review": {
             "enabled": True,
-            "block_on": ["critical"],
+            "block_on": ["critical", "high", "medium", "low"],
             "max_turns": 0,
             "max_diff_chars": 80000,
         },
@@ -145,6 +145,12 @@ _DEFAULT_AUTOPILOT_POLICY = {
         "max_rounds": 2,
         "retry_on": ["local_verification_failed", "remote_ci_failed"],
         "stop_on": ["agent_runtime_error", "git_error", "permission_error", "merge_conflict"],
+        "architect_enabled": True,
+        "architect_agent": "architect",
+        "architect_model": "claude-architect",
+        "architect_on_severity": ["critical", "high", "medium", "low"],
+        "architect_max_turns": 4,
+        "architect_max_diff_chars": 80000,
     },
 }
 _DEFAULT_VERIFICATION_POLICY = {
@@ -170,7 +176,7 @@ _DEFAULT_VERIFICATION_POLICY = {
     "code_review": {
         "enabled": True,
         "agent": "code-reviewer",
-        "block_on": ["critical"],
+        "block_on": ["critical", "high", "medium", "low"],
         "diff_against": "base_branch",
         "max_diff_chars": 80000,
         "max_turns": 6,
@@ -1531,8 +1537,9 @@ class RepoAutopilotStore:
             and bool(card.metadata.get("autopilot_managed"))
             and not bool(card.metadata.get("manual_retry"))
             # Skip CI-monitor path when card is requeued for repair — let the main
-            # repair loop run the agent to actually fix the failing tests.
-            and card.metadata.get("last_failure_stage") != "remote_ci_failed"
+            # repair loop run the agent to actually fix the failing tests/review issues.
+            and card.metadata.get("last_failure_stage")
+            not in {"remote_ci_failed", "remote_review_failed"}
         ):
             ci_state, ci_summary, pr_snapshot, _checks = await self._wait_for_pr_ci(
                 linked_pr_number, policies
@@ -1625,7 +1632,8 @@ class RepoAutopilotStore:
             linked_pr_number is not None
             and bool(card.metadata.get("autopilot_managed"))
             and not bool(card.metadata.get("manual_retry"))
-            and card.metadata.get("last_failure_stage") != "remote_ci_failed"
+            and card.metadata.get("last_failure_stage")
+            not in {"remote_ci_failed", "remote_review_failed"}
         ):
             ci_state, ci_summary, pr_snapshot, _checks = await self._wait_for_pr_ci(
                 linked_pr_number, policies
@@ -2031,6 +2039,23 @@ class RepoAutopilotStore:
                             and repeat_meta["repeated_failure_count"]
                             < self._max_repeated_failure_attempts(policies)
                         ):
+                            architect_plan_path = await self._maybe_run_repair_architect_plan(
+                                card,
+                                cwd=working_cwd,
+                                policies=policies,
+                                base_branch=base_branch,
+                                failed_attempt=attempt_count,
+                                failure_stage="local_verification_failed",
+                                failure_summary=summary,
+                                stream=stream_writer,
+                            )
+                            if architect_plan_path is not None:
+                                metadata_updates.update(
+                                    {
+                                        "repair_architect_plan_path": str(architect_plan_path),
+                                        "repair_architect_attempt": attempt_count,
+                                    }
+                                )
                             self.update_status(
                                 card.id,
                                 status="repairing",
@@ -2379,6 +2404,23 @@ class RepoAutopilotStore:
                                 "last_failure_summary": summary,
                             }
                             if attempt_count < max_attempts:
+                                architect_plan_path = await self._maybe_run_repair_architect_plan(
+                                    card,
+                                    cwd=working_cwd,
+                                    policies=policies,
+                                    base_branch=base_branch,
+                                    failed_attempt=attempt_count,
+                                    failure_stage="remote_review_failed",
+                                    failure_summary=summary,
+                                    stream=stream_writer,
+                                )
+                                if architect_plan_path is not None:
+                                    remote_review_meta.update(
+                                        {
+                                            "repair_architect_plan_path": str(architect_plan_path),
+                                            "repair_architect_attempt": attempt_count,
+                                        }
+                                    )
                                 self.update_status(
                                     card.id,
                                     status="repairing",
@@ -3988,7 +4030,7 @@ class RepoAutopilotStore:
         )
 
     def _extract_reviewer_feedback(self, card_id: str) -> str:
-        """Extract CRITICAL/HIGH issues from verification report.
+        """Extract non-NONE code-reviewer issues from verification report.
 
         Returns formatted feedback string, or empty string if no issues found.
         """
@@ -4010,7 +4052,7 @@ class RepoAutopilotStore:
         except Exception:
             return ""
 
-        # Look for code-reviewer section with CRITICAL or HIGH severity
+        # Look for code-reviewer section with reviewer issues.
         issues = []
         lines = content.split("\n")
         in_reviewer_section = False
@@ -4033,7 +4075,7 @@ class RepoAutopilotStore:
             # Parse severity
             if line.strip().startswith("Severity:"):
                 severity_text = line.split(":", 1)[1].strip().upper()
-                if severity_text in ("CRITICAL", "HIGH"):
+                if severity_text in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
                     current_severity = severity_text
 
             # Parse findings section
@@ -4053,6 +4095,176 @@ class RepoAutopilotStore:
             return ""
 
         return "\n".join([f"Severity: {current_severity}"] + issues)
+
+    def _repair_architect_plan_path(self, card_id: str, failed_attempt: int) -> Path:
+        return self._runs_dir / f"{card_id}-attempt-{failed_attempt:02d}-repair-architect.md"
+
+    def _extract_repair_architect_plan(self, card_id: str, failed_attempt: int) -> str:
+        plan_path = self._repair_architect_plan_path(card_id, failed_attempt)
+        if not plan_path.exists():
+            return ""
+        try:
+            return plan_path.read_text(encoding="utf-8").strip()
+        except Exception:
+            return ""
+
+    def _repair_architect_severities(self, policies: dict[str, Any]) -> set[str]:
+        repair_cfg = (policies.get("autopilot", {}).get("repair", {}) or {})
+        raw = repair_cfg.get("architect_on_severity", ["critical", "high", "medium", "low"])
+        return {str(item).lower() for item in raw if str(item).strip()}
+
+    def _repair_architect_system_prompt(self, agent_name: str) -> str | None:
+        try:
+            from openharness.coordinator.agent_definitions import get_agent_definition
+
+            agent_def = get_agent_definition(agent_name)
+            if agent_def and agent_def.system_prompt:
+                return agent_def.system_prompt
+        except Exception:
+            pass
+        try:
+            from openharness.coordinator.agent_definitions import load_agents_dir
+
+            for agent_def in load_agents_dir(Path.home() / ".claude" / "agents"):
+                if agent_def.name == agent_name and agent_def.system_prompt:
+                    return agent_def.system_prompt
+        except Exception:
+            return None
+        return None
+
+    async def _maybe_run_repair_architect_plan(
+        self,
+        card: RepoTaskCard,
+        *,
+        cwd: Path,
+        policies: dict[str, Any],
+        base_branch: str,
+        failed_attempt: int,
+        failure_stage: str,
+        failure_summary: str,
+        stream: RunStreamWriter | None = None,
+    ) -> Path | None:
+        repair_cfg = (policies.get("autopilot", {}).get("repair", {}) or {})
+        if not repair_cfg.get("architect_enabled", True):
+            return None
+
+        reviewer_feedback = self._extract_reviewer_feedback(card.id)
+        severity = _parse_review_severity(reviewer_feedback)
+        if severity == "none" or severity not in self._repair_architect_severities(policies):
+            return None
+
+        max_chars = int(repair_cfg.get("architect_max_diff_chars", 80000) or 80000)
+        try:
+            diff_text = (
+                self._run_git(
+                    ["diff", f"origin/{base_branch}...HEAD"],
+                    cwd=cwd,
+                    check=False,
+                ).stdout
+                or ""
+            )
+        except Exception as exc:
+            diff_text = f"(could not collect diff: {exc})"
+        truncated = False
+        if len(diff_text) > max_chars:
+            diff_text = diff_text[:max_chars]
+            truncated = True
+
+        agent_name = _safe_text(repair_cfg.get("architect_agent")) or "architect"
+        model = _safe_text(repair_cfg.get("architect_model")) or "claude-architect"
+        agent_system_prompt = self._repair_architect_system_prompt(agent_name)
+        raw_turns = repair_cfg.get("architect_max_turns", 4)
+        max_turns: int | None = None if raw_turns in (None, "", 0) else int(raw_turns)
+        command = f"agent:{agent_name} repair plan (attempt {failed_attempt})"
+
+        prompt = (
+            f"You are the repair architect for autopilot task `{card.id}` ({card.title}).\n\n"
+            "A code-reviewer gate reported issues. Do not edit files. Produce concise, concrete "
+            "repair guidance for the next worker attempt.\n\n"
+            f"Failure stage: {failure_stage}\n"
+            f"Failure summary: {failure_summary or '(none)'}\n"
+            f"Severity: {severity.upper()}\n\n"
+            "Reviewer feedback:\n"
+            f"{reviewer_feedback}\n\n"
+            "Required output:\n"
+            "1. Root cause hypothesis.\n"
+            "2. Exact files/functions the worker should inspect or change.\n"
+            "3. Minimal repair steps in order.\n"
+            "4. Verification commands to run.\n"
+            "5. Risks or constraints the worker must preserve.\n\n"
+            f"Diff vs `{base_branch}`{' (truncated)' if truncated else ''}:\n"
+            f"```\n{diff_text or '(empty diff)'}\n```\n"
+        )
+
+        if stream is not None:
+            stream.emit("phase_start", {"phase": "repair_architect", "attempt": failed_attempt})
+        try:
+            output = await self._run_agent_prompt(
+                prompt,
+                model=model,
+                max_turns=max_turns,
+                permission_mode="full_auto",
+                cwd=cwd,
+                stream=stream,
+                phase="repair_architect",
+                system_prompt=agent_system_prompt,
+                checkpoint_card_id=card.id,
+                checkpoint_phase="repair_architect",
+                checkpoint_attempt=failed_attempt,
+            )
+        except Exception as exc:
+            if stream is not None:
+                stream.emit(
+                    "phase_end",
+                    {"phase": "repair_architect", "attempt": failed_attempt, "ok": False},
+                )
+            self.append_journal(
+                kind="repair_architect_failed",
+                summary=f"{command} failed: {exc}",
+                task_id=card.id,
+                metadata={
+                    "attempt_count": failed_attempt,
+                    "severity": severity,
+                    "agent": agent_name,
+                    "model": model,
+                },
+            )
+            return None
+
+        if stream is not None:
+            stream.emit(
+                "phase_end",
+                {"phase": "repair_architect", "attempt": failed_attempt, "ok": True},
+            )
+
+        plan_path = self._repair_architect_plan_path(card.id, failed_attempt)
+        plan_text = (
+            f"# Repair Architect Plan: {card.id}\n\n"
+            f"Agent: {agent_name}\n"
+            f"Model: {model}\n"
+            f"Failed attempt: {failed_attempt}\n"
+            f"Severity: {severity.upper()}\n"
+            f"Failure stage: {failure_stage}\n"
+            f"Failure summary: {failure_summary or '(none)'}\n\n"
+            "## Reviewer Feedback\n\n"
+            f"{reviewer_feedback}\n\n"
+            "## Architect Plan\n\n"
+            f"{output.strip() or '(architect returned no text)'}\n"
+        )
+        atomic_write_text(plan_path, plan_text)
+        self.append_journal(
+            kind="repair_architect_plan",
+            summary=f"{command} produced repair guidance",
+            task_id=card.id,
+            metadata={
+                "attempt_count": failed_attempt,
+                "severity": severity,
+                "agent": agent_name,
+                "model": model,
+                "plan_path": str(plan_path),
+            },
+        )
+        return plan_path
 
     def _prepare_repair_prompt(
         self,
@@ -4078,7 +4290,12 @@ class RepoAutopilotStore:
             extras.append(f"- Previous agent summary: {_shorten(prior_summary, limit=600)}")
 
         # Inject code reviewer feedback if previous failure came from a review gate.
-        if failure_stage in ("code_review", "verifying", "local_verification_failed"):
+        if failure_stage in (
+            "code_review",
+            "verifying",
+            "local_verification_failed",
+            "remote_review_failed",
+        ):
             reviewer_feedback = self._extract_reviewer_feedback(card.id)
             if reviewer_feedback:
                 extras.extend(
@@ -4090,6 +4307,18 @@ class RepoAutopilotStore:
                         reviewer_feedback,
                         "",
                         "[End of reviewer constraints — address ALL of the above in your implementation.]",
+                    ]
+                )
+            architect_plan = self._extract_repair_architect_plan(card.id, attempt_count - 1)
+            if architect_plan:
+                extras.extend(
+                    [
+                        "",
+                        "[Repair architect guidance for this retry:]",
+                        "",
+                        architect_plan,
+                        "",
+                        "[End of repair architect guidance — use it to focus the patch.]",
                     ]
                 )
 
@@ -4786,6 +5015,7 @@ class RepoAutopilotStore:
         checkpoint_phase: str | None = None,
         checkpoint_attempt: int = 1,
         resume_messages: list[Any] | None = None,
+        system_prompt: str | None = None,
     ) -> str:
         from openharness.ui.runtime import build_runtime, close_runtime, start_runtime
 
@@ -4806,6 +5036,7 @@ class RepoAutopilotStore:
                 permission_prompt=_allow,
                 ask_user_prompt=_ask,
                 permission_mode=permission_mode,
+                system_prompt=system_prompt,
             )
             await start_runtime(bundle)
             if resume_messages:
@@ -4920,6 +5151,7 @@ class RepoAutopilotStore:
 
         max_chars = int(review_cfg.get("max_diff_chars", 80000))
         block_on = {str(s).lower() for s in review_cfg.get("block_on", ["critical"])}
+        block_label = ", ".join(sorted(s.upper() for s in block_on)) or "CRITICAL"
         _raw_turns = review_cfg.get("max_turns", 0)
         max_turns: int | None = None if _raw_turns in (None, "", 0) else int(_raw_turns)
         command = f"agent:code-reviewer (PR #{pr_number} diff vs {base_branch})"
@@ -4972,7 +5204,7 @@ class RepoAutopilotStore:
             "Apply the rules in `~/.claude/rules/common/code-review.md`. "
             "Also verify the implementation satisfies the task requirement, not just that the diff is syntactically safe. "
             "Treat committed virtualenvs, machine-local absolute paths, and missing behavior for named configuration options as CRITICAL. "
-            "Block on CRITICAL only.\n\n"
+            f"Block on configured severities: {block_label}.\n\n"
             f"PR diff{' (truncated)' if truncated else ''}:\n```\n{diff_text}\n```\n"
         )
 
@@ -5022,6 +5254,7 @@ class RepoAutopilotStore:
         review_cfg = (policies.get("verification") or {}).get("code_review") or {}
         max_chars = int(review_cfg.get("max_diff_chars", 80000))
         block_on = {str(s).lower() for s in review_cfg.get("block_on", ["critical"])}
+        block_label = ", ".join(sorted(s.upper() for s in block_on)) or "CRITICAL"
         raw_turns = review_cfg.get("max_turns", 0)
         max_turns: int | None = None if raw_turns in (None, "", 0) else int(raw_turns)
 
@@ -5067,7 +5300,7 @@ class RepoAutopilotStore:
             "Apply the rules in `~/.claude/rules/common/code-review.md`. "
             "Also verify the implementation satisfies the task requirement, not just that the diff is syntactically safe. "
             "Treat committed virtualenvs, machine-local absolute paths, and missing behavior for named configuration options as CRITICAL. "
-            "Block on CRITICAL only.\n\n"
+            f"Block on configured severities: {block_label}.\n\n"
             f"Diff{' (truncated)' if truncated else ''}:\n```\n{diff_text}\n```\n"
         )
 
