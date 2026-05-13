@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from openharness.autopilot.service import (
+    _DEFAULT_AUTOPILOT_POLICY,
     _DEFAULT_VERIFICATION_POLICY,
     _parse_review_severity,
 )
@@ -13,7 +14,15 @@ def test_default_policy_includes_code_review_block():
     cr = _DEFAULT_VERIFICATION_POLICY["code_review"]
     assert cr["enabled"] is True
     assert cr["agent"] == "code-reviewer"
-    assert "critical" in cr["block_on"]
+    assert cr["block_on"] == ["critical", "high", "medium", "low"]
+
+
+def test_default_policy_includes_repair_architect_block():
+    repair = _DEFAULT_AUTOPILOT_POLICY["repair"]
+    assert repair["architect_enabled"] is True
+    assert repair["architect_agent"] == "architect"
+    assert repair["architect_model"] == "claude-architect"
+    assert repair["architect_on_severity"] == ["critical", "high", "medium", "low"]
 
 
 def test_parse_severity_detects_critical():
