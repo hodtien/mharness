@@ -8064,7 +8064,9 @@ def test_retry_now_reclaims_pending_card_and_clears_pending_metadata(tmp_path: P
     assert any(entry.kind == "manual_retry" for entry in journal)
 
 
-def test_manual_reset_failed_card_clears_terminal_retry_metadata(tmp_path: Path) -> None:
+def test_manual_reset_failed_card_preserves_failure_context_for_repair_retry(
+    tmp_path: Path,
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     store = RepoAutopilotStore(repo)
@@ -8085,8 +8087,81 @@ def test_manual_reset_failed_card_clears_terminal_retry_metadata(tmp_path: Path)
 
     assert reset.status == "queued"
     assert reset.metadata["manual_retry"] is True
-    assert reset.metadata["attempt_count"] == 0
-    assert "last_failure_stage" not in reset.metadata
-    assert "last_failure_summary" not in reset.metadata
+    assert reset.metadata["attempt_count"] == 3
+    assert reset.metadata["last_failure_stage"] == "local_verification_failed"
+    assert reset.metadata["last_failure_summary"] == "tests failed"
     assert "verification_failed" not in reset.metadata
     assert "worker_id" not in reset.metadata
+
+
+def test_manual_retry_failed_card_injects_repair_prompt_context(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Retry repair", body="body")
+    verification_report = runs_dir / f"{card.id}-attempt-01-verification.md"
+    verification_report.write_text(
+        """# Verification Report: test-card
+
+## FAILED :: agent:code-reviewer (diff vs main)
+
+### stdout
+```text
+Severity: CRITICAL
+Findings:
+  - src/example.py:10 correctness Missing persisted routing config
+```
+""",
+        encoding="utf-8",
+    )
+    plan_report = runs_dir / f"{card.id}-attempt-01-repair-architect.md"
+    plan_report.write_text(
+        "# Repair Architect Plan\n\nPersist routing before rerunning verification.\n",
+        encoding="utf-8",
+    )
+    store.update_status(
+        card.id,
+        status="failed",
+        metadata_updates={
+            "attempt_count": 1,
+            "last_failure_stage": "local_verification_failed",
+            "last_failure_summary": "agent:code-reviewer (diff vs main) rc=1",
+        },
+    )
+    store.update_status(card.id, status="queued")
+
+    captured_prompt: dict[str, str] = {}
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None):
+        return WorktreeInfo(path=repo, branch=branch or "main", name=slug)
+
+    async def fake_run_agent(self, prompt, **kwargs):
+        captured_prompt["text"] = prompt
+        return "manual retry repair ran"
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", lambda self, path: None
+    )
+    store._run_agent_prompt = MethodType(fake_run_agent, store)
+    store._run_verification_steps = MethodType(lambda self, policies, *, cwd=None: [], store)
+    monkeypatch.setattr(store, "_is_git_repo", lambda cwd: False)
+
+    import asyncio
+
+    asyncio.run(store.run_card(card.id))
+
+    prompt = captured_prompt["text"]
+    assert "Repair context:" in prompt
+    assert "Previous failure stage: local_verification_failed" in prompt
+    assert "Missing persisted routing config" in prompt
+    assert "Repair Architect Plan" in prompt
+    assert "Treat reviewer findings and architect guidance as acceptance criteria" in prompt

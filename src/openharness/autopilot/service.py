@@ -784,6 +784,9 @@ class RepoAutopilotStore:
         card.status = status
         card.updated_at = time.time()
         if status == "queued" and previous_status in {"failed", "rejected", "killed", "pending"}:
+            preserved_failure_stage = card.metadata.get("last_failure_stage")
+            preserved_failure_summary = card.metadata.get("last_failure_summary")
+            preserved_attempt_count = int(card.metadata.get("attempt_count", 0) or 0)
             for key in (
                 "worker_id",
                 "pending_reason",
@@ -796,8 +799,15 @@ class RepoAutopilotStore:
                 "resume_phase",
             ):
                 card.metadata.pop(key, None)
-            card.metadata["attempt_count"] = 0
+            card.metadata["attempt_count"] = (
+                preserved_attempt_count if previous_status in {"failed", "rejected"} else 0
+            )
             card.metadata["manual_retry"] = True
+            if previous_status in {"failed", "rejected"}:
+                if preserved_failure_stage:
+                    card.metadata["last_failure_stage"] = preserved_failure_stage
+                if preserved_failure_summary:
+                    card.metadata["last_failure_summary"] = preserved_failure_summary
         if note:
             card.metadata["last_note"] = note.strip()
         if metadata_updates:
