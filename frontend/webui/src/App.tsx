@@ -22,10 +22,11 @@ import ProviderSettingsPage from "./pages/ProviderSettingsPage";
 import ModelsSettingsPage from "./pages/ModelsSettingsPage";
 import AgentsSettingsPage from "./pages/AgentsSettingsPage";
 import CronSettingsPage from "./pages/CronSettingsPage";
+import SettingsControlPage from "./pages/SettingsControlPage";
+import SecuritySettingsPage from "./pages/SecuritySettingsPage";
 import AutopilotPage from "./pages/PipelinePage";
 import TasksPage from "./pages/TasksPage";
 import ProjectsPage from "./pages/ProjectsPage";
-import PlaceholderPage from "./pages/PlaceholderPage";
 import ToastContainer from "./components/ToastContainer";
 
 function RootRedirect() {
@@ -237,12 +238,16 @@ export default function App() {
             element={<AgentsSettingsPage />}
           />
           <Route
+            path="/settings"
+            element={<SettingsControlPage />}
+          />
+          <Route
             path="/settings/cron"
             element={<CronSettingsPage />}
           />
           <Route
-            path="/settings/*"
-            element={<PlaceholderPage title="Settings" description="Provider, model, and agent settings." />}
+            path="/settings/security"
+            element={<SecuritySettingsPage />}
           />
           <Route path="*" element={<Navigate to="/chat" replace />} />
         </Route>

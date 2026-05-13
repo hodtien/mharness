@@ -226,16 +226,14 @@ describe("WebUI startup smoke", () => {
     expect(useSession.getState().errorBanner).toBeNull();
   });
 
-  it("opens the Sessions and permission-mode dropdowns from the shell header", async () => {
+  it("shows the current header controls and opens the permission-mode dropdown", async () => {
     renderApp();
     await waitForWebSocketOpen();
 
-    // Sessions ▾
-    fireEvent.click(screen.getByRole("button", { name: /sessions/i }));
-    expect(screen.getByRole("menu", { name: /recent sessions/i })).toBeTruthy();
-    await screen.findByText(/no recent sessions/i);
+    expect(screen.getAllByRole("link", { name: /history/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /password/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /logout/i })).toBeTruthy();
 
-    // Permission-mode chip (DEFAULT ▾)
     fireEvent.click(screen.getByRole("button", { name: /DEFAULT/ }));
     const menu = screen.getByRole("menu", { name: /permission mode/i });
     const items = within(menu).getAllByRole("menuitem");
