@@ -71,9 +71,15 @@ export default function ModelsSettingsPage() {
         if (cancelled) return;
         setModels(modelsResp);
         setProviders(providersResp.providers);
-        // Default: all accordions expanded.
+        // Default: active providers expanded, inactive collapsed.
         const open: Record<string, boolean> = {};
-        for (const id of Object.keys(modelsResp)) open[id] = true;
+        for (const p of providersResp.providers) {
+          open[p.id] = p.is_active;
+        }
+        // Providers without profiles still get expanded by default (no explicit state).
+        for (const id of Object.keys(modelsResp)) {
+          if (open[id] === undefined) open[id] = true;
+        }
         setOpenProviders(open);
       })
       .catch((err) => {
@@ -139,8 +145,35 @@ export default function ModelsSettingsPage() {
       const custom = filtered.filter((model) => model.is_custom);
       return [providerId, [...custom, ...builtIn]] as [string, ModelProfile[]];
     });
-    return entries.filter(([, items]) => items.length > 0);
+    return entries.filter(([, items]) => items.length > 0)
+      // Active providers first, then by label.
+      .sort(([aId, aItems], [bId, bItems]) => {
+        const pa = providerStatus[aId];
+        const pb = providerStatus[bId];
+        if (pa?.is_active && !pb?.is_active) return -1;
+        if (!pa?.is_active && pb?.is_active) return 1;
+        // Within active (or inactive), default model first.
+        const aDefault = aItems[0]?.is_default ? 0 : 1;
+        const bDefault = bItems[0]?.is_default ? 0 : 1;
+        if (aDefault !== bDefault) return aDefault - bDefault;
+        return (pa?.label ?? aId).localeCompare(pb?.label ?? bId);
+      });
   }, [models, search, providerFilter, providerStatus, configFilter, healthFilter, capabilityFilter, typeFilter, defaultOnly]);
+
+  // When searching, auto-reveal any collapsed sections that contain matches.
+  const searchReveal = useMemo(() => {
+    if (!search.trim()) return null;
+    const query = search.trim().toLowerCase();
+    const reveal: Record<string, boolean> = {};
+    for (const [providerId, items] of Object.entries(models)) {
+      const hasMatch = items.some((m) => {
+        const haystack = `${m.id} ${m.label}`.toLowerCase();
+        return haystack.includes(query);
+      });
+      if (hasMatch) reveal[providerId] = true;
+    }
+    return reveal;
+  }, [models, search]);
 
   if (loading) {
     return (
@@ -412,7 +445,8 @@ export default function ModelsSettingsPage() {
             </div>
           ) : (
             filteredProviderEntries.map(([providerId, items]) => {
-              const open = openProviders[providerId] ?? true;
+              const searchOverride = searchReveal?.[providerId];
+              const open = searchOverride !== undefined ? searchOverride : (openProviders[providerId] ?? true);
               const label = providerLabels[providerId] ?? providerId;
               const customCount = items.filter((m) => m.is_custom).length;
               return (
@@ -434,6 +468,12 @@ export default function ModelsSettingsPage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-[var(--text)]">{label}</span>
+                          {providerStatus[providerId]?.is_active && (
+                            <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-xs text-cyan-100">Active</span>
+                          )}
+                          {providerStatus[providerId]?.is_active === false && providerStatus[providerId]?.has_credentials && (
+                            <span className="rounded-full border border-red-400/40 bg-red-400/10 px-2 py-0.5 text-xs text-red-200">Probe failing</span>
+                          )}
                           {customCount > 0 && (
                             <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-200">
                               {customCount} custom
@@ -554,9 +594,11 @@ function ModelsTable({
   const { builtInModels, customModels } = useMemo(() => {
     const customModels = models.filter((model) => model.is_custom);
     const builtInModels = models.filter((model) => !model.is_custom);
+    const sortDefaultFirst = (a: ModelProfile, b: ModelProfile) =>
+      a.is_default !== b.is_default ? (a.is_default ? -1 : 1) : a.id.localeCompare(b.id);
     return {
-      builtInModels: builtInModels.sort((a, b) => a.id.localeCompare(b.id)),
-      customModels: customModels.sort((a, b) => a.id.localeCompare(b.id)),
+      builtInModels: [...builtInModels].sort(sortDefaultFirst),
+      customModels: [...customModels].sort(sortDefaultFirst),
     };
   }, [models]);
 
@@ -645,6 +687,11 @@ function ModelSectionRows({
                 </span>
               ) : (
                 <span className="text-xs text-[var(--text-dim)]">—</span>
+              )}
+              {model.is_default && provider?.is_active && (
+                <span className="ml-1 rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-xs text-cyan-100">
+                  Active
+                </span>
               )}
             </td>
             <td className="px-5 py-2">
