@@ -4,6 +4,7 @@ import { api, type CronConfigResponse } from "../api/client";
 import { useSession } from "../store/session";
 import type { AppStatePayload } from "../api/types";
 import PageHeader from "../components/PageHeader";
+import { PathDisplay } from "../components/PathDisplay";
 
 import { getAuthSemanticState } from "../utils/authStatusSemantics";
 
@@ -172,7 +173,12 @@ function OperationalStatus({
         />
         {appState?.cwd && (
           <div className="col-span-2 sm:col-span-3">
-            <StatusRow label="CWD" value={appState.cwd} mono />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-dim)]">
+                CWD
+              </span>
+              <PathDisplay path={appState.cwd} copyLabel="Copy working directory" />
+            </div>
           </div>
         )}
       </div>

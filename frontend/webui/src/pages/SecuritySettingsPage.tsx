@@ -1,6 +1,7 @@
 import { useState } from "react";
 import PageHeader from "../components/PageHeader";
 import ChangePasswordModal from "../components/ChangePasswordModal";
+import { PathDisplay } from "../components/PathDisplay";
 import { api } from "../api/client";
 import { toast } from "../store/toast";
 import { useSession } from "../store/session";
@@ -95,7 +96,8 @@ export default function SecuritySettingsPage() {
                 </button>
               </div>
               <div className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs text-[var(--text-dim)]">
-                Config directory: <code className="font-mono text-[var(--text)]">~/.harness/</code>
+                Config directory:{" "}
+                <PathDisplay path={appState?.config_dir ?? "~/.harness/"} copyLabel="Copy config directory" />
               </div>
             </div>
           </div>
