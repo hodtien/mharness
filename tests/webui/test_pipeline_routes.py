@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 
@@ -496,6 +497,7 @@ async def test_run_next_counts_running_retry_task_as_capacity(tmp_path, monkeypa
     )
 
     running_task = SimpleNamespace(
+        status="running",
         cwd=str(tmp_path.resolve()),
         command=f"oh autopilot run-next --cwd {tmp_path} --card-id ap-test-retry",
     )
@@ -509,7 +511,8 @@ async def test_run_next_counts_running_retry_task_as_capacity(tmp_path, monkeypa
 
     assert response.status_code == 409
     body = response.json()["detail"]
-    assert body["error"] == "capacity_reached"
+    assert body["error"] == "card_already_running"
+    assert body["card_id"] == "ap-test-retry"
     mock_manager.create_shell_task.assert_not_called()
 
 
@@ -575,6 +578,7 @@ async def test_run_next_adds_running_retry_task_to_active_cards(tmp_path, monkey
     )
 
     running_task = SimpleNamespace(
+        status="running",
         cwd=str(tmp_path.resolve()),
         command=f"oh autopilot run-next --cwd {tmp_path} --card-id ap-test-retry",
     )
@@ -588,7 +592,8 @@ async def test_run_next_adds_running_retry_task_to_active_cards(tmp_path, monkey
 
     assert response.status_code == 409
     body = response.json()["detail"]
-    assert body["error"] == "capacity_reached"
+    assert body["error"] == "card_already_running"
+    assert body["card_id"] == "ap-test-retry"
     mock_manager.create_shell_task.assert_not_called()
 
 
@@ -641,6 +646,7 @@ async def test_run_next_counts_unscoped_run_next_task_as_capacity(tmp_path, monk
     )
 
     running_task = SimpleNamespace(
+        status="running",
         cwd=str(tmp_path.resolve()),
         command=f"oh autopilot run-next --cwd {tmp_path}",
     )
@@ -707,6 +713,7 @@ async def test_run_next_dedupes_running_task_for_active_card(tmp_path, monkeypat
     )
 
     running_task = SimpleNamespace(
+        status="running",
         cwd=str(tmp_path.resolve()),
         command=f"oh autopilot run-next --cwd {tmp_path} --card-id ap-test-running",
     )
@@ -761,6 +768,7 @@ async def test_run_next_ignores_running_non_autopilot_tasks_for_capacity(tmp_pat
     )
 
     running_task = SimpleNamespace(
+        status="running",
         cwd=str(tmp_path.resolve()),
         command="python -m pytest 'autopilot run-next should work'",
     )
@@ -833,7 +841,10 @@ def test_run_next_returns_202_when_under_capacity(tmp_path, monkeypatch) -> None
     assert response.status_code == 202
     body = response.json()
     assert body["status"] == "accepted"
+    assert body["card_id"] == "ap-test-queued"
     assert "task_id" in body
+    command = mock_manager.create_shell_task.call_args.kwargs["command"]
+    assert "--card-id ap-test-queued" in command
 
 
 def test_run_next_returns_202_and_task_id_when_queued_card_exists(tmp_path, monkeypatch) -> None:
@@ -856,8 +867,84 @@ def test_run_next_returns_202_and_task_id_when_queued_card_exists(tmp_path, monk
     assert response.status_code == 202
     body = response.json()
     assert body["status"] == "accepted"
+    assert body["card_id"] == r.json()["id"]
     assert "task_id" in body
     mock_manager.create_shell_task.assert_called_once()
+    command = mock_manager.create_shell_task.call_args.kwargs["command"]
+    assert f"--card-id {r.json()['id']}" in command
+
+
+async def test_concurrent_run_next_only_dispatches_top_card_once(tmp_path, monkeypatch) -> None:
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import httpx
+    from openharness.webui.server.app import create_app
+    import openharness.webui.server.routes.pipeline as pipeline_routes
+
+    reg_dir = tmp_path / ".openharness" / "autopilot"
+    reg_dir.mkdir(parents=True)
+    registry = {
+        "updated_at": 0.0,
+        "cards": [
+            {
+                "id": "ap-test-queued",
+                "fingerprint": "fp-queued",
+                "title": "Waiting card",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "score": 10,
+                "labels": [],
+                "body": "",
+                "created_at": 1.0,
+                "updated_at": 1.0,
+                "metadata": {},
+            },
+        ],
+    }
+    (reg_dir / "registry.json").write_text(json.dumps(registry), encoding="utf-8")
+
+    created_commands: list[str] = []
+    task_started = asyncio.Event()
+    release_task = asyncio.Event()
+
+    async def fake_create_shell_task(*, command, description, cwd, task_type):
+        created_commands.append(command)
+        task_started.set()
+        await release_task.wait()
+        return SimpleNamespace(id=f"task-{len(created_commands)}")
+
+    def fake_list_tasks(*, status=None):
+        if not created_commands:
+            return []
+        task = SimpleNamespace(
+            status="running",
+            cwd=str(tmp_path.resolve()),
+            command=created_commands[0],
+        )
+        return [task] if status in (None, "running") else []
+
+    mock_manager = MagicMock()
+    mock_manager.create_shell_task = fake_create_shell_task
+    mock_manager.list_tasks = fake_list_tasks
+    monkeypatch.setattr(pipeline_routes, "get_task_manager", lambda: mock_manager)
+
+    app = create_app(token="test-token", cwd=tmp_path, spa_dir="")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        first = asyncio.create_task(client.post("/api/pipeline/run-next", headers=AUTH))
+        await task_started.wait()
+        second = asyncio.create_task(client.post("/api/pipeline/run-next", headers=AUTH))
+        await asyncio.sleep(0)
+        release_task.set()
+        first_response, second_response = await asyncio.gather(first, second)
+
+    statuses = sorted([first_response.status_code, second_response.status_code])
+    assert statuses == [202, 409]
+    assert len(created_commands) == 1
+    assert "--card-id ap-test-queued" in created_commands[0]
+    conflict = first_response if first_response.status_code == 409 else second_response
+    assert conflict.json()["detail"]["error"] == "card_already_running"
 
 
 async def test_resume_card_allows_stale_active_card_with_checkpoint(tmp_path, monkeypatch) -> None:
