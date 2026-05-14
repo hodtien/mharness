@@ -313,7 +313,7 @@ def action_pipeline_card(
     new_status = _ACTION_TO_STATUS[body.action]
     metadata_updates: dict[str, Any] | None = None
     if body.action == "reset":
-        metadata_updates = {"attempt_count": 0, "last_note": None}
+        metadata_updates = {"last_note": None}
     card = store.update_status(
         card_id,
         status=new_status,

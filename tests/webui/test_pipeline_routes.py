@@ -177,7 +177,7 @@ def test_action_retry_updates_card_status_to_queued(tmp_path) -> None:
     assert body["status"] == "queued"
 
 
-def test_action_reset_failed_card_clears_attempt_count(tmp_path) -> None:
+def test_action_reset_failed_card_preserves_repair_context_and_clears_repeated_failure(tmp_path) -> None:
     client = _client(tmp_path)
 
     r = client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Reset me"})
@@ -190,7 +190,15 @@ def test_action_reset_failed_card_clears_attempt_count(tmp_path) -> None:
     store.update_status(
         card_id,
         status="failed",
-        metadata_updates={"attempt_count": 3, "last_failure_stage": "local_verification_failed"},
+        metadata_updates={
+            "attempt_count": 3,
+            "last_failure_stage": "local_verification_failed",
+            "last_failure_summary": "agent:code-reviewer (diff vs main) rc=1",
+            "repeated_failure_key": "local_verification_failed:agent:code-reviewer (diff vs main) rc=1",
+            "repeated_failure_count": 7,
+            "verification_failed": True,
+            "worker_id": "pid-1-deadbeef",
+        },
     )
 
     response = client.post(
@@ -202,8 +210,16 @@ def test_action_reset_failed_card_clears_attempt_count(tmp_path) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "queued"
-    assert body["attempt_count"] == 0
+    assert body["attempt_count"] == 3
     assert body["metadata"]["last_note"] is None
+
+    detail = client.get(f"/api/pipeline/cards/{card_id}", headers=AUTH).json()
+    assert detail["metadata"]["last_failure_stage"] == "local_verification_failed"
+    assert detail["metadata"]["last_failure_summary"] == "agent:code-reviewer (diff vs main) rc=1"
+    assert "repeated_failure_key" not in detail["metadata"]
+    assert "repeated_failure_count" not in detail["metadata"]
+    assert "verification_failed" not in detail["metadata"]
+    assert "worker_id" not in detail["metadata"]
 
 
 def test_action_on_unknown_card_returns_404(tmp_path) -> None:
