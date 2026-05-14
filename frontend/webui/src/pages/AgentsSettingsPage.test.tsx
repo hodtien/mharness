@@ -37,24 +37,24 @@ const LONG_SYSTEM_PROMPT = `${"System prompt details. ".repeat(30)}Final expande
 
 const sampleAgents = [
   {
-    name: "gan-generator",
+    name: "custom-worker",
     description: "Generates implementation changes for autopilot.",
     model: "gpt-4o-mini",
     effort: "medium",
     permission_mode: "default",
     tools_count: 3,
     has_system_prompt: true,
-    source_file: "agents/gan-generator.md",
+    source_file: "agents/custom-worker.md",
   },
   {
-    name: "code-reviewer",
+    name: "custom-reviewer",
     description: "Reviews autopilot changes before completion.",
     model: "claude-3-5-sonnet",
     effort: "high",
     permission_mode: "plan",
     tools_count: 2,
     has_system_prompt: true,
-    source_file: "agents/code-reviewer.md",
+    source_file: "agents/custom-reviewer.md",
   },
   {
     name: "Default Chat Agent",
@@ -114,6 +114,11 @@ const sampleModels = {
 
 interface FetchOverrides {
   patch?: (name: string, body: Record<string, unknown>) => { status?: number; data: unknown };
+  policyAgents?: {
+    implement_agent: string | null;
+    review_agent: string | null;
+    operational_agents: string[];
+  };
 }
 
 function setupFetch(overrides: FetchOverrides = {}) {
@@ -125,6 +130,15 @@ function setupFetch(overrides: FetchOverrides = {}) {
     }
     if (url === "/api/models" && (!init?.method || init.method === "GET")) {
       return Promise.resolve(jsonResponse(sampleModels));
+    }
+    if (url === "/api/pipeline/policy/agents" && (!init?.method || init.method === "GET")) {
+      return Promise.resolve(jsonResponse(
+        overrides.policyAgents ?? {
+          implement_agent: "custom-worker",
+          review_agent: "custom-reviewer",
+          operational_agents: ["custom-worker", "custom-reviewer"],
+        },
+      ));
     }
     if (url.startsWith("/api/agents/") && (!init?.method || init.method === "GET")) {
       const name = decodeURIComponent(url.slice("/api/agents/".length));
@@ -190,11 +204,48 @@ describe("AgentsSettingsPage", () => {
 
     expect(screen.getByText("Default routing by use case")).toBeTruthy();
     expect(screen.getAllByText("Code Agent").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("gan-generator").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("code-reviewer").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("custom-worker").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("custom-reviewer").length).toBeGreaterThan(0);
     expect(screen.getByText("Fast Agent")).toBeTruthy();
     expect(screen.getByText(/header model selection temporarily overrides/i)).toBeTruthy();
     expect(screen.getByText(/Selected model\/provider is unavailable: missing-model/i)).toBeTruthy();
+  });
+
+  it("labels review-only policy agent as Autopilot Review", async () => {
+    mockLocalStorage();
+    setupFetch({
+      policyAgents: {
+        implement_agent: null,
+        review_agent: "custom-reviewer",
+        operational_agents: ["custom-reviewer"],
+      },
+    });
+
+    await renderAgentsPage();
+
+    expect(screen.queryByText("Autopilot Worker")).toBeNull();
+    const reviewLabel = screen.getByText("Autopilot Review");
+    expect(reviewLabel.parentElement?.textContent).toContain("custom-reviewer");
+  });
+
+  it("dedupes matching worker and review policy agents", async () => {
+    mockLocalStorage();
+    setupFetch({
+      policyAgents: {
+        implement_agent: "custom-worker",
+        review_agent: "custom-worker",
+        operational_agents: ["custom-worker", "custom-worker"],
+      },
+    });
+
+    await renderAgentsPage();
+
+    const customWorkerDetailButtons = screen
+      .getAllByRole("button", { name: /view details/i })
+      .filter((button) => button.closest(".rounded-xl")?.textContent?.includes("custom-worker"));
+    expect(customWorkerDetailButtons).toHaveLength(1);
+    expect(screen.getByText("Autopilot Worker")).toBeTruthy();
+    expect(screen.getByText("Autopilot Review")).toBeTruthy();
   });
 
   it("shows View details button on agent cards", async () => {
@@ -215,7 +266,7 @@ describe("AgentsSettingsPage", () => {
     setupFetch();
 
     await renderAgentsPage();
-    // gan-generator is pinned first; click on Default Chat Agent's View details
+    // custom-worker is pinned first; click on Default Chat Agent's View details
     const viewDetailButtons = screen.getAllByRole("button", { name: /view details/i });
     const chatDetailBtn = viewDetailButtons.find((btn) => {
       const card = btn.closest(".rounded-xl");
@@ -289,7 +340,7 @@ describe("AgentsSettingsPage", () => {
 
     // Click the Edit button for "Default Chat Agent" (the first unpinned agent, index 1 in order)
     const editButtons = screen.getAllByRole("button", { name: /edit/i });
-    // gan-generator is first (pinned), Default Chat Agent is second
+    // custom-worker is first (pinned), Default Chat Agent is second
     const chatEditIdx = editButtons.findIndex((btn) => {
       const card = btn.closest(".rounded-xl");
       return card?.textContent?.includes("Default Chat Agent");

@@ -630,6 +630,24 @@ def _policy_defaults(policies: dict[str, Any]) -> dict[str, str | None]:
     }
 
 
+def _policy_agent_names(policies: dict[str, Any]) -> dict[str, str | None]:
+    execution = policies.get("execution")
+    if not isinstance(execution, dict):
+        autopilot = policies.get("autopilot")
+        execution = autopilot.get("execution") if isinstance(autopilot, dict) else {}
+    if not isinstance(execution, dict):
+        execution = {}
+
+    def agent_name(key: str) -> str | None:
+        value = execution.get(key)
+        return value.strip() or None if isinstance(value, str) else None
+
+    return {
+        "implement_agent": agent_name("implement_agent"),
+        "review_agent": agent_name("review_agent"),
+    }
+
+
 @router.get("/policy", dependencies=_AUTH_DEPENDENCY)
 def get_pipeline_policy(state: WebUIState = Depends(get_state)) -> dict:
     """Return the autopilot policy as both raw YAML and parsed JSON.
@@ -648,6 +666,20 @@ def get_pipeline_policy(state: WebUIState = Depends(get_state)) -> dict:
         parsed = None
     defaults = _policy_defaults(parsed) if isinstance(parsed, dict) else {"default_model": None}
     return {"yaml_content": yaml_content, "parsed": parsed, "defaults": defaults}
+
+
+@router.get("/policy/agents", dependencies=_AUTH_DEPENDENCY)
+def get_pipeline_policy_agents(state: WebUIState = Depends(get_state)) -> dict:
+    policy_path = get_project_autopilot_policy_path(state.cwd)
+    if not policy_path.is_file():
+        return {"implement_agent": None, "review_agent": None, "operational_agents": []}
+    try:
+        parsed = yaml.safe_load(policy_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        parsed = {}
+    names = _policy_agent_names(parsed) if isinstance(parsed, dict) else {"implement_agent": None, "review_agent": None}
+    operational_agents = [name for name in names.values() if name]
+    return {**names, "operational_agents": operational_agents}
 
 
 @router.patch("/policy", dependencies=_AUTH_DEPENDENCY)

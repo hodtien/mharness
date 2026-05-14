@@ -8,18 +8,14 @@ import { PathDisplay } from "../components/PathDisplay";
 
 const EFFORT_OPTIONS = ["low", "medium", "high"] as const;
 const PERMISSION_OPTIONS = ["default", "acceptEdits", "bypassPermissions", "plan", "dontAsk"] as const;
-const ROUTING_DEFAULTS = [
+const BASE_ROUTING_DEFAULTS = [
   { useCase: "Chat", agent: "Default Chat Agent" },
   { useCase: "Code", agent: "Code Agent" },
   { useCase: "Review", agent: "Review Agent" },
-  { useCase: "Autopilot Worker", agent: "gan-generator" },
-  { useCase: "Autopilot Review", agent: "code-reviewer" },
   { useCase: "Fast/cheap tasks", agent: "Fast Agent" },
 ];
 
-const AUTOPILOT_POLICY_AGENTS = ["gan-generator", "code-reviewer"];
-const OPERATIONAL_AGENT_NAMES = [
-  ...AUTOPILOT_POLICY_AGENTS,
+const STATIC_OPERATIONAL_AGENT_NAMES = [
   "worker",
   "reviewer",
   "architect",
@@ -68,19 +64,20 @@ export default function AgentsSettingsPage() {
   const [permissionFilter, setPermissionFilter] = useState<string>("all");
   const [toolsFilter, setToolsFilter] = useState<"all" | "none" | "some" | "all-tools">("all");
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
-
-  // Set of agent names referenced by the active autopilot policy
-  const autopilotPolicyAgentNames = new Set(AUTOPILOT_POLICY_AGENTS);
+  const [autopilotWorkerAgentName, setAutopilotWorkerAgentName] = useState<string | null>(null);
+  const [autopilotReviewAgentName, setAutopilotReviewAgentName] = useState<string | null>(null);
 
   const { feedback: saveFeedback, errorMessage: saveErrorMessage, showSaving, showSaved, showError: showSaveError } = useFormFeedback();
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.listAgents(), api.listModels()])
-      .then(([agentsResp, modelsResp]) => {
+    Promise.all([api.listAgents(), api.listModels(), api.getAutopilotPolicyAgents()])
+      .then(([agentsResp, modelsResp, policyAgentsResp]) => {
         if (cancelled) return;
         setAgents(agentsResp);
         setAllModels(modelsResp);
+        setAutopilotWorkerAgentName(policyAgentsResp.implement_agent);
+        setAutopilotReviewAgentName(policyAgentsResp.review_agent);
       })
       .catch((err) => {
         if (!cancelled) setError(String(err));
@@ -207,11 +204,29 @@ export default function AgentsSettingsPage() {
     }
   };
 
+  const autopilotPolicyAgentNames = useMemo(
+    () => Array.from(new Set([autopilotWorkerAgentName, autopilotReviewAgentName].filter((name): name is string => Boolean(name)))),
+    [autopilotWorkerAgentName, autopilotReviewAgentName],
+  );
+  const autopilotPolicyAgentNameSet = useMemo(() => new Set(autopilotPolicyAgentNames), [autopilotPolicyAgentNames]);
+  const operationalAgentNames = useMemo(
+    () => Array.from(new Set([...autopilotPolicyAgentNames, ...STATIC_OPERATIONAL_AGENT_NAMES])),
+    [autopilotPolicyAgentNames],
+  );
+  const routingDefaults = useMemo(
+    () => [
+      ...BASE_ROUTING_DEFAULTS,
+      ...(autopilotWorkerAgentName ? [{ useCase: "Autopilot Worker", agent: autopilotWorkerAgentName }] : []),
+      ...(autopilotReviewAgentName ? [{ useCase: "Autopilot Review", agent: autopilotReviewAgentName }] : []),
+    ],
+    [autopilotWorkerAgentName, autopilotReviewAgentName],
+  );
+
   const filteredAgents = useMemo(() => {
     const q = search.trim().toLowerCase();
     return agents.filter((agent) => {
       if (q) {
-        const role = OPERATIONAL_AGENT_NAMES.includes(agent.name) ? "operational" : "agent";
+        const role = operationalAgentNames.includes(agent.name) ? "operational" : "agent";
         const haystack = `${agent.name} ${agent.description} ${agent.source_file ?? ""} ${agent.model ?? ""} ${agent.effort ?? ""} ${agent.permission_mode ?? ""} ${role}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
@@ -225,12 +240,12 @@ export default function AgentsSettingsPage() {
       if (toolsFilter === "all-tools" && agent.tools_count != null) return false;
       return true;
     });
-  }, [agents, search, typeFilter, modelFilter, permissionFilter, toolsFilter]);
+  }, [agents, search, typeFilter, modelFilter, permissionFilter, toolsFilter, operationalAgentNames]);
 
   const pinnedAgents = useMemo(() => {
     const byName = new Map(filteredAgents.map((agent) => [agent.name, agent]));
-    return OPERATIONAL_AGENT_NAMES.map((name) => byName.get(name)).filter((agent): agent is AgentProfile => Boolean(agent));
-  }, [filteredAgents]);
+    return operationalAgentNames.map((name) => byName.get(name)).filter((agent): agent is AgentProfile => Boolean(agent));
+  }, [filteredAgents, operationalAgentNames]);
 
   const unpinnedAgents = useMemo(() => {
     const pinnedNames = new Set(pinnedAgents.map((agent) => agent.name));
@@ -239,8 +254,8 @@ export default function AgentsSettingsPage() {
 
   const renderCompactRow = (agent: AgentProfile) => {
     const hasBrokenModel = missingModel(agent.model);
-    const isPolicyAgent = autopilotPolicyAgentNames.has(agent.name);
-    const role = OPERATIONAL_AGENT_NAMES.includes(agent.name) ? "Operational" : "General";
+    const isPolicyAgent = autopilotPolicyAgentNameSet.has(agent.name);
+    const role = operationalAgentNames.includes(agent.name) ? "Operational" : "General";
     return (
       <tr key={agent.name} className="border-t border-[var(--border)]">
         <td className="px-3 py-2 text-sm font-medium text-[var(--text)]">
@@ -285,7 +300,7 @@ export default function AgentsSettingsPage() {
           <h2 className="text-sm font-semibold text-cyan-100">Default routing by use case</h2>
           <p className="mt-1 text-xs text-[var(--text-dim)]">Configure model capability once on Models, then route work to an Agent profile. Header model selection temporarily overrides the chosen agent model for the current session.</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            {ROUTING_DEFAULTS.map((route) => (
+            {routingDefaults.map((route) => (
               <div key={route.useCase} className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2">
                 <div className="text-[10px] uppercase tracking-wide text-[var(--text-dim)]">{route.useCase}</div>
                 <div className="text-xs font-medium text-[var(--text)]">{route.agent}</div>
@@ -448,7 +463,7 @@ export default function AgentsSettingsPage() {
                             custom
                           </span>
                         )}
-                        {autopilotPolicyAgentNames.has(agent.name) && (
+                        {autopilotPolicyAgentNameSet.has(agent.name) && (
                           <span className="shrink-0 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
                             Used by Autopilot
                           </span>
