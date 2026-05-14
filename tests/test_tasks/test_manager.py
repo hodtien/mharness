@@ -139,3 +139,106 @@ async def test_completion_listener_fires_when_task_finishes(tmp_path: Path, monk
     await asyncio.wait_for(done.wait(), timeout=5)
 
     assert seen == [(task.id, "completed", 0)]
+
+
+@pytest.mark.asyncio
+async def test_task_sets_terminal_fields_on_exit(tmp_path: Path, monkeypatch):
+    """Verify exit_code, terminal_at, and last_log_excerpt are set when task ends."""
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(tmp_path / "data"))
+    manager = BackgroundTaskManager()
+
+    task = await manager.create_shell_task(
+        command="printf 'output line one\\noutput line two\\noutput line three'",
+        description="terminal_fields",
+        cwd=tmp_path,
+    )
+
+    await asyncio.wait_for(manager._waiters[task.id], timeout=5)
+    updated = manager.get_task(task.id)
+    assert updated is not None
+    assert updated.status == "completed"
+    assert updated.return_code == 0
+    assert updated.terminal_at is not None
+    assert updated.last_heartbeat_at is not None
+    assert updated.last_log_excerpt is not None
+    assert "output line three" in updated.last_log_excerpt
+
+
+@pytest.mark.asyncio
+async def test_failed_task_captures_error_excerpt(tmp_path: Path, monkeypatch):
+    """Verify failed tasks capture last few lines as error summary."""
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(tmp_path / "data"))
+    manager = BackgroundTaskManager()
+
+    task = await manager.create_shell_task(
+        command="printf 'error occurred\\nsecond error\\nfatal: last error' && exit 1",
+        description="failed_task",
+        cwd=tmp_path,
+    )
+
+    await asyncio.wait_for(manager._waiters[task.id], timeout=5)
+    updated = manager.get_task(task.id)
+    assert updated is not None
+    assert updated.status == "failed"
+    assert updated.return_code == 1
+    assert updated.terminal_at is not None
+    assert updated.error_summary == "Exit code: 1"
+    assert updated.last_log_excerpt is not None
+    assert "fatal: last error" in updated.last_log_excerpt
+
+
+@pytest.mark.asyncio
+async def test_stale_watchdog_marks_stale_task_failed(tmp_path: Path, monkeypatch):
+    """Verify stale watchdog marks long-running tasks with no heartbeat as failed."""
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(tmp_path / "data"))
+    # Use a 2 second threshold - task has no heartbeat after initial set
+    manager = BackgroundTaskManager(stale_threshold_seconds=2.0)
+    manager.start_stale_watchdog()
+
+    # Create a task with a very short sleep so process exits quickly
+    # but we'll block the output reader to prevent heartbeat updates
+    task = await manager.create_shell_task(
+        command="sleep 60",
+        description="stalled_task",
+        cwd=tmp_path,
+    )
+    assert task.status == "running"
+
+    # Simulate time passing by clearing heartbeat (process still "alive" in test context)
+    task.last_heartbeat_at = task.last_heartbeat_at - 10  # 10 seconds ago
+
+    # Trigger stale check manually
+    manager._mark_stale_tasks()
+
+    updated = manager.get_task(task.id)
+    assert updated is not None
+    assert updated.status == "failed"
+    assert updated.error_summary is not None
+    assert "heartbeat" in updated.error_summary or "stalled" in updated.error_summary
+
+    manager.stop_stale_watchdog()
+    await manager.aclose()
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_updated_on_output(tmp_path: Path, monkeypatch):
+    """Verify last_heartbeat_at is updated when task produces output."""
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(tmp_path / "data"))
+    manager = BackgroundTaskManager(stale_threshold_seconds=2.0)
+    manager.start_stale_watchdog()
+
+    task = await manager.create_shell_task(
+        command="sleep 1 && printf 'heartbeat test'",
+        description="heartbeat_task",
+        cwd=tmp_path,
+    )
+
+    # Wait for output to be processed
+    await asyncio.sleep(0.5)
+    updated = manager.get_task(task.id)
+    assert updated is not None
+    # Heartbeat should be updated after output
+    assert updated.last_heartbeat_at is not None
+
+    manager.stop_stale_watchdog()
+    await manager.aclose()

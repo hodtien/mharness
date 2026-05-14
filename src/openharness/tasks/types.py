@@ -28,3 +28,12 @@ class TaskRecord:
     ended_at: float | None = None
     return_code: int | None = None
     metadata: dict[str, str] = field(default_factory=dict)
+    # Terminal tracking fields
+    last_heartbeat_at: float | None = None
+    terminal_at: float | None = None
+    error_summary: str | None = None
+    last_log_excerpt: str | None = None
+
+
+# Default stale threshold: 15 minutes without heartbeat
+DEFAULT_STALE_THRESHOLD_SECONDS = 15 * 60
