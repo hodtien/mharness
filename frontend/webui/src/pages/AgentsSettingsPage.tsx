@@ -11,11 +11,24 @@ const ROUTING_DEFAULTS = [
   { useCase: "Chat", agent: "Default Chat Agent" },
   { useCase: "Code", agent: "Code Agent" },
   { useCase: "Review", agent: "Review Agent" },
-  { useCase: "Autopilot Worker", agent: "Autopilot Agent" },
-  { useCase: "Planning", agent: "Code Agent" },
+  { useCase: "Autopilot Worker", agent: "gan-generator" },
+  { useCase: "Autopilot Review", agent: "code-reviewer" },
   { useCase: "Fast/cheap tasks", agent: "Fast Agent" },
 ];
 
+const AUTOPILOT_POLICY_AGENTS = ["gan-generator", "code-reviewer"];
+const OPERATIONAL_AGENT_NAMES = [
+  ...AUTOPILOT_POLICY_AGENTS,
+  "worker",
+  "reviewer",
+  "architect",
+  "verification",
+  "planner",
+  "python-reviewer",
+  "typescript-reviewer",
+];
+
+type ViewMode = "cards" | "compact";
 
 function truncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
@@ -53,6 +66,10 @@ export default function AgentsSettingsPage() {
   const [modelFilter, setModelFilter] = useState<"all" | "assigned" | "unassigned">("all");
   const [permissionFilter, setPermissionFilter] = useState<string>("all");
   const [toolsFilter, setToolsFilter] = useState<"all" | "none" | "some" | "all-tools">("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
+
+  // Set of agent names referenced by the active autopilot policy
+  const autopilotPolicyAgentNames = new Set(AUTOPILOT_POLICY_AGENTS);
 
   const { feedback: saveFeedback, errorMessage: saveErrorMessage, showSaving, showSaved, showError: showSaveError } = useFormFeedback();
 
@@ -193,7 +210,8 @@ export default function AgentsSettingsPage() {
     const q = search.trim().toLowerCase();
     return agents.filter((agent) => {
       if (q) {
-        const haystack = `${agent.name} ${agent.description} ${agent.source_file ?? ""}`.toLowerCase();
+        const role = OPERATIONAL_AGENT_NAMES.includes(agent.name) ? "operational" : "agent";
+        const haystack = `${agent.name} ${agent.description} ${agent.source_file ?? ""} ${agent.model ?? ""} ${agent.effort ?? ""} ${agent.permission_mode ?? ""} ${role}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       if (typeFilter === "custom" && !agent.source_file) return false;
@@ -207,6 +225,40 @@ export default function AgentsSettingsPage() {
       return true;
     });
   }, [agents, search, typeFilter, modelFilter, permissionFilter, toolsFilter]);
+
+  const pinnedAgents = useMemo(() => {
+    const byName = new Map(filteredAgents.map((agent) => [agent.name, agent]));
+    return OPERATIONAL_AGENT_NAMES.map((name) => byName.get(name)).filter((agent): agent is AgentProfile => Boolean(agent));
+  }, [filteredAgents]);
+
+  const unpinnedAgents = useMemo(() => {
+    const pinnedNames = new Set(pinnedAgents.map((agent) => agent.name));
+    return filteredAgents.filter((agent) => !pinnedNames.has(agent.name));
+  }, [filteredAgents, pinnedAgents]);
+
+  const renderCompactRow = (agent: AgentProfile) => {
+    const hasBrokenModel = missingModel(agent.model);
+    const isPolicyAgent = autopilotPolicyAgentNames.has(agent.name);
+    const role = OPERATIONAL_AGENT_NAMES.includes(agent.name) ? "Operational" : "General";
+    return (
+      <tr key={agent.name} className="border-t border-[var(--border)]">
+        <td className="px-3 py-2 text-sm font-medium text-[var(--text)]">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {agent.name}
+            {isPolicyAgent && <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300">Used by Autopilot</span>}
+          </div>
+          <div className="max-w-[20rem] truncate text-[10px] text-[var(--text-dim)]" title={agent.description}>{agent.description}</div>
+        </td>
+        <td className="px-3 py-2 text-xs text-[var(--text-dim)]">{agent.model ?? "—"}</td>
+        <td className="px-3 py-2 text-xs text-[var(--text-dim)]">{agent.effort ?? "—"}</td>
+        <td className="px-3 py-2 text-xs text-[var(--text-dim)]">{agent.model ? agent.model.split(/[/:]/)[0] : "—"}</td>
+        <td className="max-w-[14rem] truncate px-3 py-2 font-mono text-[10px] text-[var(--text-dim)]" title={agent.source_file ?? "built-in"}>{agent.source_file ?? "built-in"}</td>
+        <td className={`px-3 py-2 text-xs ${hasBrokenModel ? "text-red-300" : "text-emerald-300"}`}>{hasBrokenModel ? "Unavailable" : "Available"}</td>
+        <td className="px-3 py-2 text-xs text-[var(--text-dim)]">{role}</td>
+        <td className="px-3 py-2 text-right"><button type="button" onClick={() => openDetail(agent.name)} className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-dim)] hover:text-[var(--text)]">Details</button></td>
+      </tr>
+    );
+  };
 
   if (loading) {
     return (
@@ -249,16 +301,36 @@ export default function AgentsSettingsPage() {
 
         {/* Agents search and filters */}
         <div className="flex flex-col gap-3">
-          <div className="relative">
-            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[var(--text-dim)]">🔍</span>
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, description, or source path…"
-              aria-label="Search agents"
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] py-2 pl-10 pr-4 text-sm text-[var(--text)] placeholder-[var(--text-dim)] outline-none focus:border-cyan-400/50"
-            />
+          <div className="relative flex items-center gap-3">
+            <div className="relative flex-1">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[var(--text-dim)]">🔍</span>
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, description, source, model, effort, permission, role…"
+                aria-label="Search agents"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] py-2 pl-10 pr-4 text-sm text-[var(--text)] placeholder-[var(--text-dim)] outline-none focus:border-cyan-400/50"
+              />
+            </div>
+            <div className="flex shrink-0 gap-1 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                title="Card view"
+                className={`rounded px-2 py-1 text-xs ${viewMode === "cards" ? "bg-cyan-500/20 text-cyan-100" : "text-[var(--text-dim)] hover:text-[var(--text)]"}`}
+              >
+                ▦ Cards
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("compact")}
+                title="Compact table view"
+                className={`rounded px-2 py-1 text-xs ${viewMode === "compact" ? "bg-cyan-500/20 text-cyan-100" : "text-[var(--text-dim)] hover:text-[var(--text)]"}`}
+              >
+                ☰ Table
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -322,8 +394,38 @@ export default function AgentsSettingsPage() {
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {filteredAgents.map((agent) => {
+        {filteredAgents.length > 0 && viewMode === "cards" && pinnedAgents.length > 0 && (
+          <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">
+            <span className="h-2 w-2 rounded-full bg-cyan-400/60" />Operational agents appear first
+          </h3>
+        )}
+
+        {filteredAgents.length > 0 && viewMode === "compact" && (
+          <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-[10px] uppercase tracking-wider text-[var(--text-dim)]">
+                  <th className="px-3 py-2 font-medium">Name / Description</th>
+                  <th className="px-3 py-2 font-medium">Model</th>
+                  <th className="px-3 py-2 font-medium">Effort</th>
+                  <th className="px-3 py-2 font-medium">Provider</th>
+                  <th className="px-3 py-2 font-medium">Source</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Role</th>
+                  <th className="px-3 py-2 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pinnedAgents.map((agent) => renderCompactRow(agent))}
+                {unpinnedAgents.map((agent) => renderCompactRow(agent))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {viewMode === "cards" && (
+          <div className="grid gap-4 sm:grid-cols-2">
+          {[...pinnedAgents, ...unpinnedAgents].map((agent) => {
             const isEditing = editing === agent.name;
             const isUserOwned = !!agent.source_file;
             const hasBrokenModel = missingModel(agent.model);
@@ -343,6 +445,11 @@ export default function AgentsSettingsPage() {
                         {isUserOwned && (
                           <span className="shrink-0 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-medium text-cyan-400">
                             custom
+                          </span>
+                        )}
+                        {autopilotPolicyAgentNames.has(agent.name) && (
+                          <span className="shrink-0 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
+                            Used by Autopilot
                           </span>
                         )}
                       </div>
@@ -511,6 +618,7 @@ export default function AgentsSettingsPage() {
             );
           })}
         </div>
+        )}
       </div>
 
 

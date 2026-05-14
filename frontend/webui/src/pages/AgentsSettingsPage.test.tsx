@@ -37,6 +37,26 @@ const LONG_SYSTEM_PROMPT = `${"System prompt details. ".repeat(30)}Final expande
 
 const sampleAgents = [
   {
+    name: "gan-generator",
+    description: "Generates implementation changes for autopilot.",
+    model: "gpt-4o-mini",
+    effort: "medium",
+    permission_mode: "default",
+    tools_count: 3,
+    has_system_prompt: true,
+    source_file: "agents/gan-generator.md",
+  },
+  {
+    name: "code-reviewer",
+    description: "Reviews autopilot changes before completion.",
+    model: "claude-3-5-sonnet",
+    effort: "high",
+    permission_mode: "plan",
+    tools_count: 2,
+    has_system_prompt: true,
+    source_file: "agents/code-reviewer.md",
+  },
+  {
     name: "Default Chat Agent",
     description: "Generic helper agent for everyday work.",
     model: "gpt-4o-mini",
@@ -154,8 +174,8 @@ describe("AgentsSettingsPage", () => {
     expect(screen.getByLabelText("Loading content")).toBeTruthy();
     await waitFor(() => expect(screen.getAllByText("Default Chat Agent")[0]).toBeTruthy());
     expect(screen.getByText("researcher")).toBeTruthy();
-    // model badge value rendered
-    expect(screen.getByText("gpt-4o-mini")).toBeTruthy();
+    // model badge value rendered (multiple agents may share the same model)
+    expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0);
     // long description should be truncated with ellipsis
     const truncated = screen.getByText(/^R+\u2026$/);
     expect(truncated.textContent?.length).toBe(120);
@@ -170,7 +190,8 @@ describe("AgentsSettingsPage", () => {
 
     expect(screen.getByText("Default routing by use case")).toBeTruthy();
     expect(screen.getAllByText("Code Agent").length).toBeGreaterThan(0);
-    expect(screen.getByText("Autopilot Agent")).toBeTruthy();
+    expect(screen.getAllByText("gan-generator").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("code-reviewer").length).toBeGreaterThan(0);
     expect(screen.getByText("Fast Agent")).toBeTruthy();
     expect(screen.getByText(/header model selection temporarily overrides/i)).toBeTruthy();
     expect(screen.getByText(/Selected model\/provider is unavailable: missing-model/i)).toBeTruthy();
@@ -182,7 +203,7 @@ describe("AgentsSettingsPage", () => {
 
     await renderAgentsPage();
 
-    expect(screen.getAllByRole("button", { name: /view details/i })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /view details/i })).toHaveLength(sampleAgents.length);
     // help microcopy from page header
     expect(screen.getByText(/Agents are task profiles/i)).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /clone/i }).length).toBeGreaterThan(0);
@@ -194,7 +215,13 @@ describe("AgentsSettingsPage", () => {
     setupFetch();
 
     await renderAgentsPage();
-    fireEvent.click(screen.getAllByRole("button", { name: /view details/i })[0]);
+    // gan-generator is pinned first; click on Default Chat Agent's View details
+    const viewDetailButtons = screen.getAllByRole("button", { name: /view details/i });
+    const chatDetailBtn = viewDetailButtons.find((btn) => {
+      const card = btn.closest(".rounded-xl");
+      return card?.textContent?.includes("Default Chat Agent");
+    });
+    fireEvent.click(chatDetailBtn!);
 
     await waitFor(() => expect(screen.getByText("Full generic helper agent description shown in the details modal.")).toBeTruthy());
     expect(screen.getAllByText("Default Chat Agent").length).toBeGreaterThan(1);
@@ -206,7 +233,9 @@ describe("AgentsSettingsPage", () => {
     setupFetch();
 
     await renderAgentsPage();
-    fireEvent.click(screen.getAllByRole("button", { name: /view details/i })[0]);
+    const viewDetailButtons = screen.getAllByRole("button", { name: /view details/i });
+    const chatDetailBtn = viewDetailButtons.find((btn) => btn.closest(".rounded-xl")?.textContent?.includes("Default Chat Agent"));
+    fireEvent.click(chatDetailBtn!);
 
     await waitFor(() => expect(screen.getByText("Full generic helper agent description shown in the details modal.")).toBeTruthy());
     const modal = screen.getByText("Full generic helper agent description shown in the details modal.").closest(".space-y-5");
@@ -227,8 +256,10 @@ describe("AgentsSettingsPage", () => {
     setupFetch();
 
     await renderAgentsPage();
-    // Click View details to open the detail modal
-    fireEvent.click(screen.getAllByRole("button", { name: /view details/i })[0]);
+    // Click View details to open Default Chat Agent's detail modal
+    const viewDetailButtons = screen.getAllByRole("button", { name: /view details/i });
+    const chatDetailBtn = viewDetailButtons.find((btn) => btn.closest(".rounded-xl")?.textContent?.includes("Default Chat Agent"));
+    fireEvent.click(chatDetailBtn!);
 
     // In detail modal, expand button appears when system prompt exists
     await waitFor(() => expect(screen.getByRole("button", { name: /^expand$/i })).toBeTruthy());
@@ -256,9 +287,14 @@ describe("AgentsSettingsPage", () => {
 
     await waitFor(() => expect(screen.getAllByText("Default Chat Agent")[0]).toBeTruthy());
 
-    // Click the first Edit button
+    // Click the Edit button for "Default Chat Agent" (the first unpinned agent, index 1 in order)
     const editButtons = screen.getAllByRole("button", { name: /edit/i });
-    fireEvent.click(editButtons[0]);
+    // gan-generator is first (pinned), Default Chat Agent is second
+    const chatEditIdx = editButtons.findIndex((btn) => {
+      const card = btn.closest(".rounded-xl");
+      return card?.textContent?.includes("Default Chat Agent");
+    });
+    fireEvent.click(editButtons[chatEditIdx]);
 
     // Editor should appear
     await waitFor(() => expect(screen.getByTestId("editor-Default Chat Agent")).toBeTruthy());
@@ -293,7 +329,7 @@ describe("AgentsSettingsPage", () => {
 
     await waitFor(() => expect(screen.getAllByText("Default Chat Agent")[0]).toBeTruthy());
 
-    fireEvent.click(screen.getAllByRole("button", { name: /edit/i })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /edit/i }).find((btn) => btn.closest(".rounded-xl")?.textContent?.includes("Default Chat Agent"))!);
     await waitFor(() => expect(screen.getByTestId("editor-Default Chat Agent")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
