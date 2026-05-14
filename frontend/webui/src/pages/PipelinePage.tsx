@@ -428,7 +428,12 @@ interface ColumnDef {
   statuses: RepoTaskStatus[];
   badgeColor: string;
   pulseWhenActive?: boolean;
+  /** When true, this column is part of the terminal group and can be collapsed */
+  terminal?: boolean;
 }
+
+/** Default number of terminal cards to show when collapsed */
+const TERMINAL_COLLAPSE_LIMIT = 5;
 
 const COLUMNS: ColumnDef[] = [
   {
@@ -461,18 +466,21 @@ const COLUMNS: ColumnDef[] = [
     label: "Completed",
     statuses: ["completed", "merged"],
     badgeColor: "bg-[var(--status-done-bg)] text-[var(--status-done-text)] border-[var(--status-done-border)]",
+    terminal: true,
   },
   {
     id: "failed",
     label: "Failed",
     statuses: ["failed"],
     badgeColor: "bg-[var(--status-failed-bg)] text-[var(--status-failed-text)] border-[var(--status-failed-border)]",
+    terminal: true,
   },
   {
     id: "rejected",
     label: "Rejected",
     statuses: ["rejected", "killed", "paused", "superseded"],
     badgeColor: "bg-[var(--status-rejected-bg)] text-[var(--status-rejected-text)] border-[var(--status-rejected-border)]",
+    terminal: true,
   },
 ];
 
@@ -1712,6 +1720,8 @@ export default function PipelinePage() {
   const [policyDefaultModel, setPolicyDefaultModel] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const projectSwitchedAt = useSession((s) => s.projectSwitchedAt);
+  /** Override terminal collapse: when true, show all terminal cards regardless of limit */
+  const [showAllTerminal, setShowAllTerminal] = useState(false);
 
   // Attention strip counts
   const failedCount = cards.filter((c) => c.status === "failed" || c.status === "paused").length;
@@ -2024,21 +2034,120 @@ export default function PipelinePage() {
               ))}
             </div>
           </div>
-          <div className="flex flex-1 overflow-x-auto overflow-y-hidden p-4 gap-4">
-            {COLUMNS.map((col) => {
-              const colCards = cards.filter((c) => col.statuses.includes(c.status) && matchesBoardFilter(c.status, boardFilter));
+          <div className="flex flex-1 overflow-x-auto p-4 gap-4">
+            {(() => {
+              const activeCols = COLUMNS.filter((c) => !c.terminal);
+              const terminalCols = COLUMNS.filter((c) => c.terminal);
+              const totalTerminalCount = cards.filter((c) => terminalCols.some((col) => col.statuses.includes(c.status)) && matchesBoardFilter(c.status, boardFilter)).length;
               return (
-                <div key={col.id} className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
-                  <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-3 py-2.5">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">{col.label}</span>
-                    <span className={`flex h-5 min-w-5 items-center justify-center rounded-full border px-1.5 text-[10px] font-medium ${col.badgeColor}${col.pulseWhenActive && colCards.length > 0 ? " animate-pulse-subtle" : ""}`}>{colCards.length}</span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                    {colCards.length === 0 ? <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--text-dim)]">No cards for this filter.</div> : colCards.map((card) => <Card key={card.id} card={card} onClick={() => setSelectedCard(card)} />)}
-                  </div>
-                </div>
+                <>
+                  {activeCols.map((col) => {
+                    const colCards = cards.filter((c) => col.statuses.includes(c.status) && matchesBoardFilter(c.status, boardFilter));
+                    return (
+                      <div key={col.id} className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+                        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-3 py-2.5">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">{col.label}</span>
+                          <span className={`flex h-5 min-w-5 items-center justify-center rounded-full border px-1.5 text-[10px] font-medium ${col.badgeColor}${col.pulseWhenActive && colCards.length > 0 ? " animate-pulse-subtle" : ""}`}>{colCards.length}</span>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                          {colCards.length === 0 ? <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--text-dim)]">No cards for this filter.</div> : colCards.map((card) => <Card key={card.id} card={card} onClick={() => setSelectedCard(card)} />)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* Terminal section */}
+                  {terminalCols.length > 0 && (
+                    <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel-2)]">
+                      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel-2)] px-3 py-2.5">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">Terminal history</span>
+                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full border bg-[var(--status-done-bg)] px-1.5 text-[10px] font-medium text-[var(--status-done-text)] border-[var(--status-done-border)]" data-testid="terminal-history-count">{totalTerminalCount}</span>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                        {(() => {
+                          // Gather and flatten all terminal cards
+                          const allTerminalCards: Array<{ card: PipelineCard; colId: string; colLabel: string }> = [];
+                          for (const col of terminalCols) {
+                            const colCards = cards.filter((c) => col.statuses.includes(c.status) && matchesBoardFilter(c.status, boardFilter));
+                            for (const card of colCards) {
+                              allTerminalCards.push({ card, colId: col.id, colLabel: col.label });
+                            }
+                          }
+                          // Sort by most recent first
+                          allTerminalCards.sort((a, b) => b.card.updated_at - a.card.updated_at);
+                          const visibleTerminal = showAllTerminal || boardFilter === "terminal" ? allTerminalCards : allTerminalCards.slice(0, TERMINAL_COLLAPSE_LIMIT);
+                          const hiddenCount = allTerminalCards.length - visibleTerminal.length;
+
+                          // Group back by column for display
+                          const grouped: Record<string, Array<PipelineCard>> = {};
+                          for (const item of visibleTerminal) {
+                            if (!grouped[item.colId]) grouped[item.colId] = [];
+                            grouped[item.colId].push(item.card);
+                          }
+
+                          if (boardFilter !== "terminal" && allTerminalCards.length <= TERMINAL_COLLAPSE_LIMIT) {
+                            // Small count: render directly without grouping headers
+                            return (
+                              <>
+                                {terminalCols.map((col) => {
+                                  const colCards = cards.filter((c) => col.statuses.includes(c.status) && matchesBoardFilter(c.status, boardFilter));
+                                  return (
+                                    <div key={col.id}>
+                                      {colCards.map((card) => <Card key={card.id} card={card} onClick={() => setSelectedCard(card)} />)}
+                                    </div>
+                                  );
+                                })}
+                              </>
+                            );
+                          }
+
+                          return (
+                            <>
+                              {terminalCols.map((col) => {
+                                const colCards = grouped[col.id] ?? [];
+                                if (colCards.length === 0) return null;
+                                return (
+                                  <div key={col.id}>
+                                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-dim)] opacity-60">{col.label}</div>
+                                    {colCards.map((card) => <Card key={card.id} card={card} onClick={() => setSelectedCard(card)} />)}
+                                  </div>
+                                );
+                              })}
+                              {hiddenCount > 0 && boardFilter !== "terminal" && (
+                                <button
+                                  onClick={() => setShowAllTerminal(true)}
+                                  className="mt-2 w-full rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1.5 text-center text-xs text-[var(--accent)] hover:border-[var(--accent)]/40"
+                                  data-testid="show-more-terminal"
+                                >
+                                  +{hiddenCount} more
+                                </button>
+                              )}
+                            </>
+                          );
+                        })()}
+                        {boardFilter !== "terminal" && !showAllTerminal && totalTerminalCount > TERMINAL_COLLAPSE_LIMIT && (
+                          <button
+                            onClick={() => setShowAllTerminal(true)}
+                            className="mt-2 w-full rounded-md border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-2 py-1.5 text-center text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent)]/20"
+                            data-testid="show-all-terminal"
+                          >
+                            Show all {totalTerminalCount} terminal
+                          </button>
+                        )}
+                        {showAllTerminal && (
+                          <button
+                            onClick={() => setShowAllTerminal(false)}
+                            className="mt-2 w-full rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1.5 text-center text-xs text-[var(--text-dim)] hover:border-[var(--accent)]/40 hover:text-[var(--text)]"
+                            data-testid="collapse-terminal"
+                          >
+                            Collapse terminal
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
               );
-            })}
+            })()}
           </div>
         </>
       )}

@@ -802,14 +802,14 @@ describe("PipelinePage", () => {
     vi.useRealTimers();
   });
 
-  it("shows terminal cards in separate outcome columns by default", async () => {
+  it("shows terminal cards in terminal history section, grouped by outcome", async () => {
     const terminalCards = [
       { id: "card-completed", title: "Completed task", status: "completed", source_kind: "manual_idea", score: 60, labels: [], created_at: 1, updated_at: 1 },
-      { id: "card-merged", title: "Merged task", status: "merged", source_kind: "github_issue", score: 90, labels: [], created_at: 1, updated_at: 1 },
-      { id: "card-failed", title: "Failed task", status: "failed", source_kind: "manual_idea", score: 40, labels: [], created_at: 1, updated_at: 1 },
-      { id: "card-paused", title: "Paused task", status: "paused", source_kind: "manual_idea", score: 30, labels: [], created_at: 1, updated_at: 1 },
-      { id: "card-rejected", title: "Rejected task", status: "rejected", source_kind: "manual_idea", score: 20, labels: [], created_at: 1, updated_at: 1 },
-      { id: "card-superseded", title: "Superseded task", status: "superseded", source_kind: "manual_idea", score: 10, labels: [], created_at: 1, updated_at: 1 },
+      { id: "card-merged", title: "Merged task", status: "merged", source_kind: "github_issue", score: 90, labels: [], created_at: 2, updated_at: 2 },
+      { id: "card-failed", title: "Failed task", status: "failed", source_kind: "manual_idea", score: 40, labels: [], created_at: 3, updated_at: 3 },
+      { id: "card-paused", title: "Paused task", status: "paused", source_kind: "manual_idea", score: 30, labels: [], created_at: 4, updated_at: 4 },
+      { id: "card-rejected", title: "Rejected task", status: "rejected", source_kind: "manual_idea", score: 20, labels: [], created_at: 5, updated_at: 5 },
+      { id: "card-superseded", title: "Superseded task", status: "superseded", source_kind: "manual_idea", score: 10, labels: [], created_at: 6, updated_at: 6 },
     ];
 
     vi.stubGlobal(
@@ -831,16 +831,163 @@ describe("PipelinePage", () => {
       </BrowserRouter>,
     );
 
-    expect(await screen.findByText(/^Completed$/)).toBeTruthy();
-    expect(screen.getByText(/^Failed$/)).toBeTruthy();
-    expect(screen.getByText(/^Rejected$/)).toBeTruthy();
-    expect(screen.getByText("Completed task")).toBeTruthy();
-    expect(screen.getByText("Merged task")).toBeTruthy();
-    expect(screen.getByText("Failed task")).toBeTruthy();
-    expect(screen.getByText("Paused task")).toBeTruthy();
-    expect(screen.getByText("Rejected task")).toBeTruthy();
-    expect(screen.getByText("Superseded task")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Terminal history/i })).toBeNull();
+    // Terminal section exists with count
+    expect(await screen.findByText(/^Terminal history$/)).toBeTruthy();
+    // Badge count via testid
+    expect(screen.getByTestId("terminal-history-count").textContent).toBe("6");
+
+    // Cards are inside terminal history section — check via data-testid on the section
+    const terminalSection = screen.getByTestId("terminal-history-count").closest('[class*="flex-col"]');
+    expect(terminalSection).toBeTruthy();
+  });
+
+  it("collapses terminal section by default when over limit", async () => {
+    // 10 terminal cards — more than the 5-card collapse limit
+    const manyTerminalCards = Array.from({ length: 10 }, (_, i) => ({
+      id: `card-terminal-${i}`,
+      title: `Terminal task ${i}`,
+      status: i % 3 === 0 ? "failed" : i % 3 === 1 ? "rejected" : "completed",
+      source_kind: "manual_idea" as const,
+      score: 50,
+      labels: [],
+      created_at: i + 1,
+      updated_at: i + 1,
+    }));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards: manyTerminalCards, updated_at: 0 }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: [] }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    await screen.findByText(/^Terminal history$/);
+    // Badge shows full count (primary collapse state signal)
+    expect(screen.getByTestId("terminal-history-count").textContent).toBe("10");
+
+    // "Show all N terminal" button visible when over limit
+    const showAllBtn = await screen.findByTestId("show-all-terminal");
+    expect(showAllBtn).toBeTruthy();
+    expect(showAllBtn.textContent).toContain("10");
+
+    // Click expand — badge count stays the same, collapse button appears
+    fireEvent.click(showAllBtn);
+    expect(screen.getByTestId("terminal-history-count").textContent).toBe("10");
+    expect(screen.getByTestId("collapse-terminal")).toBeTruthy();
+
+    // Click collapse — back to collapsed state with show-all button
+    fireEvent.click(screen.getByTestId("collapse-terminal"));
+    await waitFor(() => {
+      expect(screen.getByTestId("show-all-terminal")).toBeTruthy();
+    });
+  });
+
+  it("shows all terminal when filter is Terminal", async () => {
+    const terminalCards = Array.from({ length: 8 }, (_, i) => ({
+      id: `card-terminal-${i}`,
+      title: `Terminal task ${i}`,
+      status: i % 2 === 0 ? "failed" : "completed",
+      source_kind: "manual_idea" as const,
+      score: 50,
+      labels: [],
+      created_at: i + 1,
+      updated_at: i + 1,
+    }));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards: terminalCards, updated_at: 0 }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: [] }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    await screen.findByText(/^Terminal history$/);
+
+    // Click Terminal filter
+    fireEvent.click(screen.getByRole("button", { name: /^Terminal$/ }));
+
+    // All cards visible immediately (no collapse when filter is active)
+    expect(await screen.findByText("Terminal task 0")).toBeTruthy();
+    expect(screen.getByText("Terminal task 7")).toBeTruthy();
+    // No show/collapse buttons in Terminal filter mode
+    expect(screen.queryByTestId("show-all-terminal")).toBeNull();
+    expect(screen.queryByTestId("collapse-terminal")).toBeNull();
+  });
+
+  it("terminal count is accurate regardless of collapse state", async () => {
+    const terminalCards = Array.from({ length: 12 }, (_, i) => ({
+      id: `card-${i}`,
+      title: `Task ${i}`,
+      status: i % 4 === 0 ? "failed" : i % 4 === 1 ? "rejected" : i % 4 === 2 ? "completed" : "merged",
+      source_kind: "manual_idea" as const,
+      score: 50,
+      labels: [],
+      created_at: i + 1,
+      updated_at: i + 1,
+    }));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/pipeline/cards") {
+          return Promise.resolve(jsonResponse({ cards: terminalCards, updated_at: 0 }));
+        }
+        if (url.startsWith("/api/pipeline/journal")) {
+          return Promise.resolve(jsonResponse({ entries: [] }));
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      }),
+    );
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    await screen.findByText(/^Terminal history$/);
+
+    // Badge shows full count
+    expect(screen.getByTestId("terminal-history-count").textContent).toBe("12");
+
+    // Expand
+    fireEvent.click(screen.getByTestId("show-all-terminal"));
+
+    // Badge still shows full count
+    await waitFor(() => {
+      expect(screen.getByTestId("terminal-history-count").textContent).toBe("12");
+    });
+
+    // Collapse back
+    fireEvent.click(screen.getByTestId("collapse-terminal"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("terminal-history-count").textContent).toBe("12");
+    });
   });
 
   it("Activity tab: shows filter pills and filters entries by kind", async () => {
