@@ -6,42 +6,7 @@ import ErrorBanner from "../components/ErrorBanner";
 import { toast } from "../store/toast";
 import { useSession } from "../store/session";
 import PageHeader from "../components/PageHeader";
-
-// Truncate path for display: ~/.../<last-segment> pattern
-function shortenPath(path: string, maxLen = 48): string {
-  if (!path) return "";
-  const pathSegments = path.split("/").filter(Boolean);
-  const display = pathSegments.length >= 3 && pathSegments[0] === "Users" ? `~/${pathSegments.slice(2).join("/")}` : path;
-  if (display.length <= maxLen) return display;
-  const segs = display.split("/").filter(Boolean);
-  if (segs.length <= 1) return display.slice(0, maxLen);
-  const last = segs[segs.length - 1];
-  const prefix = display.startsWith("~") ? "~/" : "/";
-  const avail = maxLen - last.length - prefix.length - 2;
-  if (avail > 4) {
-    return `${prefix}${segs[0].slice(0, avail)}…/${last}`;
-  }
-  return `${prefix}…/${last}`;
-}
-
-function CopyButton({ text, className = "" }: { text: string; className?: string }) {
-  return (
-    <button
-      type="button"
-      aria-label={`Copy path ${text}`}
-      onClick={() => {
-        navigator.clipboard.writeText(text).then(
-          () => toast.success("Path copied."),
-          () => toast.error("Copy failed.")
-        );
-      }}
-      title={text}
-      className={`shrink-0 rounded border border-[var(--border)] bg-[var(--panel-2)] p-1 text-xs text-[var(--text-dim)] hover:border-cyan-400/40 hover:text-[var(--text)] ${className}`}
-    >
-      📋
-    </button>
-  );
-}
+import { PathDisplay } from "../components/PathDisplay";
 
 type ViewFilter = "all" | "active" | "existing" | "missing" | "temp" | "worktree";
 
@@ -465,7 +430,6 @@ export default function ProjectsPage() {
               const isActive = activeProjectId === project.id;
               const isDeleting = deleting === project.id;
               const isActivating = activating === project.id;
-              const displayPath = shortenPath(project.path);
               return (
                 <div
                   key={project.id}
@@ -509,13 +473,7 @@ export default function ProjectsPage() {
                             )}
                           </div>
                           <div className="mt-1 flex items-center gap-1">
-                            <CopyButton text={project.path} />
-                            <p
-                              className="truncate font-mono text-xs text-[var(--text-dim)]"
-                              title={project.path}
-                            >
-                              {displayPath}
-                            </p>
+                            <PathDisplay path={project.path} maxLen={48} copyLabel={`Copy path for ${project.name}`} />
                           </div>
                           {project.description && (
                             <p className="mt-1 text-xs text-[var(--text-dim)]">

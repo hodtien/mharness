@@ -4,6 +4,7 @@ import LoadingSkeleton from "../components/LoadingSkeleton";
 import { toast } from "../store/toast";
 import { useUnsavedWarning, FeedbackBadge, useFormFeedback } from "../hooks/useSettingsForm";
 import PageHeader from "../components/PageHeader";
+import { PathDisplay } from "../components/PathDisplay";
 
 const EFFORT_OPTIONS = ["low", "medium", "high"] as const;
 const PERMISSION_OPTIONS = ["default", "acceptEdits", "bypassPermissions", "plan", "dontAsk"] as const;
@@ -458,9 +459,9 @@ export default function AgentsSettingsPage() {
                       </p>
                       {/* Source file path */}
                       {agent.source_file && (
-                        <p className="mt-1 truncate font-mono text-[10px] text-[var(--text-dim)] opacity-60" title={agent.source_file}>
-                          {agent.source_file}
-                        </p>
+                        <div className="mt-1">
+                          <PathDisplay path={agent.source_file} maxLen={50} copyLabel={`Copy source file for ${agent.name}`} />
+                        </div>
                       )}
                     </div>
                     {!isEditing && (

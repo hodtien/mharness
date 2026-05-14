@@ -179,6 +179,50 @@ describe("SettingsControlPage (Control Center)", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  // ── CWD in operational status ─────────────────────────────────────────────────
+  it("displays CWD path from appState with copy button", async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes("/projects")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: () => Promise.resolve({ projects: [], active_project_id: null }),
+        });
+      }
+      if (url.includes("/cron")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: () => Promise.resolve({ jobs: [], scheduler_running: false }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: () => Promise.resolve({}),
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const longCwd = "/Users/developer/very/long/project/path/that/needs/truncation";
+    useSession.setState({
+      tasks: [],
+      appState: { cwd: longCwd, model: "test", provider: "test" } as never,
+    });
+
+    renderControlPage();
+
+    // CWD label present
+    expect(screen.getByText(/^CWD$/)).toBeTruthy();
+    // Tooltip reveals full path
+    expect(screen.getByTitle(longCwd)).toBeTruthy();
+    // Copy button has accessible label
+    expect(screen.getByRole("button", { name: /copy working directory/i })).toBeTruthy();
+  });
+
   // ── State combination: scheduler_running=true but feature enabled=false ──────
   it("shows 'stopped' scheduler status when scheduler process is not running", async () => {
     const fetchMock = vi.fn((url: string) => {
