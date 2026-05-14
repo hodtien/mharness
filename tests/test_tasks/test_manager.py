@@ -236,10 +236,7 @@ async def test_stale_watchdog_marks_stale_task_failed(tmp_path: Path, monkeypatc
 
     manager.register_completion_listener(_listener)
 
-    # Trigger stale check manually
-    manager._mark_stale_tasks()
-
-    # Listener is called via fire-and-forget asyncio.create_task, so give loop a chance
+    await manager._mark_stale_tasks()
     await asyncio.sleep(0.2)
 
     updated = manager.get_task(task.id)

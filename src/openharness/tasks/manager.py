@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import contextlib
 import os
 import shlex
 import time
@@ -14,6 +15,7 @@ from typing import Awaitable, Callable
 from uuid import uuid4
 
 from openharness.config.paths import get_tasks_dir
+from openharness.config.settings import load_settings
 from openharness.tasks.types import DEFAULT_STALE_THRESHOLD_SECONDS, TaskRecord, TaskStatus, TaskType
 from openharness.utils.shell import create_shell_subprocess
 
@@ -65,10 +67,7 @@ class BackgroundTaskManager:
         """Start the background stale watchdog coroutine if not already running."""
         if self._stale_watchdog_task is not None and not self._stale_watchdog_task.done():
             return
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return  # No event loop in this thread; skip watchdog start
+        asyncio.get_running_loop()
         self._stale_watchdog_task = asyncio.create_task(self._run_stale_watchdog())
 
     def stop_stale_watchdog(self) -> None:
@@ -81,14 +80,14 @@ class BackgroundTaskManager:
         """Periodically check for stale running tasks and mark them failed."""
         while True:
             try:
-                await asyncio.sleep(60)  # Check every minute
-                self._mark_stale_tasks()
+                await asyncio.sleep(60)
+                await self._mark_stale_tasks()
             except asyncio.CancelledError:
                 break
             except Exception:
                 log.exception("Stale watchdog error")
 
-    def _mark_stale_tasks(self) -> None:
+    async def _mark_stale_tasks(self) -> None:
         """Mark long-running tasks with no recent heartbeat as stale/failed."""
         now = time.time()
         stale_tasks: list[TaskRecord] = []
@@ -103,7 +102,7 @@ class BackgroundTaskManager:
         for task in stale_tasks:
             task.status = "failed"
             task.ended_at = time.time()
-            task.terminal_at = time.time()
+            task.terminal_at = task.ended_at
             task.error_summary = f"Task stalled: no heartbeat for {self._stale_threshold_seconds}s"
             try:
                 content = task.output_file.read_text(encoding="utf-8", errors="replace")
@@ -113,21 +112,8 @@ class BackgroundTaskManager:
                     task.last_log_excerpt = "\n".join(non_empty[-5:])
             except Exception:
                 pass
-            # CRITICAL fix: terminate subprocess and cancel waiter so _wait_for_completion()
-            # cannot overwrite the stale terminal state or notify listeners a second time
-            proc = self._processes.get(task.id)
-            if proc is not None and proc.returncode is None:
-                try:
-                    proc.terminate()
-                except (ProcessLookupError, RuntimeError):
-                    pass
-                self._processes.pop(task.id, None)
-            waiter = self._waiters.get(task.id)
-            if waiter is not None and not waiter.done():
-                waiter.cancel()
-            self._waiters.pop(task.id, None)
+            await self._terminate_stale_process(task)
             log.warning("Marked stale task %s as failed (no heartbeat for %ds)", task.id, self._stale_threshold_seconds)
-            # Notify listeners asynchronously
             snapshot = replace(task, metadata=dict(task.metadata))
             for listener_id, listener in list(self._completion_listeners.items()):
                 try:
@@ -136,6 +122,26 @@ class BackgroundTaskManager:
                         asyncio.create_task(maybe_awaitable)
                 except Exception:
                     log.exception("Stale watchdog listener error for task %s", task.id)
+
+    async def _terminate_stale_process(self, task: TaskRecord) -> None:
+        process = self._processes.get(task.id)
+        waiter = self._waiters.get(task.id)
+        if process is not None and process.returncode is None:
+            with contextlib.suppress(ProcessLookupError, RuntimeError):
+                process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=3)
+            except asyncio.TimeoutError:
+                with contextlib.suppress(ProcessLookupError, RuntimeError):
+                    process.kill()
+                await process.wait()
+            await _close_process_stdin(process)
+        if waiter is not None and not waiter.done():
+            waiter.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await waiter
+        self._processes.pop(task.id, None)
+        self._waiters.pop(task.id, None)
 
     async def create_shell_task(
         self,
@@ -166,6 +172,7 @@ class BackgroundTaskManager:
         self._output_locks[task_id] = asyncio.Lock()
         self._input_locks[task_id] = asyncio.Lock()
         await self._start_process(task_id)
+        self.start_stale_watchdog()
         return record
 
     async def create_agent_task(
@@ -488,13 +495,10 @@ def get_task_manager() -> BackgroundTaskManager:
         if _DEFAULT_MANAGER is not None:
             _DEFAULT_MANAGER.stop_stale_watchdog()
             _DEFAULT_MANAGER.close()
-        # CRITICAL fix: read configured stale threshold from env, default to 15 minutes
-        stale_threshold_seconds = float(
-            os.environ.get("OPENHARNESS_TASK_STALE_THRESHOLD_SECONDS", DEFAULT_STALE_THRESHOLD_SECONDS)
-        )
+        settings = load_settings()
+        stale_threshold_seconds = settings.task_stale_threshold_seconds or DEFAULT_STALE_THRESHOLD_SECONDS
         _DEFAULT_MANAGER = BackgroundTaskManager(stale_threshold_seconds=stale_threshold_seconds)
         _DEFAULT_MANAGER_KEY = current_key
-        _DEFAULT_MANAGER.start_stale_watchdog()
         from openharness.services.auto_review import hook_auto_review
 
         hook_auto_review(_DEFAULT_MANAGER)
