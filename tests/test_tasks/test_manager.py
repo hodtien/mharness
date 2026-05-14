@@ -188,6 +188,26 @@ async def test_failed_task_captures_error_excerpt(tmp_path: Path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stale_threshold_read_from_env(tmp_path: Path, monkeypatch):
+    """Verify get_task_manager reads OPENHARNESS_TASK_STALE_THRESHOLD_SECONDS from env."""
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("OPENHARNESS_TASK_STALE_THRESHOLD_SECONDS", "42.0")
+    # Reset the singleton so it picks up the new env value
+    from openharness.tasks.manager import reset_task_manager
+
+    reset_task_manager()
+    try:
+        from openharness.tasks.manager import get_task_manager
+
+        manager = get_task_manager()
+        assert manager._stale_threshold_seconds == 42.0, (
+            f"Expected 42.0, got {manager._stale_threshold_seconds}"
+        )
+    finally:
+        reset_task_manager()
+
+
+@pytest.mark.asyncio
 async def test_stale_watchdog_marks_stale_task_failed(tmp_path: Path, monkeypatch):
     """Verify stale watchdog marks long-running tasks with no heartbeat as failed."""
     monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(tmp_path / "data"))
@@ -207,14 +227,31 @@ async def test_stale_watchdog_marks_stale_task_failed(tmp_path: Path, monkeypatc
     # Simulate time passing by clearing heartbeat (process still "alive" in test context)
     task.last_heartbeat_at = task.last_heartbeat_at - 10  # 10 seconds ago
 
+    # Track listener calls for double-notification check
+    call_count = 0
+
+    async def _listener(t):
+        nonlocal call_count
+        call_count += 1
+
+    manager.register_completion_listener(_listener)
+
     # Trigger stale check manually
     manager._mark_stale_tasks()
+
+    # Listener is called via fire-and-forget asyncio.create_task, so give loop a chance
+    await asyncio.sleep(0.2)
 
     updated = manager.get_task(task.id)
     assert updated is not None
     assert updated.status == "failed"
     assert updated.error_summary is not None
     assert "heartbeat" in updated.error_summary or "stalled" in updated.error_summary
+    # CRITICAL fix verification: subprocess and waiter must be cleaned up
+    assert task.id not in manager._processes, "process should be removed after stale marking"
+    assert task.id not in manager._waiters, "waiter should be removed after stale marking"
+    # Listener should have been called exactly once (not twice)
+    assert call_count == 1, f"Expected 1 listener call, got {call_count}"
 
     manager.stop_stale_watchdog()
     await manager.aclose()

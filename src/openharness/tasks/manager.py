@@ -113,6 +113,19 @@ class BackgroundTaskManager:
                     task.last_log_excerpt = "\n".join(non_empty[-5:])
             except Exception:
                 pass
+            # CRITICAL fix: terminate subprocess and cancel waiter so _wait_for_completion()
+            # cannot overwrite the stale terminal state or notify listeners a second time
+            proc = self._processes.get(task.id)
+            if proc is not None and proc.returncode is None:
+                try:
+                    proc.terminate()
+                except (ProcessLookupError, RuntimeError):
+                    pass
+                self._processes.pop(task.id, None)
+            waiter = self._waiters.get(task.id)
+            if waiter is not None and not waiter.done():
+                waiter.cancel()
+            self._waiters.pop(task.id, None)
             log.warning("Marked stale task %s as failed (no heartbeat for %ds)", task.id, self._stale_threshold_seconds)
             # Notify listeners asynchronously
             snapshot = replace(task, metadata=dict(task.metadata))
@@ -303,6 +316,11 @@ class BackgroundTaskManager:
             return
 
         task = self._tasks[task_id]
+        # CRITICAL fix: skip if already terminal (e.g. stale watchdog marked it failed)
+        if task.terminal_at is not None:
+            self._processes.pop(task_id, None)
+            self._waiters.pop(task_id, None)
+            return
         task.return_code = return_code
         now = time.time()
         task.ended_at = now
@@ -470,7 +488,11 @@ def get_task_manager() -> BackgroundTaskManager:
         if _DEFAULT_MANAGER is not None:
             _DEFAULT_MANAGER.stop_stale_watchdog()
             _DEFAULT_MANAGER.close()
-        _DEFAULT_MANAGER = BackgroundTaskManager()
+        # CRITICAL fix: read configured stale threshold from env, default to 15 minutes
+        stale_threshold_seconds = float(
+            os.environ.get("OPENHARNESS_TASK_STALE_THRESHOLD_SECONDS", DEFAULT_STALE_THRESHOLD_SECONDS)
+        )
+        _DEFAULT_MANAGER = BackgroundTaskManager(stale_threshold_seconds=stale_threshold_seconds)
         _DEFAULT_MANAGER_KEY = current_key
         _DEFAULT_MANAGER.start_stale_watchdog()
         from openharness.services.auto_review import hook_auto_review
