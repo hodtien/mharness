@@ -37,6 +37,26 @@ const LONG_SYSTEM_PROMPT = `${"System prompt details. ".repeat(30)}Final expande
 
 const sampleAgents = [
   {
+    name: "custom-worker",
+    description: "Generates implementation changes for autopilot.",
+    model: "gpt-4o-mini",
+    effort: "medium",
+    permission_mode: "default",
+    tools_count: 3,
+    has_system_prompt: true,
+    source_file: "agents/custom-worker.md",
+  },
+  {
+    name: "custom-reviewer",
+    description: "Reviews autopilot changes before completion.",
+    model: "claude-3-5-sonnet",
+    effort: "high",
+    permission_mode: "plan",
+    tools_count: 2,
+    has_system_prompt: true,
+    source_file: "agents/custom-reviewer.md",
+  },
+  {
     name: "Default Chat Agent",
     description: "Generic helper agent for everyday work.",
     model: "gpt-4o-mini",
@@ -94,6 +114,11 @@ const sampleModels = {
 
 interface FetchOverrides {
   patch?: (name: string, body: Record<string, unknown>) => { status?: number; data: unknown };
+  policyAgents?: {
+    implement_agent: string | null;
+    review_agent: string | null;
+    operational_agents: string[];
+  };
 }
 
 function setupFetch(overrides: FetchOverrides = {}) {
@@ -105,6 +130,15 @@ function setupFetch(overrides: FetchOverrides = {}) {
     }
     if (url === "/api/models" && (!init?.method || init.method === "GET")) {
       return Promise.resolve(jsonResponse(sampleModels));
+    }
+    if (url === "/api/pipeline/policy/agents" && (!init?.method || init.method === "GET")) {
+      return Promise.resolve(jsonResponse(
+        overrides.policyAgents ?? {
+          implement_agent: "custom-worker",
+          review_agent: "custom-reviewer",
+          operational_agents: ["custom-worker", "custom-reviewer"],
+        },
+      ));
     }
     if (url.startsWith("/api/agents/") && (!init?.method || init.method === "GET")) {
       const name = decodeURIComponent(url.slice("/api/agents/".length));
@@ -154,8 +188,8 @@ describe("AgentsSettingsPage", () => {
     expect(screen.getByLabelText("Loading content")).toBeTruthy();
     await waitFor(() => expect(screen.getAllByText("Default Chat Agent")[0]).toBeTruthy());
     expect(screen.getByText("researcher")).toBeTruthy();
-    // model badge value rendered
-    expect(screen.getByText("gpt-4o-mini")).toBeTruthy();
+    // model badge value rendered (multiple agents may share the same model)
+    expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0);
     // long description should be truncated with ellipsis
     const truncated = screen.getByText(/^R+\u2026$/);
     expect(truncated.textContent?.length).toBe(120);
@@ -170,10 +204,48 @@ describe("AgentsSettingsPage", () => {
 
     expect(screen.getByText("Default routing by use case")).toBeTruthy();
     expect(screen.getAllByText("Code Agent").length).toBeGreaterThan(0);
-    expect(screen.getByText("Autopilot Agent")).toBeTruthy();
+    expect(screen.getAllByText("custom-worker").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("custom-reviewer").length).toBeGreaterThan(0);
     expect(screen.getByText("Fast Agent")).toBeTruthy();
     expect(screen.getByText(/header model selection temporarily overrides/i)).toBeTruthy();
     expect(screen.getByText(/Selected model\/provider is unavailable: missing-model/i)).toBeTruthy();
+  });
+
+  it("labels review-only policy agent as Autopilot Review", async () => {
+    mockLocalStorage();
+    setupFetch({
+      policyAgents: {
+        implement_agent: null,
+        review_agent: "custom-reviewer",
+        operational_agents: ["custom-reviewer"],
+      },
+    });
+
+    await renderAgentsPage();
+
+    expect(screen.queryByText("Autopilot Worker")).toBeNull();
+    const reviewLabel = screen.getByText("Autopilot Review");
+    expect(reviewLabel.parentElement?.textContent).toContain("custom-reviewer");
+  });
+
+  it("dedupes matching worker and review policy agents", async () => {
+    mockLocalStorage();
+    setupFetch({
+      policyAgents: {
+        implement_agent: "custom-worker",
+        review_agent: "custom-worker",
+        operational_agents: ["custom-worker", "custom-worker"],
+      },
+    });
+
+    await renderAgentsPage();
+
+    const customWorkerDetailButtons = screen
+      .getAllByRole("button", { name: /view details/i })
+      .filter((button) => button.closest(".rounded-xl")?.textContent?.includes("custom-worker"));
+    expect(customWorkerDetailButtons).toHaveLength(1);
+    expect(screen.getByText("Autopilot Worker")).toBeTruthy();
+    expect(screen.getByText("Autopilot Review")).toBeTruthy();
   });
 
   it("shows View details button on agent cards", async () => {
@@ -182,7 +254,7 @@ describe("AgentsSettingsPage", () => {
 
     await renderAgentsPage();
 
-    expect(screen.getAllByRole("button", { name: /view details/i })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /view details/i })).toHaveLength(sampleAgents.length);
     // help microcopy from page header
     expect(screen.getByText(/Agents are task profiles/i)).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /clone/i }).length).toBeGreaterThan(0);
@@ -194,7 +266,13 @@ describe("AgentsSettingsPage", () => {
     setupFetch();
 
     await renderAgentsPage();
-    fireEvent.click(screen.getAllByRole("button", { name: /view details/i })[0]);
+    // custom-worker is pinned first; click on Default Chat Agent's View details
+    const viewDetailButtons = screen.getAllByRole("button", { name: /view details/i });
+    const chatDetailBtn = viewDetailButtons.find((btn) => {
+      const card = btn.closest(".rounded-xl");
+      return card?.textContent?.includes("Default Chat Agent");
+    });
+    fireEvent.click(chatDetailBtn!);
 
     await waitFor(() => expect(screen.getByText("Full generic helper agent description shown in the details modal.")).toBeTruthy());
     expect(screen.getAllByText("Default Chat Agent").length).toBeGreaterThan(1);
@@ -206,7 +284,9 @@ describe("AgentsSettingsPage", () => {
     setupFetch();
 
     await renderAgentsPage();
-    fireEvent.click(screen.getAllByRole("button", { name: /view details/i })[0]);
+    const viewDetailButtons = screen.getAllByRole("button", { name: /view details/i });
+    const chatDetailBtn = viewDetailButtons.find((btn) => btn.closest(".rounded-xl")?.textContent?.includes("Default Chat Agent"));
+    fireEvent.click(chatDetailBtn!);
 
     await waitFor(() => expect(screen.getByText("Full generic helper agent description shown in the details modal.")).toBeTruthy());
     const modal = screen.getByText("Full generic helper agent description shown in the details modal.").closest(".space-y-5");
@@ -227,8 +307,10 @@ describe("AgentsSettingsPage", () => {
     setupFetch();
 
     await renderAgentsPage();
-    // Click View details to open the detail modal
-    fireEvent.click(screen.getAllByRole("button", { name: /view details/i })[0]);
+    // Click View details to open Default Chat Agent's detail modal
+    const viewDetailButtons = screen.getAllByRole("button", { name: /view details/i });
+    const chatDetailBtn = viewDetailButtons.find((btn) => btn.closest(".rounded-xl")?.textContent?.includes("Default Chat Agent"));
+    fireEvent.click(chatDetailBtn!);
 
     // In detail modal, expand button appears when system prompt exists
     await waitFor(() => expect(screen.getByRole("button", { name: /^expand$/i })).toBeTruthy());
@@ -256,9 +338,14 @@ describe("AgentsSettingsPage", () => {
 
     await waitFor(() => expect(screen.getAllByText("Default Chat Agent")[0]).toBeTruthy());
 
-    // Click the first Edit button
+    // Click the Edit button for "Default Chat Agent" (the first unpinned agent, index 1 in order)
     const editButtons = screen.getAllByRole("button", { name: /edit/i });
-    fireEvent.click(editButtons[0]);
+    // custom-worker is first (pinned), Default Chat Agent is second
+    const chatEditIdx = editButtons.findIndex((btn) => {
+      const card = btn.closest(".rounded-xl");
+      return card?.textContent?.includes("Default Chat Agent");
+    });
+    fireEvent.click(editButtons[chatEditIdx]);
 
     // Editor should appear
     await waitFor(() => expect(screen.getByTestId("editor-Default Chat Agent")).toBeTruthy());
@@ -293,7 +380,7 @@ describe("AgentsSettingsPage", () => {
 
     await waitFor(() => expect(screen.getAllByText("Default Chat Agent")[0]).toBeTruthy());
 
-    fireEvent.click(screen.getAllByRole("button", { name: /edit/i })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /edit/i }).find((btn) => btn.closest(".rounded-xl")?.textContent?.includes("Default Chat Agent"))!);
     await waitFor(() => expect(screen.getByTestId("editor-Default Chat Agent")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 

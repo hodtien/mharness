@@ -355,6 +355,12 @@ export interface AgentPatch {
   permission_mode?: string;
 }
 
+export interface AutopilotPolicyAgentsResponse {
+  implement_agent: string | null;
+  review_agent: string | null;
+  operational_agents: string[];
+}
+
 // ---------------- Cron Schedule Config ----------------
 
 export interface CronConfigResponse {
@@ -527,6 +533,7 @@ export const api = {
       { method: "DELETE" },
     ),
   listAgents: () => apiFetch<AgentProfile[]>("/api/agents"),
+  getAutopilotPolicyAgents: () => apiFetch<AutopilotPolicyAgentsResponse>("/api/pipeline/policy/agents"),
   getAgent: (name: string) => apiFetch<AgentDetail>(`/api/agents/${encodeURIComponent(name)}`),
   patchAgent: (name: string, patch: AgentPatch) =>
     apiFetch<AgentProfile>(`/api/agents/${encodeURIComponent(name)}`, {

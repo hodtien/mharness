@@ -1068,6 +1068,104 @@ async def test_resume_card_rejects_active_card_without_checkpoint(tmp_path) -> N
 
 
 # ---------------------------------------------------------------------------
+# GET /api/pipeline/policy/agents — policy-linked agent names
+# ---------------------------------------------------------------------------
+
+
+def test_get_pipeline_policy_agents_returns_configured_agent_names(tmp_path) -> None:
+    client = _client(tmp_path)
+    policy_dir = tmp_path / ".openharness" / "autopilot"
+    policy_dir.mkdir(parents=True)
+    (policy_dir / "autopilot_policy.yaml").write_text(
+        """
+intake: {}
+decision: {}
+execution:
+  implement_agent: custom-worker
+  review_agent: custom-reviewer
+github: {}
+repair: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/pipeline/policy/agents", headers=AUTH)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "implement_agent": "custom-worker",
+        "review_agent": "custom-reviewer",
+        "operational_agents": ["custom-worker", "custom-reviewer"],
+    }
+
+
+def test_get_pipeline_policy_agents_handles_missing_or_non_string_names(tmp_path) -> None:
+    client = _client(tmp_path)
+    policy_dir = tmp_path / ".openharness" / "autopilot"
+    policy_dir.mkdir(parents=True)
+    (policy_dir / "autopilot_policy.yaml").write_text(
+        """
+execution:
+  implement_agent: 123
+  review_agent:
+    - custom-reviewer
+""".strip(),
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/pipeline/policy/agents", headers=AUTH)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "implement_agent": None,
+        "review_agent": None,
+        "operational_agents": [],
+    }
+
+
+def test_get_pipeline_policy_agents_supports_nested_autopilot_execution(tmp_path) -> None:
+    client = _client(tmp_path)
+    policy_dir = tmp_path / ".openharness" / "autopilot"
+    policy_dir.mkdir(parents=True)
+    (policy_dir / "autopilot_policy.yaml").write_text(
+        """
+autopilot:
+  execution:
+    implement_agent: nested-worker
+    review_agent: nested-reviewer
+""".strip(),
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/pipeline/policy/agents", headers=AUTH)
+
+    assert response.status_code == 200
+    assert response.json()["operational_agents"] == ["nested-worker", "nested-reviewer"]
+
+
+def test_get_pipeline_policy_agents_handles_malformed_nested_autopilot(tmp_path) -> None:
+    client = _client(tmp_path)
+    policy_dir = tmp_path / ".openharness" / "autopilot"
+    policy_dir.mkdir(parents=True)
+    (policy_dir / "autopilot_policy.yaml").write_text(
+        """
+autopilot:
+  - invalid
+""".strip(),
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/pipeline/policy/agents", headers=AUTH)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "implement_agent": None,
+        "review_agent": None,
+        "operational_agents": [],
+    }
+
+
+# ---------------------------------------------------------------------------
 # GET /api/pipeline/preflight — global system health check
 # ---------------------------------------------------------------------------
 
