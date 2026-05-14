@@ -101,6 +101,11 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+
+    // Expand OpenAI to see its models (inactive provider collapsed by default).
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
+
     await waitFor(() => expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0));
     expect(screen.getAllByText("gpt-custom").length).toBeGreaterThan(0);
     expect(screen.getByText("custom")).toBeTruthy();
@@ -114,7 +119,10 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
-    await waitFor(() => expect(screen.getAllByText(/128,000|128000/).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("Anthropic")[0]).toBeTruthy());
+
+    // Active provider (Anthropic) expanded by default — Sonnet visible.
+    expect(screen.getAllByText("Sonnet").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/200,000|200000/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/✓ default/).length).toBeGreaterThan(0);
     expect(screen.getByText(/Models are provider\/model capabilities/i)).toBeTruthy();
@@ -125,6 +133,11 @@ describe("ModelsSettingsPage", () => {
     setupFetch();
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+
+    // Expand OpenAI to see its models.
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /delete gpt-custom/i })).toBeTruthy(),
@@ -140,15 +153,20 @@ describe("ModelsSettingsPage", () => {
 
     await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
 
-    const heading = screen.getByRole("button", { name: /openai/i });
-    // Currently open — table row visible
-    expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0);
-    fireEvent.click(heading);
-    // After collapse: row no longer visible
-    await waitFor(() => expect(screen.queryByText("gpt-4o-mini")).toBeNull());
-    // Re-expand
-    fireEvent.click(heading);
+    // Inactive provider (OpenAI) is collapsed by default — gpt-4o-mini not visible.
+    expect(screen.queryByText("gpt-4o-mini")).toBeNull();
+
+    // Active provider (Anthropic) is expanded by default — Sonnet visible.
+    expect(screen.getAllByText("Sonnet").length).toBeGreaterThan(0);
+
+    // Expand OpenAI.
+    const openaiHeading = screen.getByRole("button", { name: /openai/i });
+    fireEvent.click(openaiHeading);
     await waitFor(() => expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0));
+
+    // Collapse OpenAI.
+    fireEvent.click(openaiHeading);
+    await waitFor(() => expect(screen.queryByText("gpt-4o-mini")).toBeNull());
   });
 
   it("filters models by id or label", async () => {
@@ -213,6 +231,11 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+
+    // Expand OpenAI to see its models.
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
+
     await waitFor(() => expect(screen.getAllByText("gpt-custom").length).toBeGreaterThan(0));
 
     // Click "Custom" filter
@@ -228,6 +251,11 @@ describe("ModelsSettingsPage", () => {
     setupFetch();
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+
+    // Expand OpenAI to see its models.
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
 
     await waitFor(() => expect(screen.getAllByText("gpt-4o-mini")[0]).toBeTruthy());
 
@@ -308,6 +336,9 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+    // Expand OpenAI (inactive provider).
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
     await waitFor(() => expect(screen.getByRole("button", { name: /delete gpt-custom/i })).toBeTruthy());
 
     fireEvent.click(screen.getByRole("button", { name: /delete gpt-custom/i }));
@@ -341,6 +372,8 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
     await waitFor(() => expect(screen.getByRole("button", { name: /delete gpt-custom/i })).toBeTruthy());
 
     fireEvent.click(screen.getByRole("button", { name: /delete gpt-custom/i }));
@@ -358,6 +391,8 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /edit gpt-custom/i })).toBeTruthy(),
     );
@@ -370,6 +405,8 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /edit gpt-custom/i })).toBeTruthy(),
     );
@@ -429,6 +466,8 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /edit gpt-custom/i })).toBeTruthy(),
     );
@@ -471,6 +510,8 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /edit gpt-custom/i })).toBeTruthy(),
     );
@@ -505,6 +546,8 @@ describe("ModelsSettingsPage", () => {
 
     render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
 
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /edit gpt-custom/i })).toBeTruthy(),
     );
@@ -516,5 +559,83 @@ describe("ModelsSettingsPage", () => {
 
     await waitFor(() => expect(screen.queryByText(/edit custom model/i)).toBeNull());
     expect(calls.length).toBe(0);
+  });
+
+  it("sorts active providers first", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+
+    const sections = screen.queryAllByRole("button", { name: /openai|anthropic/i });
+    // Active (Anthropic) should come before inactive (OpenAI).
+    const labels = sections.map((s) => s.textContent ?? "");
+    const activeIdx = labels.findIndex((l) => /anthropic/i.test(l));
+    const inactiveIdx = labels.findIndex((l) => /openai/i.test(l));
+    expect(activeIdx).toBeLessThan(inactiveIdx);
+  });
+
+  it("auto-reveals collapsed section when search matches it", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+
+    // OpenAI collapsed by default.
+    expect(screen.queryByText("gpt-4o-mini")).toBeNull();
+
+    // Search for a model inside OpenAI.
+    fireEvent.change(screen.getByPlaceholderText(/filter by model id or label/i), { target: { value: "gpt-4o" } });
+
+    // Section auto-expanded.
+    await waitFor(() => expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0));
+  });
+
+  it("shows Active badge on active provider header", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getAllByText("Anthropic")[0]).toBeTruthy());
+
+    // Active provider (Anthropic) has "Active" badge in header.
+    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+  });
+
+  it("shows default model first within each section", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+
+    // Expand OpenAI.
+    const openaiHeading = screen.getByRole("button", { name: /openai/i });
+    fireEvent.click(openaiHeading);
+
+    await waitFor(() => expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0));
+
+    // After expansion, both gpt-4o-mini (default built-in) and gpt-custom (non-default custom) are visible.
+    // Default model should appear first in the table order (built-in section renders before custom section).
+    // Verify gpt-4o-mini row is present.
+    expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0);
+    // gpt-custom row should also be present.
+    expect(screen.getAllByText("gpt-custom").length).toBeGreaterThan(0);
+    // The default model badge should appear on gpt-4o-mini row (the ✓ default span).
+    const defaultBadge = screen.getAllByText(/✓ default/)[0];
+    expect(defaultBadge).toBeTruthy();
+    // Verify the row containing gpt-4o-mini appears before the row containing gpt-custom in DOM order.
+    const gpt4Row = defaultBadge.closest("tr");
+    const gptCustomRow = screen.getAllByText("gpt-custom")[0].closest("tr");
+    expect(gpt4Row).toBeTruthy();
+    expect(gptCustomRow).toBeTruthy();
+    const allRows = Array.from(document.body.querySelectorAll("table tbody tr"));
+    expect(allRows.indexOf(gpt4Row!)).toBeLessThan(allRows.indexOf(gptCustomRow!));
   });
 });
