@@ -65,6 +65,10 @@ class BackgroundTaskManager:
         """Start the background stale watchdog coroutine if not already running."""
         if self._stale_watchdog_task is not None and not self._stale_watchdog_task.done():
             return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return  # No event loop in this thread; skip watchdog start
         self._stale_watchdog_task = asyncio.create_task(self._run_stale_watchdog())
 
     def stop_stale_watchdog(self) -> None:
