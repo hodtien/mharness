@@ -4167,17 +4167,19 @@ class RepoAutopilotStore:
             "specific enough to implement without guessing.\n\n"
             "Required output format (use these exact headings):\n"
             "1. ROOT CAUSE\n"
-            "2. FILES TO CHANGE\n"
-            "3. EXACT CHANGES\n"
-            "4. ACCEPTANCE CHECKS\n"
-            "5. DO NOT CHANGE\n\n"
+            "2. CRITICAL/HIGH FINDING MAP\n"
+            "3. FILES TO CHANGE\n"
+            "4. EXACT CHANGES\n"
+            "5. ACCEPTANCE CHECKS\n"
+            "6. DO NOT CHANGE\n\n"
             "Requirements for each section:\n"
             "- ROOT CAUSE: one short paragraph tying the reviewer findings to the likely defect.\n"
+            "- CRITICAL/HIGH FINDING MAP: enumerate every CRITICAL/HIGH reviewer finding and map it to one concrete code change, or state why it cannot be fixed automatically.\n"
             "- FILES TO CHANGE: list concrete repository paths and, when possible, functions/components.\n"
             "- EXACT CHANGES: ordered implementation steps describing the minimal patch, expected data flow, and what must be persisted or wired end-to-end. Name required API calls/state updates instead of vague advice.\n"
             "- ACCEPTANCE CHECKS: specific commands, assertions, or reviewer-visible behaviors that prove the fix is complete. Include any missing behavior that must exist to satisfy the requirement, not just compile.\n"
             "- DO NOT CHANGE: unrelated files, existing valid behavior, and shortcuts to avoid. Call out forbidden shortcuts like hardcoded placeholders, copy-only changes, or partial UI without persistence when relevant.\n\n"
-            "Do not restate the reviewer feedback without turning it into an implementation brief. Prefer file_path:line_number references when the reviewer already identified them.\n\n"
+            "Do not restate the reviewer feedback without turning it into an implementation brief. For CRITICAL/HIGH findings, missing a concrete mapping is itself a failed repair plan. Prefer file_path:line_number references when the reviewer already identified them.\n\n"
             f"Diff vs `{base_branch}`{' (truncated)' if truncated else ''}:\n"
             f"```\n{diff_text or '(empty diff)'}\n```\n"
         )
@@ -4288,11 +4290,11 @@ class RepoAutopilotStore:
                     [
                         "",
                         f"[Previous attempt #{attempt_count - 1} failed code review. "
-                        "Code reviewer identified these issues that MUST be fixed:]",
+                        "Code reviewer identified these issues that MUST be fixed before any other work:]",
                         "",
                         reviewer_feedback,
                         "",
-                        "[End of reviewer constraints — address ALL of the above in your implementation.]",
+                        "[End of reviewer constraints — address ALL CRITICAL/HIGH findings explicitly, mapping each to a concrete code change before continuing.]",
                     ]
                 )
             architect_plan = self._extract_repair_architect_plan(card.id, attempt_count - 1)
@@ -4304,7 +4306,7 @@ class RepoAutopilotStore:
                         "",
                         architect_plan,
                         "",
-                        "[End of repair architect guidance — use it to focus the patch.]",
+                        "[End of repair architect guidance — follow the CRITICAL/HIGH finding map as acceptance criteria for this retry.]",
                     ]
                 )
 
@@ -4314,6 +4316,7 @@ class RepoAutopilotStore:
                 "Repair instructions:",
                 "- Make the smallest patch that fixes the reported failure.",
                 "- Treat reviewer findings and architect guidance as acceptance criteria, not optional suggestions.",
+                "- For every CRITICAL/HIGH finding, make a concrete code change that addresses it or stop and explain why it cannot be fixed safely.",
                 "- Implement the missing behavior end-to-end; do not stop at copy, placeholder constants, or UI-only changes when persistence/wiring is required.",
                 "- Do not restart the task from scratch if the existing branch already contains valid progress.",
                 "- Do not refactor unrelated code or broaden scope beyond the reported failure.",
