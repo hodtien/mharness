@@ -802,6 +802,8 @@ class RepoAutopilotStore:
                 "last_failure_stage",
                 "last_failure_summary",
                 "verification_failed",
+                "repeated_failure_key",
+                "repeated_failure_count",
                 "resume_available",
                 "resume_phase",
             ):

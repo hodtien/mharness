@@ -8083,6 +8083,8 @@ def test_manual_reset_failed_card_preserves_failure_context_for_repair_retry(
             "last_failure_summary": "tests failed",
             "verification_failed": True,
             "worker_id": "pid-1-deadbeef",
+            "repeated_failure_key": "local_verification_failed:tests failed",
+            "repeated_failure_count": 3,
         },
     )
 
@@ -8095,6 +8097,8 @@ def test_manual_reset_failed_card_preserves_failure_context_for_repair_retry(
     assert reset.metadata["last_failure_summary"] == "tests failed"
     assert "verification_failed" not in reset.metadata
     assert "worker_id" not in reset.metadata
+    assert "repeated_failure_key" not in reset.metadata
+    assert "repeated_failure_count" not in reset.metadata
 
 
 def test_manual_retry_failed_card_injects_repair_prompt_context(tmp_path: Path, monkeypatch) -> None:
