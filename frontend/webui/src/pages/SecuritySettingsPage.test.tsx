@@ -112,4 +112,33 @@ describe("SecuritySettingsPage", () => {
     const pill = screen.getByText("Setup required").closest("span");
     expect(pill?.className).toContain("status-pill-danger");
   });
+
+  it("shows config directory with copy button when appState is set", () => {
+    useSession.setState({
+      appState: { config_dir: "/Users/test/.harness" },
+    });
+    render(
+      <MemoryRouter>
+        <SecuritySettingsPage />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/config directory/i)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /copy config directory/i }),
+    ).toBeTruthy();
+  });
+
+  it("shows fallback ~/.harness/ when config_dir is not set", () => {
+    useSession.setState({
+      appState: {} as never,
+    });
+    render(
+      <MemoryRouter>
+        <SecuritySettingsPage />
+      </MemoryRouter>,
+    );
+    // The PathDisplay should still render with the fallback
+    expect(screen.getByText(/config directory/i)).toBeTruthy();
+    expect(screen.getByText("~/.harness/")).toBeTruthy();
+  });
 });

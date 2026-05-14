@@ -41,6 +41,7 @@ export interface AppStatePayload {
   bridge_sessions?: number;
   output_style?: string;
   keybindings?: Record<string, string>;
+  config_dir?: string;
 }
 
 export type BackendEventType =
