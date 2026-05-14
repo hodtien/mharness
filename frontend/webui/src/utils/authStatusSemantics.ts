@@ -43,6 +43,9 @@ export function getAuthSemanticState(authStatus: string | undefined | null): Aut
       if (!authStatus || authStatus === "unknown") {
         return { label: "Unknown", tone: "neutral" };
       }
+      if (authStatus.startsWith("configured")) {
+        return { label: "Ready", tone: "neutral" };
+      }
       if (authStatus.startsWith("missing")) {
         return { label: "Not configured", tone: "danger" };
       }

@@ -15,6 +15,12 @@ describe("authStatusSemantics", () => {
       expect(result.tone).toBe("neutral");
     });
 
+    it('maps "configured (...)" → Ready / neutral', () => {
+      const result = getAuthSemanticState("configured (enterprise: claude)");
+      expect(result.label).toBe("Ready");
+      expect(result.tone).toBe("neutral");
+    });
+
     it('maps "degraded" → Needs attention / warning', () => {
       const result = getAuthSemanticState("degraded");
       expect(result.label).toBe("Needs attention");

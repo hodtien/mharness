@@ -1,4 +1,5 @@
 import { useSession } from "../store/session";
+import { getAuthSemanticState } from "../utils/authStatusSemantics";
 
 interface Action {
   label: string;
@@ -29,6 +30,7 @@ export default function ChatEmptyState({ onSend }: { onSend: (text: string) => v
 
   const mcpConnected = appState?.mcp_connected ?? 0;
   const mcpFailed = appState?.mcp_failed ?? 0;
+  const authState = getAuthSemanticState(appState?.auth_status);
   const mcpStatus = mcpFailed > 0 ? `${mcpConnected} up, ${mcpFailed} down` : `${mcpConnected} connected`;
 
   return (
@@ -38,7 +40,7 @@ export default function ChatEmptyState({ onSend }: { onSend: (text: string) => v
         <StatusItem label="project" value={appState?.active_profile || appState?.provider || "—"} />
         <StatusItem label="model" value={appState?.model || "—"} />
         <StatusItem label="mode" value={appState?.permission_mode || "default"} />
-        <StatusItem label="auth" value={appState?.auth_status || "—"} />
+        <StatusItem label="auth" value={authState.label} />
         <StatusItem label="mcp" value={mcpStatus} />
       </div>
 
