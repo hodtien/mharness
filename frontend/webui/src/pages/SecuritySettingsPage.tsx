@@ -4,6 +4,7 @@ import ChangePasswordModal from "../components/ChangePasswordModal";
 import { api } from "../api/client";
 import { toast } from "../store/toast";
 import { useSession } from "../store/session";
+import { getAuthSemanticState, statusPillClass } from "../utils/authStatusSemantics";
 
 export default function SecuritySettingsPage() {
   const appState = useSession((s) => s.appState);
@@ -21,6 +22,8 @@ export default function SecuritySettingsPage() {
     }
   };
 
+  const authSemantic = getAuthSemanticState(appState?.auth_status);
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <PageHeader
@@ -36,14 +39,8 @@ export default function SecuritySettingsPage() {
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-[var(--text-dim)]">Auth status</span>
-                <span className={`status-pill ${
-                  appState?.auth_status === "ok"
-                    ? "status-pill-success"
-                    : appState?.auth_status === "degraded"
-                      ? "status-pill-danger"
-                      : ""
-                }`}>
-                  {appState?.auth_status ?? "unknown"}
+                <span className={statusPillClass(authSemantic.tone)}>
+                  {authSemantic.label}
                 </span>
               </div>
               <div className="flex items-center justify-between">

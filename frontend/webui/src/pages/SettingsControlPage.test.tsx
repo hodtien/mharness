@@ -239,4 +239,40 @@ describe("SettingsControlPage (Control Center)", () => {
     expect(screen.getByText("gpt-4o")).toBeTruthy();
     expect(screen.getByText("openai")).toBeTruthy();
   });
+
+  it("shows semantic auth label 'Active' for ok status", () => {
+    useSession.setState({
+      appState: {
+        model: "gpt-4o",
+        provider: "openai",
+        auth_status: "ok",
+      },
+    });
+    renderControlPage();
+    expect(screen.getByText("Active")).toBeTruthy();
+  });
+
+  it("shows semantic auth label 'Ready' for configured status", () => {
+    useSession.setState({
+      appState: {
+        model: "gpt-4o",
+        provider: "openai",
+        auth_status: "configured",
+      },
+    });
+    renderControlPage();
+    expect(screen.getByText("Ready")).toBeTruthy();
+  });
+
+  it("shows semantic auth label 'Not configured' for missing status", () => {
+    useSession.setState({
+      appState: {
+        model: "gpt-4o",
+        provider: "openai",
+        auth_status: "missing",
+      },
+    });
+    renderControlPage();
+    expect(screen.getByText("Not configured")).toBeTruthy();
+  });
 });

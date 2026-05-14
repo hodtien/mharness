@@ -5,6 +5,8 @@ import { useSession } from "../store/session";
 import type { AppStatePayload } from "../api/types";
 import PageHeader from "../components/PageHeader";
 
+import { getAuthSemanticState } from "../utils/authStatusSemantics";
+
 // ─── Icon glyphs ─────────────────────────────────────────────────────────────
 
 const ICON: Record<string, string> = {
@@ -130,6 +132,7 @@ function OperationalStatus({
   tasksFailed,
 }: OperationalStatusProps) {
   const schedulerRunning = cronConfig?.scheduler_running ?? false;
+  const authSemantic = getAuthSemanticState(appState?.auth_status);
 
   return (
     <div
@@ -144,8 +147,8 @@ function OperationalStatus({
         <StatusRow label="Provider" value={appState?.provider ?? "—"} />
         <StatusRow
           label="Auth"
-          value={appState?.auth_status ?? "—"}
-          tone={appState?.auth_status === "ok" ? "success" : "danger"}
+          value={authSemantic.label}
+          tone={authSemantic.tone}
         />
         <StatusRow
           label="Jobs running"
