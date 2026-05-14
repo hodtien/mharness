@@ -1082,6 +1082,98 @@ def test_pipeline_retry_now_accepts_failed_card_and_spawns_task(tmp_path, monkey
     assert card["metadata"]["retry_by"] == "user"
 
 
+def test_run_next_after_retry_now_does_not_dispatch_following_card(tmp_path, monkeypatch) -> None:
+    registry = {
+        "version": 1,
+        "updated_at": 1000.0,
+        "cards": [
+            {
+                "id": "ap-p18-8",
+                "title": "Retried task",
+                "body": "",
+                "status": "failed",
+                "source_kind": "manual_idea",
+                "source_ref": "",
+                "fingerprint": "manual_idea:p18-8",
+                "score": 120,
+                "score_reasons": [],
+                "labels": [],
+                "metadata": {},
+                "created_at": 600.0,
+                "updated_at": 700.0,
+            },
+            {
+                "id": "ap-p18-6",
+                "title": "Next task",
+                "body": "",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "source_ref": "",
+                "fingerprint": "manual_idea:p18-6",
+                "score": 100,
+                "score_reasons": [],
+                "labels": [],
+                "metadata": {},
+                "created_at": 600.0,
+                "updated_at": 700.0,
+            },
+        ],
+    }
+    reg_dir = tmp_path / ".openharness" / "autopilot"
+    reg_dir.mkdir(parents=True)
+    (reg_dir / "registry.json").write_text(json.dumps(registry))
+    (reg_dir / "autopilot_policy.yaml").write_text(
+        "execution:\n  max_parallel_runs: 2\n",
+        encoding="utf-8",
+    )
+
+    manager = get_task_manager()
+    created_tasks: list[dict[str, object]] = []
+
+    async def fake_create_shell_task(*, command, description, cwd, task_type):
+        created_tasks.append(
+            {
+                "command": command,
+                "description": description,
+                "cwd": cwd,
+                "task_type": task_type,
+            }
+        )
+        return SimpleNamespace(id=f"task-{len(created_tasks)}")
+
+    def fake_list_tasks(*, status=None):
+        if not created_tasks:
+            return []
+        task = SimpleNamespace(
+            status="running",
+            cwd=str(tmp_path.resolve()),
+            command=created_tasks[0]["command"],
+        )
+        return [task] if status in (None, "running") else []
+
+    monkeypatch.setattr(manager, "create_shell_task", fake_create_shell_task)
+    monkeypatch.setattr(manager, "list_tasks", fake_list_tasks)
+
+    client = _client(tmp_path)
+    retry_response = client.post(
+        "/api/pipeline/cards/ap-p18-8/retry-now",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    run_next_response = client.post(
+        "/api/pipeline/run-next",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert retry_response.status_code == 202
+    assert run_next_response.status_code == 409
+    assert retry_response.json()["card_id"] == "ap-p18-8"
+    assert run_next_response.json()["detail"]["error"] == "card_already_running"
+    assert run_next_response.json()["detail"]["card_id"] == "ap-p18-8"
+    assert len(created_tasks) == 1
+    assert "--card-id ap-p18-8" in created_tasks[0]["command"]
+
+
+
 def test_pipeline_retry_now_accepts_paused_card(tmp_path, monkeypatch) -> None:
     registry = {
         "version": 1,

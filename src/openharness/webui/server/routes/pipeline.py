@@ -325,6 +325,7 @@ def action_pipeline_card(
 _ACTIVE_STATUSES: frozenset[str] = frozenset(
     {"preparing", "running", "verifying", "waiting_ci", "repairing", "pr_open"}
 )
+_RUN_NEXT_LOCK = asyncio.Lock()
 
 
 def _run_next_command_card_id(command: str) -> tuple[bool, str | None]:
@@ -346,13 +347,14 @@ def _run_next_command_card_id(command: str) -> tuple[bool, str | None]:
     return True, None
 
 
-def _running_autopilot_task_reservations(
-    manager: Any, cwd: Path, active_card_ids: set[str]
-) -> int:
+def _running_autopilot_task_card_ids(manager: Any, cwd: Path) -> tuple[set[str], int]:
     cwd_path = cwd.resolve()
-    scoped_reservations = 0
+    card_ids: set[str] = set()
     unscoped_runs = 0
-    for task in manager.list_tasks(status="running"):
+    active_task_statuses = {"running", "pending"}
+    for task in manager.list_tasks():
+        if getattr(task, "status", None) not in active_task_statuses:
+            continue
         task_cwd = getattr(task, "cwd", None)
         command = getattr(task, "command", None)
         if not isinstance(task_cwd, str) or not isinstance(command, str):
@@ -366,11 +368,17 @@ def _running_autopilot_task_reservations(
         if not is_run_next:
             continue
         if card_id:
-            if card_id not in active_card_ids:
-                scoped_reservations += 1
+            card_ids.add(card_id)
         else:
             unscoped_runs += 1
-    return scoped_reservations + unscoped_runs
+    return card_ids, unscoped_runs
+
+
+def _running_autopilot_task_reservations(
+    manager: Any, cwd: Path, active_card_ids: set[str]
+) -> int:
+    card_ids, unscoped_runs = _running_autopilot_task_card_ids(manager, cwd)
+    return len(card_ids - active_card_ids) + unscoped_runs
 
 
 def _load_autopilot_policy(cwd: Path) -> dict[str, Any]:
@@ -532,56 +540,69 @@ async def run_next_card(state: WebUIState = Depends(get_state)) -> dict:
     Otherwise returns HTTP 202 with the background ``task_id`` so the caller
     can track progress via the Tasks API.
     """
-    registry_path = state.cwd / ".openharness" / "autopilot" / "registry.json"
-    try:
-        payload = json.loads(registry_path.read_text(encoding="utf-8")) if registry_path.is_file() else {}
-        cards = RepoAutopilotRegistry.model_validate(payload).cards if payload else []
-    except (json.JSONDecodeError, OSError, ValidationError):
-        cards = []
-    now = time.time()
-    queued = [
-        c
-        for c in cards
-        if c.status in {"queued", "accepted"}
-        or (c.status == "pending" and c.metadata.get("next_retry_at", 0) <= now)
-    ]
-    if not queued:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": "no_queued_cards",
-                "message": "No queued autopilot cards.",
-            },
+    async with _RUN_NEXT_LOCK:
+        registry_path = state.cwd / ".openharness" / "autopilot" / "registry.json"
+        try:
+            payload = json.loads(registry_path.read_text(encoding="utf-8")) if registry_path.is_file() else {}
+            cards = RepoAutopilotRegistry.model_validate(payload).cards if payload else []
+        except (json.JSONDecodeError, OSError, ValidationError):
+            cards = []
+        now = time.time()
+        queued = [
+            c
+            for c in cards
+            if c.status in {"queued", "accepted"}
+            or (c.status == "pending" and c.metadata.get("next_retry_at", 0) <= now)
+        ]
+        if not queued:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "no_queued_cards",
+                    "message": "No queued autopilot cards.",
+                },
+            )
+        policies = _load_autopilot_policy(state.cwd)
+        manager = get_task_manager()
+        active_card_ids = {c.id for c in cards if c.status in _ACTIVE_STATUSES}
+        target_card = max(queued, key=lambda c: c.score)
+        running_task_card_ids, unscoped_task_count = _running_autopilot_task_card_ids(manager, state.cwd)
+        if target_card.id in running_task_card_ids:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "card_already_running",
+                    "card_id": target_card.id,
+                    "message": "The next autopilot card already has a running task.",
+                },
+            )
+        active_count = len(active_card_ids | running_task_card_ids) + unscoped_task_count
+        execution = policies.get("execution")
+        if not isinstance(execution, dict):
+            execution = dict(policies.get("autopilot", {}).get("execution", {}))
+        max_parallel = int(
+            execution.get("max_parallel_runs", _DEFAULT_AUTOPILOT_POLICY["execution"]["max_parallel_runs"])
         )
-    policies = _load_autopilot_policy(state.cwd)
-    manager = get_task_manager()
-    active_card_ids = {c.id for c in cards if c.status in _ACTIVE_STATUSES}
-    active_count = len(active_card_ids) + _running_autopilot_task_reservations(
-        manager, state.cwd, active_card_ids
-    )
-    execution = policies.get("execution")
-    if not isinstance(execution, dict):
-        execution = dict(policies.get("autopilot", {}).get("execution", {}))
-    max_parallel = int(
-        execution.get("max_parallel_runs", _DEFAULT_AUTOPILOT_POLICY["execution"]["max_parallel_runs"])
-    )
-    if active_count >= max_parallel:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": "capacity_reached",
-                "message": f"Maximum parallel runs ({max_parallel}) reached. {active_count} tasks currently active.",
-            },
+        if active_count >= max_parallel:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "capacity_reached",
+                    "message": f"Maximum parallel runs ({max_parallel}) reached. {active_count} tasks currently active.",
+                },
+            )
+        oh_executable = str(Path(sys.executable).with_name("oh"))
+        command = (
+            f"{shlex.quote(oh_executable)} autopilot run-next "
+            f"--cwd {shlex.quote(str(state.cwd))} --card-id {shlex.quote(target_card.id)}"
         )
-    oh_executable = str(Path(sys.executable).with_name("oh"))
-    command = f"{shlex.quote(oh_executable)} autopilot run-next --cwd {shlex.quote(str(state.cwd))}"
-    task = await manager.create_shell_task(
-        command=command,
-        description="autopilot run-next",
-        cwd=state.cwd,
-        task_type="local_bash",
-    )
-    return {"task_id": task.id, "status": "accepted"}
+        task = await manager.create_shell_task(
+            command=command,
+            description=f"autopilot run-next {target_card.id}",
+            cwd=state.cwd,
+            task_type="local_bash",
+        )
+        return {"task_id": task.id, "card_id": target_card.id, "status": "accepted"}
 
 
 # ---------------------------------------------------------------------------
