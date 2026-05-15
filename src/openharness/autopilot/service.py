@@ -69,6 +69,11 @@ from openharness.utils.fs import atomic_write_text
 
 log = logging.getLogger(__name__)
 
+
+class RepairArchitectFailedError(RuntimeError):
+    pass
+
+
 _SOURCE_BASE_SCORES: dict[RepoTaskSource, int] = {
     "ohmo_request": 100,
     "manual_idea": 80,
@@ -2033,16 +2038,43 @@ class RepoAutopilotStore:
                             and repeat_meta["repeated_failure_count"]
                             < self._max_repeated_failure_attempts(policies)
                         ):
-                            architect_plan_path = await self._maybe_run_repair_architect_plan(
-                                card,
-                                cwd=working_cwd,
-                                policies=policies,
-                                base_branch=base_branch,
-                                failed_attempt=attempt_count,
-                                failure_stage="local_verification_failed",
-                                failure_summary=summary,
-                                stream=stream_writer,
-                            )
+                            try:
+                                architect_plan_path = await self._maybe_run_repair_architect_plan(
+                                    card,
+                                    cwd=working_cwd,
+                                    policies=policies,
+                                    base_branch=base_branch,
+                                    failed_attempt=attempt_count,
+                                    failure_stage="local_verification_failed",
+                                    failure_summary=summary,
+                                    stream=stream_writer,
+                                )
+                            except RepairArchitectFailedError as exc:
+                                summary = str(exc)
+                                self.update_status(
+                                    card.id,
+                                    status="failed",
+                                    note=summary,
+                                    metadata_updates={
+                                        **metadata_updates,
+                                        "last_failure_stage": "repair_architect_failed",
+                                        "last_failure_summary": summary,
+                                    },
+                                )
+                                if issue_number is not None:
+                                    self._comment_on_issue(
+                                        issue_number, self._comment_terminal_failure(summary)
+                                    )
+                                return RepoRunResult(
+                                    card_id=card.id,
+                                    status="failed",
+                                    assistant_summary=assistant_summary,
+                                    run_report_path=str(current_run_report),
+                                    verification_report_path=str(current_verification_report),
+                                    verification_steps=verification_steps,
+                                    attempt_count=attempt_count,
+                                    worktree_path=str(working_cwd),
+                                )
                             if architect_plan_path is not None:
                                 architect_repair_path = architect_plan_path
                                 metadata_updates.update(
@@ -2408,16 +2440,61 @@ class RepoAutopilotStore:
                                 and repeat_meta["repeated_failure_count"]
                                 < self._max_repeated_failure_attempts(policies)
                             ):
-                                architect_plan_path = await self._maybe_run_repair_architect_plan(
-                                    card,
-                                    cwd=working_cwd,
-                                    policies=policies,
-                                    base_branch=base_branch,
-                                    failed_attempt=attempt_count,
-                                    failure_stage="remote_review_failed",
-                                    failure_summary=summary,
-                                    stream=stream_writer,
-                                )
+                                try:
+                                    architect_plan_path = await self._maybe_run_repair_architect_plan(
+                                        card,
+                                        cwd=working_cwd,
+                                        policies=policies,
+                                        base_branch=base_branch,
+                                        failed_attempt=attempt_count,
+                                        failure_stage="remote_review_failed",
+                                        failure_summary=summary,
+                                        stream=stream_writer,
+                                    )
+                                except RepairArchitectFailedError as exc:
+                                    summary = str(exc)
+                                    self.update_status(
+                                        card.id,
+                                        status="completed",
+                                        note=f"PR #{linked_pr_number} requires human gate after repair architect failure",
+                                        metadata_updates={
+                                            **remote_review_meta,
+                                            "human_gate_pending": True,
+                                            "last_failure_stage": "repair_architect_failed",
+                                            "last_failure_summary": summary,
+                                        },
+                                    )
+                                    self.append_journal(
+                                        kind="human_gate_pending",
+                                        summary=(
+                                            "Repair architect failed; human gate required "
+                                            f"for PR #{linked_pr_number}"
+                                        ),
+                                        task_id=card.id,
+                                        metadata={
+                                            "pr_number": linked_pr_number,
+                                            "remote_review_status": remote_review_step.status,
+                                        },
+                                    )
+                                    self._comment_on_pr(
+                                        linked_pr_number, self._comment_terminal_failure(summary)
+                                    )
+                                    if issue_number is not None:
+                                        self._comment_on_issue(
+                                            issue_number, self._comment_terminal_failure(summary)
+                                        )
+                                    return RepoRunResult(
+                                        card_id=card.id,
+                                        status="completed",
+                                        assistant_summary=assistant_summary,
+                                        run_report_path=str(current_run_report),
+                                        verification_report_path=str(current_verification_report),
+                                        verification_steps=verification_steps,
+                                        attempt_count=attempt_count,
+                                        worktree_path=str(working_cwd),
+                                        pr_number=linked_pr_number,
+                                        pr_url=pr_url,
+                                    )
                                 if architect_plan_path is not None:
                                     architect_repair_path = architect_plan_path
                                     remote_review_meta.update(
@@ -4158,12 +4235,19 @@ class RepoAutopilotStore:
         stream: RunStreamWriter | None = None,
     ) -> Path | None:
         repair_cfg = (policies.get("autopilot", {}).get("repair", {}) or {})
-        if not repair_cfg.get("architect_enabled", True):
-            return None
-
         reviewer_feedback = self._extract_reviewer_feedback(card.id, failed_attempt=failed_attempt)
         severity = _parse_review_severity(reviewer_feedback)
-        if severity == "none" or severity not in self._repair_architect_severities(policies):
+        if severity == "none":
+            return None
+        if severity in {"critical", "high"} and not repair_cfg.get("architect_enabled", True):
+            raise RepairArchitectFailedError(
+                "repair architect is required for CRITICAL/HIGH reviewer findings but is disabled"
+            )
+        if severity not in self._repair_architect_severities(policies):
+            if severity in {"critical", "high"}:
+                raise RepairArchitectFailedError(
+                    "repair architect is required for CRITICAL/HIGH reviewer findings but is filtered out"
+                )
             return None
 
         max_chars = int(repair_cfg.get("architect_max_diff_chars", 80000) or 80000)
@@ -4247,7 +4331,7 @@ class RepoAutopilotStore:
                     "model": model,
                 },
             )
-            return None
+            raise RepairArchitectFailedError(f"{command} failed: {exc}") from exc
 
         if stream is not None:
             stream.emit(

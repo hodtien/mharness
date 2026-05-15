@@ -1757,6 +1757,358 @@ def test_autopilot_run_card_uses_architect_plan_for_reviewer_repair(
     assert "Architect applied direct repair" in repair_text
 
 
+def test_autopilot_run_card_stops_when_required_repair_architect_disabled(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Architect disabled",
+        body="critical reviewer feedback must not fall back to worker",
+    )
+    policies = store.load_policies()
+    policies["verification"]["code_review"]["enabled"] = False
+    policies["autopilot"]["repair"]["architect_enabled"] = False
+    agent_calls: list[str | None] = []
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None, agent_id=None):
+        return SimpleNamespace(path=worktree)
+
+    async def fake_remove_worktree(self, slug):
+        return True
+
+    async def fake_run_agent_prompt(self, *args, phase=None, **kwargs):
+        agent_calls.append(phase)
+        return "worker attempt"
+
+    def fake_run_verification_steps(self, policies, *, cwd=None):
+        return [
+            RepoVerificationStep(
+                command="agent:code-reviewer (diff vs main)",
+                returncode=1,
+                status="failed",
+                stdout=(
+                    "Severity: HIGH\n"
+                    "Findings:\n"
+                    "  - src/openharness/tasks/manager.py:92 correctness stale job not terminalized\n"
+                    "Summary: Requires architect repair."
+                ),
+                stderr="severity=high",
+            )
+        ]
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.load_policies",
+        lambda self: policies,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt",
+        fake_run_agent_prompt,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        fake_run_verification_steps,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_issue",
+        lambda self, issue_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    updated = store.get_card(card.id)
+
+    assert result.status == "failed"
+    assert agent_calls == ["implement"]
+    assert updated is not None
+    assert updated.metadata["last_failure_stage"] == "repair_architect_failed"
+    assert "is disabled" in updated.metadata["last_failure_summary"]
+
+
+
+def test_autopilot_run_card_stops_when_repair_architect_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Architect repair fails",
+        body="reviewer feedback should not fall back to worker when architect fails",
+    )
+    policies = store.load_policies()
+    policies["verification"]["code_review"]["enabled"] = False
+    agent_calls: list[str | None] = []
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None, agent_id=None):
+        return SimpleNamespace(path=worktree)
+
+    async def fake_remove_worktree(self, slug):
+        return True
+
+    async def fake_run_agent_prompt(
+        self,
+        prompt: str,
+        *,
+        model,
+        max_turns,
+        permission_mode,
+        cwd=None,
+        phase=None,
+        **kwargs,
+    ):
+        agent_calls.append(phase)
+        if phase == "repair_architect":
+            raise RuntimeError("Exceeded maximum turn limit (4)")
+        return f"worker attempt {len([call for call in agent_calls if call == 'implement'])}"
+
+    def fake_run_verification_steps(self, policies, *, cwd=None):
+        return [
+            RepoVerificationStep(
+                command="agent:code-reviewer (diff vs main)",
+                returncode=1,
+                status="failed",
+                stdout=(
+                    "Severity: HIGH\n"
+                    "Findings:\n"
+                    "  - src/openharness/tasks/manager.py:92 correctness stale job not terminalized\n"
+                    "Summary: Requires architect repair."
+                ),
+                stderr="severity=high",
+            )
+        ]
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.load_policies",
+        lambda self: policies,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt",
+        fake_run_agent_prompt,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        fake_run_verification_steps,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_issue",
+        lambda self, issue_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    updated = store.get_card(card.id)
+
+    assert result.status == "failed"
+    assert agent_calls == ["implement", "repair_architect"]
+    assert updated is not None
+    assert updated.status == "failed"
+    assert updated.metadata["last_failure_stage"] == "repair_architect_failed"
+    assert "Exceeded maximum turn limit" in updated.metadata["last_failure_summary"]
+
+
+def test_autopilot_run_card_remote_review_architect_failure_human_gates(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Remote architect repair fails",
+        body="remote reviewer feedback should not fall back to worker when architect fails",
+    )
+    policies = store.load_policies()
+    policies["verification"]["code_review"]["enabled"] = False
+    policies["autopilot"]["github"]["auto_merge"]["mode"] = "always"
+    agent_calls: list[str | None] = []
+    pr_comments: list[tuple[int, str]] = []
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None, agent_id=None):
+        return SimpleNamespace(path=worktree)
+
+    async def fake_remove_worktree(self, slug):
+        return True
+
+    async def fake_run_agent_prompt(
+        self,
+        prompt: str,
+        *,
+        model,
+        max_turns,
+        permission_mode,
+        cwd=None,
+        phase=None,
+        **kwargs,
+    ):
+        agent_calls.append(phase)
+        if phase == "repair_architect":
+            raise RuntimeError("Exceeded maximum turn limit (4)")
+        return f"worker attempt {len([call for call in agent_calls if call == 'implement'])}"
+
+    def fake_run_verification_steps(self, policies, *, cwd=None):
+        return [RepoVerificationStep(command="uv run pytest -q", returncode=0, status="success")]
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        return (
+            "success",
+            "All reported remote checks passed.",
+            {"url": "https://example/pr/30", "labels": [], "isDraft": False},
+            [],
+        )
+
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=1,
+            status="failed",
+            stdout=(
+                "Severity: CRITICAL\n"
+                "Findings:\n"
+                "  - src/openharness/tasks/manager.py:92 correctness stale job not terminalized\n"
+                "Summary: Requires architect repair."
+            ),
+            stderr="severity=critical",
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.load_policies",
+        lambda self: policies,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt",
+        fake_run_agent_prompt,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        fake_run_verification_steps,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_commit_all",
+        lambda self, cwd, message: True,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
+            True,
+            "branch_push_done",
+            f"Pushed {head_branch}.",
+        ),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
+        lambda self, card, *, head_branch, base_branch, run_report_path, verification_report_path: {
+            "number": 30,
+            "url": "https://example/pr/30",
+        },
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: pr_comments.append((pr_number, comment)),
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    updated = store.get_card(card.id)
+
+    assert result.status == "completed"
+    assert result.pr_number == 30
+    assert agent_calls == ["implement", "repair_architect"]
+    assert updated is not None
+    assert updated.status == "completed"
+    assert updated.metadata["human_gate_pending"] is True
+    assert updated.metadata["linked_pr_number"] == 30
+    assert updated.metadata["linked_pr_url"] == "https://example/pr/30"
+    assert updated.metadata["last_failure_stage"] == "repair_architect_failed"
+    assert "Exceeded maximum turn limit" in updated.metadata["last_failure_summary"]
+    assert pr_comments and pr_comments[-1][0] == 30
+
+
+
 def test_autopilot_run_card_resumes_pending_architect_repair_without_worker(
     tmp_path: Path, monkeypatch
 ) -> None:
