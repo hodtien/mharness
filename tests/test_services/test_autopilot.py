@@ -1845,6 +1845,15 @@ def test_autopilot_run_card_stops_when_required_repair_architect_disabled(
     assert updated is not None
     assert updated.metadata["last_failure_stage"] == "repair_architect_failed"
     assert "is disabled" in updated.metadata["last_failure_summary"]
+    assert updated.metadata["repair_architect_underlying_failure_stage"] == "local_verification_failed"
+    assert "agent:code-reviewer" in updated.metadata["repair_architect_underlying_failure_summary"]
+
+    reset = store.update_status(card.id, status="queued")
+
+    assert reset.metadata["last_failure_stage"] == "local_verification_failed"
+    assert "agent:code-reviewer" in reset.metadata["last_failure_summary"]
+    assert "repair_architect_underlying_failure_stage" not in reset.metadata
+    assert "repair_architect_underlying_failure_summary" not in reset.metadata
 
 
 
@@ -1948,6 +1957,23 @@ def test_autopilot_run_card_stops_when_repair_architect_fails(
     assert updated.status == "failed"
     assert updated.metadata["last_failure_stage"] == "repair_architect_failed"
     assert "Exceeded maximum turn limit" in updated.metadata["last_failure_summary"]
+    assert updated.metadata["repair_architect_underlying_failure_stage"] == "local_verification_failed"
+    assert "agent:code-reviewer" in updated.metadata["repair_architect_underlying_failure_summary"]
+
+    reset = store.update_status(card.id, status="queued")
+
+    assert reset.metadata["last_failure_stage"] == "local_verification_failed"
+    assert "agent:code-reviewer" in reset.metadata["last_failure_summary"]
+    assert reset.metadata["repair_architect_retry_requested"] is True
+    assert "repair_architect_failure_summary" not in reset.metadata
+    assert "repair_architect_underlying_failure_stage" not in reset.metadata
+    assert "repair_architect_underlying_failure_summary" not in reset.metadata
+
+    agent_calls.clear()
+    rerun = asyncio.run(store.run_card(card.id))
+
+    assert rerun.status == "failed"
+    assert agent_calls == ["repair_architect"]
 
 
 def test_autopilot_run_card_remote_review_architect_failure_human_gates(
@@ -2105,6 +2131,18 @@ def test_autopilot_run_card_remote_review_architect_failure_human_gates(
     assert updated.metadata["linked_pr_url"] == "https://example/pr/30"
     assert updated.metadata["last_failure_stage"] == "repair_architect_failed"
     assert "Exceeded maximum turn limit" in updated.metadata["last_failure_summary"]
+    assert updated.metadata["repair_architect_underlying_failure_stage"] == "remote_review_failed"
+    assert "severity=critical" in updated.metadata["repair_architect_underlying_failure_summary"]
+
+    reset = store.update_status(card.id, status="queued")
+
+    assert reset.metadata["last_failure_stage"] == "remote_review_failed"
+    assert "severity=critical" in reset.metadata["last_failure_summary"]
+    assert reset.metadata["repair_architect_retry_requested"] is True
+    assert "human_gate_pending" not in reset.metadata
+    assert "repair_architect_failure_summary" not in reset.metadata
+    assert "repair_architect_underlying_failure_stage" not in reset.metadata
+    assert "repair_architect_underlying_failure_summary" not in reset.metadata
     assert pr_comments and pr_comments[-1][0] == 30
 
 

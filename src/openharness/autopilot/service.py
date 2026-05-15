@@ -71,7 +71,10 @@ log = logging.getLogger(__name__)
 
 
 class RepairArchitectFailedError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, failure_stage: str, failure_summary: str) -> None:
+        super().__init__(message)
+        self.failure_stage = failure_stage
+        self.failure_summary = failure_summary
 
 
 _SOURCE_BASE_SCORES: dict[RepoTaskSource, int] = {
@@ -795,10 +798,28 @@ class RepoAutopilotStore:
         previous_status = card.status
         card.status = status
         card.updated_at = time.time()
-        if status == "queued" and previous_status in {"failed", "rejected", "killed", "pending"}:
+        if status == "queued" and previous_status in {
+            "failed",
+            "rejected",
+            "killed",
+            "pending",
+            "completed",
+        }:
             preserved_failure_stage = card.metadata.get("last_failure_stage")
             preserved_failure_summary = card.metadata.get("last_failure_summary")
             preserved_attempt_count = _metadata_int(card.metadata.get("attempt_count"))
+            restore_repair_architect_retry = False
+            if preserved_failure_stage == "repair_architect_failed":
+                preserved_failure_stage = card.metadata.get(
+                    "repair_architect_underlying_failure_stage"
+                ) or preserved_failure_stage
+                preserved_failure_summary = card.metadata.get(
+                    "repair_architect_underlying_failure_summary"
+                ) or preserved_failure_summary
+                restore_repair_architect_retry = preserved_failure_stage in {
+                    "local_verification_failed",
+                    "remote_review_failed",
+                }
             for key in (
                 "worker_id",
                 "pending_reason",
@@ -811,17 +832,26 @@ class RepoAutopilotStore:
                 "repeated_failure_count",
                 "resume_available",
                 "resume_phase",
+                "repair_architect_failure_summary",
+                "repair_architect_underlying_failure_stage",
+                "repair_architect_underlying_failure_summary",
+                "repair_architect_retry_requested",
+                "human_gate_pending",
             ):
                 card.metadata.pop(key, None)
             card.metadata["attempt_count"] = (
-                preserved_attempt_count if previous_status in {"failed", "rejected"} else 0
+                preserved_attempt_count
+                if previous_status in {"failed", "rejected", "completed"}
+                else 0
             )
             card.metadata["manual_retry"] = True
-            if previous_status in {"failed", "rejected"}:
+            if previous_status in {"failed", "rejected", "completed"}:
                 if preserved_failure_stage:
                     card.metadata["last_failure_stage"] = preserved_failure_stage
                 if preserved_failure_summary:
                     card.metadata["last_failure_summary"] = preserved_failure_summary
+                if restore_repair_architect_retry:
+                    card.metadata["repair_architect_retry_requested"] = True
         if note:
             card.metadata["last_note"] = note.strip()
         if metadata_updates:
@@ -1801,6 +1831,52 @@ class RepoAutopilotStore:
                         },
                     )
                     implement_phase_started = False
+                    if bool(card.metadata.get("repair_architect_retry_requested")):
+                        self.update_status(
+                            card.id,
+                            status="repairing",
+                            metadata_updates={"repair_architect_retry_requested": False},
+                        )
+                        try:
+                            architect_repair_path = await self._maybe_run_repair_architect_plan(
+                                card,
+                                cwd=working_cwd,
+                                policies=policies,
+                                base_branch=base_branch,
+                                failed_attempt=max(1, attempt_count - 1),
+                                failure_stage=prior_failure_stage,
+                                failure_summary=prior_failure_summary,
+                                stream=stream_writer,
+                            )
+                        except RepairArchitectFailedError as exc:
+                            architect_failure_summary = str(exc)
+                            self.update_status(
+                                card.id,
+                                status="failed",
+                                note=architect_failure_summary,
+                                metadata_updates={
+                                    "last_failure_stage": "repair_architect_failed",
+                                    "last_failure_summary": architect_failure_summary,
+                                    "repair_architect_failure_summary": architect_failure_summary,
+                                    "repair_architect_underlying_failure_stage": exc.failure_stage,
+                                    "repair_architect_underlying_failure_summary": exc.failure_summary,
+                                },
+                            )
+                            if issue_number is not None:
+                                self._comment_on_issue(
+                                    issue_number,
+                                    self._comment_terminal_failure(architect_failure_summary),
+                                )
+                            return RepoRunResult(
+                                card_id=card.id,
+                                status="failed",
+                                assistant_summary=architect_failure_summary,
+                                run_report_path=str(current_run_report),
+                                verification_report_path=str(current_verification_report),
+                                verification_steps=[],
+                                attempt_count=attempt_count,
+                                worktree_path=str(working_cwd),
+                            )
                     if architect_repair_path is not None:
                         assistant_summary = (
                             "Repair architect applied direct changes after the previous "
@@ -2050,20 +2126,24 @@ class RepoAutopilotStore:
                                     stream=stream_writer,
                                 )
                             except RepairArchitectFailedError as exc:
-                                summary = str(exc)
+                                architect_failure_summary = str(exc)
                                 self.update_status(
                                     card.id,
                                     status="failed",
-                                    note=summary,
+                                    note=architect_failure_summary,
                                     metadata_updates={
                                         **metadata_updates,
                                         "last_failure_stage": "repair_architect_failed",
-                                        "last_failure_summary": summary,
+                                        "last_failure_summary": architect_failure_summary,
+                                        "repair_architect_failure_summary": architect_failure_summary,
+                                        "repair_architect_underlying_failure_stage": exc.failure_stage,
+                                        "repair_architect_underlying_failure_summary": exc.failure_summary,
                                     },
                                 )
                                 if issue_number is not None:
                                     self._comment_on_issue(
-                                        issue_number, self._comment_terminal_failure(summary)
+                                        issue_number,
+                                        self._comment_terminal_failure(architect_failure_summary),
                                     )
                                 return RepoRunResult(
                                     card_id=card.id,
@@ -2452,7 +2532,7 @@ class RepoAutopilotStore:
                                         stream=stream_writer,
                                     )
                                 except RepairArchitectFailedError as exc:
-                                    summary = str(exc)
+                                    architect_failure_summary = str(exc)
                                     self.update_status(
                                         card.id,
                                         status="completed",
@@ -2461,7 +2541,10 @@ class RepoAutopilotStore:
                                             **remote_review_meta,
                                             "human_gate_pending": True,
                                             "last_failure_stage": "repair_architect_failed",
-                                            "last_failure_summary": summary,
+                                            "last_failure_summary": architect_failure_summary,
+                                            "repair_architect_failure_summary": architect_failure_summary,
+                                            "repair_architect_underlying_failure_stage": exc.failure_stage,
+                                            "repair_architect_underlying_failure_summary": exc.failure_summary,
                                         },
                                     )
                                     self.append_journal(
@@ -2477,11 +2560,13 @@ class RepoAutopilotStore:
                                         },
                                     )
                                     self._comment_on_pr(
-                                        linked_pr_number, self._comment_terminal_failure(summary)
+                                        linked_pr_number,
+                                        self._comment_terminal_failure(architect_failure_summary),
                                     )
                                     if issue_number is not None:
                                         self._comment_on_issue(
-                                            issue_number, self._comment_terminal_failure(summary)
+                                            issue_number,
+                                            self._comment_terminal_failure(architect_failure_summary),
                                         )
                                     return RepoRunResult(
                                         card_id=card.id,
@@ -4241,12 +4326,16 @@ class RepoAutopilotStore:
             return None
         if severity in {"critical", "high"} and not repair_cfg.get("architect_enabled", True):
             raise RepairArchitectFailedError(
-                "repair architect is required for CRITICAL/HIGH reviewer findings but is disabled"
+                "repair architect is required for CRITICAL/HIGH reviewer findings but is disabled",
+                failure_stage=failure_stage,
+                failure_summary=failure_summary,
             )
         if severity not in self._repair_architect_severities(policies):
             if severity in {"critical", "high"}:
                 raise RepairArchitectFailedError(
-                    "repair architect is required for CRITICAL/HIGH reviewer findings but is filtered out"
+                    "repair architect is required for CRITICAL/HIGH reviewer findings but is filtered out",
+                    failure_stage=failure_stage,
+                    failure_summary=failure_summary,
                 )
             return None
 
@@ -4331,7 +4420,11 @@ class RepoAutopilotStore:
                     "model": model,
                 },
             )
-            raise RepairArchitectFailedError(f"{command} failed: {exc}") from exc
+            raise RepairArchitectFailedError(
+                f"{command} failed: {exc}",
+                failure_stage=failure_stage,
+                failure_summary=failure_summary,
+            ) from exc
 
         if stream is not None:
             stream.emit(
