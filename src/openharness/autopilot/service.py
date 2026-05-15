@@ -1730,6 +1730,19 @@ class RepoAutopilotStore:
             prior_failure_summary = _safe_text(card.metadata.get("last_failure_summary"))
             stream_writer = get_or_create_writer(card.id, self._runs_dir)
             try:
+                architect_repair_path: Path | None = None
+                if bool(card.metadata.get("repair_architect_direct_repair_pending")):
+                    repair_path_text = _safe_text(card.metadata.get("repair_architect_plan_path"))
+                    if repair_path_text:
+                        repair_path = Path(repair_path_text).expanduser()
+                        if not repair_path.is_absolute():
+                            repair_path = self._cwd / repair_path
+                        try:
+                            resolved_path = repair_path.resolve()
+                            if resolved_path.exists() and self._runs_dir.resolve() in resolved_path.parents:
+                                architect_repair_path = resolved_path
+                        except Exception:
+                            architect_repair_path = None
                 for attempt_count in range(existing_attempts + 1, max_attempts + 1):
                     attempt_run_report = (
                         self._runs_dir / f"{card.id}-attempt-{attempt_count:02d}-run.md"
@@ -1782,127 +1795,143 @@ class RepoAutopilotStore:
                             "retry_by": None,
                         },
                     )
-                    prompt = self._prepare_repair_prompt(
-                        card,
-                        policies,
-                        attempt_count=attempt_count,
-                        prior_summary=prior_summary,
-                        failure_stage=prior_failure_stage,
-                        failure_summary=prior_failure_summary,
-                    )
-                    resume_msgs: list[Any] | None = None
-                    resume_requested = bool(card.metadata.get("resume_requested"))
-                    if resume_requested:
-                        ckpt = load_latest_checkpoint(self._runs_dir, card.id)
-                        _resume_ttl_hours = float(
-                            (policies.get("autopilot", {}).get("execution", {}) or {}).get(
-                                "resume_ttl_hours", 24
-                            )
+                    implement_phase_started = False
+                    if architect_repair_path is not None:
+                        assistant_summary = (
+                            "Repair architect applied direct changes after the previous "
+                            f"review failure. See {architect_repair_path.name}."
                         )
-                        _resume_ttl_secs = _resume_ttl_hours * 3600
-                        if (
-                            ckpt is not None
-                            and ckpt.has_pending_continuation
-                            and ckpt.phase == "implement"
-                            and (time.time() - ckpt.saved_at) < _resume_ttl_secs
-                        ):
-                            resume_msgs = restore_messages(ckpt)
-                            stream_writer.emit(
-                                "resume_started",
-                                {
-                                    "phase": ckpt.phase,
-                                    "attempt": attempt_count,
-                                    "saved_at": ckpt.saved_at,
-                                },
-                            )
-                    stream_writer.emit(
-                        "phase_start",
-                        {
-                            "phase": "implement",
-                            "attempt": attempt_count,
-                            "resumed": resume_msgs is not None,
-                        },
-                    )
-                    try:
-                        assistant_summary = await self._run_agent_prompt(
-                            prompt,
-                            model=effective_model,
-                            max_turns=effective_max_turns,
-                            permission_mode=effective_permission_mode,
-                            cwd=working_cwd,
-                            stream=stream_writer,
-                            phase="implement",
-                            checkpoint_card_id=card.id,
-                            checkpoint_phase="implement",
-                            checkpoint_attempt=attempt_count,
-                            resume_messages=resume_msgs,
-                        )
-                        if resume_requested:
-                            self.update_status(
-                                card.id,
-                                status=card.status,
-                                metadata_updates={
-                                    "resume_requested": False,
-                                    "resume_available": False,
-                                    "resume_phase": "",
-                                },
-                            )
-                    except Exception as exc:
-                        stream_writer.emit(
-                            "phase_end",
-                            {"phase": "implement", "attempt": attempt_count, "ok": False},
-                        )
-                        import traceback as _tb
-
-                        tb_text = _tb.format_exc()
-                        failure_text = self._render_run_report(
-                            card,
-                            agent_summary=f"Autopilot execution failed: {exc}\n\nTraceback:\n```\n{tb_text}\n```",
-                            verification_steps=[],
-                            verification_status="not_started",
-                        )
-                        for path in (attempt_run_report, current_run_report):
-                            atomic_write_text(path, failure_text)
-                        summary = f"agent execution failed: {exc}"
-                        ckpt_after_fail = load_latest_checkpoint(self._runs_dir, card.id)
-                        resume_meta: dict[str, Any] = {
-                            "execution_error": str(exc),
-                            "last_failure_stage": "agent_runtime_error",
-                            "last_failure_summary": summary,
-                        }
-                        if ckpt_after_fail and ckpt_after_fail.has_pending_continuation:
-                            resume_meta["resume_available"] = True
-                            resume_meta["resume_phase"] = ckpt_after_fail.phase
                         self.update_status(
                             card.id,
-                            status="failed",
-                            note=summary,
-                            metadata_updates=resume_meta,
+                            status="repairing" if attempt_count > 1 else "running",
+                            metadata_updates={"repair_architect_direct_repair_pending": False},
                         )
-                        self.append_journal(
-                            kind="run_failed",
-                            summary=f"Agent execution failed (attempt {attempt_count})",
-                            task_id=card.id,
-                            metadata={"error": str(exc), "attempt_count": attempt_count},
-                        )
-                        if issue_number is not None:
-                            self._comment_on_issue(
-                                issue_number, self._comment_terminal_failure(summary)
-                            )
-                        return RepoRunResult(
-                            card_id=card.id,
-                            status="failed",
-                            assistant_summary=failure_text.strip(),
-                            run_report_path=str(current_run_report),
-                            verification_report_path=str(current_verification_report),
-                            verification_steps=[],
+                        architect_repair_path = None
+                    else:
+                        prompt = self._prepare_repair_prompt(
+                            card,
+                            policies,
                             attempt_count=attempt_count,
-                            worktree_path=str(working_cwd),
+                            prior_summary=prior_summary,
+                            failure_stage=prior_failure_stage,
+                            failure_summary=prior_failure_summary,
                         )
+                        resume_msgs: list[Any] | None = None
+                        resume_requested = bool(card.metadata.get("resume_requested"))
+                        if resume_requested:
+                            ckpt = load_latest_checkpoint(self._runs_dir, card.id)
+                            _resume_ttl_hours = float(
+                                (policies.get("autopilot", {}).get("execution", {}) or {}).get(
+                                    "resume_ttl_hours", 24
+                                )
+                            )
+                            _resume_ttl_secs = _resume_ttl_hours * 3600
+                            if (
+                                ckpt is not None
+                                and ckpt.has_pending_continuation
+                                and ckpt.phase == "implement"
+                                and (time.time() - ckpt.saved_at) < _resume_ttl_secs
+                            ):
+                                resume_msgs = restore_messages(ckpt)
+                                stream_writer.emit(
+                                    "resume_started",
+                                    {
+                                        "phase": ckpt.phase,
+                                        "attempt": attempt_count,
+                                        "saved_at": ckpt.saved_at,
+                                    },
+                                )
+                        implement_phase_started = True
+                        stream_writer.emit(
+                            "phase_start",
+                            {
+                                "phase": "implement",
+                                "attempt": attempt_count,
+                                "resumed": resume_msgs is not None,
+                            },
+                        )
+                        try:
+                            assistant_summary = await self._run_agent_prompt(
+                                prompt,
+                                model=effective_model,
+                                max_turns=effective_max_turns,
+                                permission_mode=effective_permission_mode,
+                                cwd=working_cwd,
+                                stream=stream_writer,
+                                phase="implement",
+                                checkpoint_card_id=card.id,
+                                checkpoint_phase="implement",
+                                checkpoint_attempt=attempt_count,
+                                resume_messages=resume_msgs,
+                            )
+                            if resume_requested:
+                                self.update_status(
+                                    card.id,
+                                    status=card.status,
+                                    metadata_updates={
+                                        "resume_requested": False,
+                                        "resume_available": False,
+                                        "resume_phase": "",
+                                    },
+                                )
+                        except Exception as exc:
+                            stream_writer.emit(
+                                "phase_end",
+                                {"phase": "implement", "attempt": attempt_count, "ok": False},
+                            )
+                            import traceback as _tb
 
-                    stream_writer.emit(
-                        "phase_end", {"phase": "implement", "attempt": attempt_count, "ok": True}
-                    )
+                            tb_text = _tb.format_exc()
+                            failure_text = self._render_run_report(
+                                card,
+                                agent_summary=f"Autopilot execution failed: {exc}\n\nTraceback:\n```\n{tb_text}\n```",
+                                verification_steps=[],
+                                verification_status="not_started",
+                            )
+                            for path in (attempt_run_report, current_run_report):
+                                atomic_write_text(path, failure_text)
+                            summary = f"agent execution failed: {exc}"
+                            ckpt_after_fail = load_latest_checkpoint(self._runs_dir, card.id)
+                            resume_meta: dict[str, Any] = {
+                                "execution_error": str(exc),
+                                "last_failure_stage": "agent_runtime_error",
+                                "last_failure_summary": summary,
+                            }
+                            if ckpt_after_fail and ckpt_after_fail.has_pending_continuation:
+                                resume_meta["resume_available"] = True
+                                resume_meta["resume_phase"] = ckpt_after_fail.phase
+                            self.update_status(
+                                card.id,
+                                status="failed",
+                                note=summary,
+                                metadata_updates=resume_meta,
+                            )
+                            self.append_journal(
+                                kind="run_failed",
+                                summary=f"Agent execution failed (attempt {attempt_count})",
+                                task_id=card.id,
+                                metadata={"error": str(exc), "attempt_count": attempt_count},
+                            )
+                            if issue_number is not None:
+                                self._comment_on_issue(
+                                    issue_number, self._comment_terminal_failure(summary)
+                                )
+                            return RepoRunResult(
+                                card_id=card.id,
+                                status="failed",
+                                assistant_summary=failure_text.strip(),
+                                run_report_path=str(current_run_report),
+                                verification_report_path=str(current_verification_report),
+                                verification_steps=[],
+                                attempt_count=attempt_count,
+                                worktree_path=str(working_cwd),
+                            )
+
+                    if implement_phase_started:
+                        stream_writer.emit(
+                            "phase_end",
+                            {"phase": "implement", "attempt": attempt_count, "ok": True},
+                        )
 
                     pending_report = self._render_run_report(
                         card,
@@ -2015,10 +2044,12 @@ class RepoAutopilotStore:
                                 stream=stream_writer,
                             )
                             if architect_plan_path is not None:
+                                architect_repair_path = architect_plan_path
                                 metadata_updates.update(
                                     {
                                         "repair_architect_plan_path": str(architect_plan_path),
                                         "repair_architect_attempt": attempt_count,
+                                        "repair_architect_direct_repair_pending": True,
                                     }
                                 )
                             self.update_status(
@@ -2388,10 +2419,12 @@ class RepoAutopilotStore:
                                     stream=stream_writer,
                                 )
                                 if architect_plan_path is not None:
+                                    architect_repair_path = architect_plan_path
                                     remote_review_meta.update(
                                         {
                                             "repair_architect_plan_path": str(architect_plan_path),
                                             "repair_architect_attempt": attempt_count,
+                                            "repair_architect_direct_repair_pending": True,
                                         }
                                     )
                                 self.update_status(
@@ -4155,34 +4188,28 @@ class RepoAutopilotStore:
         agent_system_prompt = self._repair_architect_system_prompt(agent_name)
         raw_turns = repair_cfg.get("architect_max_turns", 4)
         max_turns: int | None = None if raw_turns in (None, "", 0) else int(raw_turns)
-        command = f"agent:{agent_name} repair plan (attempt {failed_attempt})"
+        command = f"agent:{agent_name} direct repair (attempt {failed_attempt})"
 
         prompt = (
             f"You are the repair architect for autopilot task `{card.id}` ({card.title}).\n\n"
-            "A code-reviewer gate reported issues. Do not edit files. Produce concise, concrete "
-            "repair guidance for the next worker attempt.\n\n"
+            "A code-reviewer gate reported issues. Edit the repository files directly in the "
+            "current worktree to repair every blocking reviewer finding.\n\n"
             f"Failure stage: {failure_stage}\n"
             f"Failure summary: {failure_summary or '(none)'}\n"
             f"Severity: {severity.upper()}\n\n"
             "Reviewer feedback:\n"
             f"{reviewer_feedback}\n\n"
-            "Your output will be injected verbatim into the next worker prompt, so it must be "
-            "specific enough to implement without guessing.\n\n"
-            "Required output format (use these exact headings):\n"
-            "1. ROOT CAUSE\n"
-            "2. CRITICAL/HIGH FINDING MAP\n"
-            "3. FILES TO CHANGE\n"
-            "4. EXACT CHANGES\n"
-            "5. ACCEPTANCE CHECKS\n"
-            "6. DO NOT CHANGE\n\n"
-            "Requirements for each section:\n"
-            "- ROOT CAUSE: one short paragraph tying the reviewer findings to the likely defect.\n"
-            "- CRITICAL/HIGH FINDING MAP: enumerate every CRITICAL/HIGH reviewer finding and map it to one concrete code change, or state why it cannot be fixed automatically.\n"
-            "- FILES TO CHANGE: list concrete repository paths and, when possible, functions/components.\n"
-            "- EXACT CHANGES: ordered implementation steps describing the minimal patch, expected data flow, and what must be persisted or wired end-to-end. Name required API calls/state updates instead of vague advice.\n"
-            "- ACCEPTANCE CHECKS: specific commands, assertions, or reviewer-visible behaviors that prove the fix is complete. Include any missing behavior that must exist to satisfy the requirement, not just compile.\n"
-            "- DO NOT CHANGE: unrelated files, existing valid behavior, and shortcuts to avoid. Call out forbidden shortcuts like hardcoded placeholders, copy-only changes, or partial UI without persistence when relevant.\n\n"
-            "Do not restate the reviewer feedback without turning it into an implementation brief. For CRITICAL/HIGH findings, missing a concrete mapping is itself a failed repair plan. Prefer file_path:line_number references when the reviewer already identified them.\n\n"
+            "Repair requirements:\n"
+            "- Make the smallest code and test changes that resolve the reviewer findings.\n"
+            "- Address every CRITICAL/HIGH finding with an actual code change or stop and explain why it cannot be fixed safely.\n"
+            "- Run the focused verification commands needed to prove the repair.\n"
+            "- Do not hand off implementation steps to a worker; you are the repair actor for this attempt.\n"
+            "- Do not refactor unrelated code or broaden scope beyond the reviewer failure.\n\n"
+            "Final response format:\n"
+            "1. FILES CHANGED\n"
+            "2. REVIEWER FINDINGS ADDRESSED\n"
+            "3. VERIFICATION RUN\n"
+            "4. REMAINING RISK\n\n"
             f"Diff vs `{base_branch}`{' (truncated)' if truncated else ''}:\n"
             f"```\n{diff_text or '(empty diff)'}\n```\n"
         )
@@ -4230,7 +4257,7 @@ class RepoAutopilotStore:
 
         plan_path = self._repair_architect_plan_path(card.id, failed_attempt)
         plan_text = (
-            f"# Repair Architect Plan: {card.id}\n\n"
+            f"# Repair Architect Execution: {card.id}\n\n"
             f"Agent: {agent_name}\n"
             f"Model: {model}\n"
             f"Failed attempt: {failed_attempt}\n"
@@ -4239,13 +4266,13 @@ class RepoAutopilotStore:
             f"Failure summary: {failure_summary or '(none)'}\n\n"
             "## Reviewer Feedback\n\n"
             f"{reviewer_feedback}\n\n"
-            "## Architect Plan\n\n"
+            "## Architect Repair Summary\n\n"
             f"{output.strip() or '(architect returned no text)'}\n"
         )
         atomic_write_text(plan_path, plan_text)
         self.append_journal(
-            kind="repair_architect_plan",
-            summary=f"{command} produced repair guidance",
+            kind="repair_architect_execution",
+            summary=f"{command} completed direct repair",
             task_id=card.id,
             metadata={
                 "attempt_count": failed_attempt,

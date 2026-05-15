@@ -1610,10 +1610,12 @@ def test_autopilot_run_card_uses_architect_plan_for_reviewer_repair(
             {"phase": phase, "model": model, "prompt": prompt, "system_prompt": system_prompt}
         )
         if phase == "repair_architect":
+            assert cwd is not None
+            (Path(cwd) / "architect-direct-repair.txt").write_text("fixed", encoding="utf-8")
             return (
-                "Architect repair plan:\n"
-                "1. Fix the missing status transition before retry.\n"
-                "2. Add a focused regression test."
+                "Architect applied direct repair:\n"
+                "1. Fixed the missing status transition before retry.\n"
+                "2. Added a focused regression test."
             )
         return f"worker attempt {len([c for c in agent_calls if c['phase'] == 'implement'])}"
 
@@ -1700,7 +1702,7 @@ def test_autopilot_run_card_uses_architect_plan_for_reviewer_repair(
     )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._git_commit_all",
-        lambda self, cwd, message: True,
+        lambda self, cwd, message: (Path(cwd) / "architect-direct-repair.txt").exists(),
     )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
@@ -1743,19 +1745,162 @@ def test_autopilot_run_card_uses_architect_plan_for_reviewer_repair(
     assert architect_calls[0]["model"] == "claude-architect"
     assert architect_calls[0]["system_prompt"] == "ARCHITECT SYSTEM PROMPT"
     assert "Severity: HIGH" in architect_calls[0]["prompt"]
-    assert "Required output format (use these exact headings):" in architect_calls[0]["prompt"]
-    assert "1. ROOT CAUSE" in architect_calls[0]["prompt"]
-    assert "2. CRITICAL/HIGH FINDING MAP" in architect_calls[0]["prompt"]
-    assert "5. ACCEPTANCE CHECKS" in architect_calls[0]["prompt"]
-    assert "6. DO NOT CHANGE" in architect_calls[0]["prompt"]
-    second_worker_prompt = [call["prompt"] for call in agent_calls if call["phase"] == "implement"][1]
-    assert "Architect repair plan:" in second_worker_prompt
-    assert "Fix the missing status transition before retry" in second_worker_prompt
-    assert "Treat reviewer findings and architect guidance as acceptance criteria" in second_worker_prompt
-    assert "For every CRITICAL/HIGH finding, make a concrete code change" in second_worker_prompt
-    assert "follow the CRITICAL/HIGH finding map as acceptance criteria" in second_worker_prompt
-    assert "do not stop at copy, placeholder constants, or UI-only changes" in second_worker_prompt
-    assert (store._runs_dir / f"{card.id}-attempt-01-repair-architect.md").exists()
+    assert "Do not edit files" not in architect_calls[0]["prompt"]
+    assert "Edit the repository files directly" in architect_calls[0]["prompt"]
+    assert "Run the focused verification commands" in architect_calls[0]["prompt"]
+    implement_calls = [call for call in agent_calls if call["phase"] == "implement"]
+    assert len(implement_calls) == 1
+    repair_artifact = store._runs_dir / f"{card.id}-attempt-01-repair-architect.md"
+    assert repair_artifact.exists()
+    repair_text = repair_artifact.read_text(encoding="utf-8")
+    assert "Repair Architect Execution" in repair_text
+    assert "Architect applied direct repair" in repair_text
+
+
+def test_autopilot_run_card_resumes_pending_architect_repair_without_worker(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    (worktree / "architect-direct-repair.txt").write_text("fixed", encoding="utf-8")
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Resume architect repair",
+        body="architect already fixed reviewer feedback before restart",
+    )
+    repair_artifact = store._runs_dir / f"{card.id}-attempt-01-repair-architect.md"
+    repair_artifact.write_text("# Repair Architect Execution\n\nApplied direct repair.", encoding="utf-8")
+    store.update_status(
+        card.id,
+        status="queued",
+        metadata_updates={
+            "attempt_count": 1,
+            "last_failure_stage": "local_verification_failed",
+            "last_failure_summary": "severity=high",
+            "repair_architect_plan_path": str(repair_artifact),
+            "repair_architect_direct_repair_pending": True,
+        },
+    )
+    policies = store.load_policies()
+    policies["verification"]["code_review"]["enabled"] = False
+    policies["autopilot"]["github"]["auto_merge"]["mode"] = "always"
+    agent_calls: list[str | None] = []
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None, agent_id=None):
+        return SimpleNamespace(path=worktree)
+
+    async def fake_remove_worktree(self, slug):
+        return True
+
+    async def fake_run_agent_prompt(self, *args, phase=None, **kwargs):
+        agent_calls.append(phase)
+        return "unexpected agent call"
+
+    def fake_run_verification_steps(self, policies, *, cwd=None):
+        return [RepoVerificationStep(command="uv run pytest -q", returncode=0, status="success")]
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        return (
+            "success",
+            "All reported remote checks passed.",
+            {"url": "https://example/pr/25", "labels": [], "isDraft": False},
+            [],
+        )
+
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=0,
+            status="success",
+            stdout="Severity: NONE",
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.load_policies",
+        lambda self: policies,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt",
+        fake_run_agent_prompt,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        fake_run_verification_steps,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_commit_all",
+        lambda self, cwd, message: (Path(cwd) / "architect-direct-repair.txt").exists(),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._push_pr_branch_with_sync",
+        lambda self, cwd, *, base_branch, head_branch, policies, card_id=None: (
+            True,
+            "branch_push_done",
+            f"Pushed {head_branch}.",
+        ),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._upsert_pull_request",
+        lambda self, card, *, head_branch, base_branch, run_report_path, verification_report_path: {
+            "number": 25,
+            "url": "https://example/pr/25",
+        },
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
+        lambda self, pr_number: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store.run_card(card.id))
+    updated = store.get_card(card.id)
+
+    assert result.status == "merged"
+    assert agent_calls == []
+    assert updated is not None
+    assert updated.metadata["repair_architect_direct_repair_pending"] is False
 
 
 def test_autopilot_run_card_stops_repeated_local_verification_failure(
