@@ -102,6 +102,33 @@ def test_encode_task_worker_payload_preserves_structured_messages() -> None:
 
 
 @pytest.mark.asyncio
+async def test_restarted_agent_task_clears_terminal_fields(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(tmp_path / "data"))
+    manager = BackgroundTaskManager()
+
+    task = await manager.create_agent_task(
+        prompt="ready",
+        description="agent",
+        cwd=tmp_path,
+        command="while read line; do echo \"got:$line\"; break; done",
+    )
+    await asyncio.wait_for(manager._waiters[task.id], timeout=5)  # type: ignore[attr-defined]
+    assert task.terminal_at is not None
+
+    await manager.write_to_task(task.id, "follow-up")
+
+    restarted = manager.get_task(task.id)
+    assert restarted is not None
+    assert restarted.status == "running"
+    assert restarted.terminal_at is None
+    assert restarted.error_summary is None
+    assert restarted.last_log_excerpt is None
+    assert restarted.last_heartbeat_at is not None
+
+    await asyncio.wait_for(manager._waiters[task.id], timeout=5)  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
 async def test_stop_task(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(tmp_path / "data"))
     manager = BackgroundTaskManager()
@@ -189,10 +216,8 @@ async def test_failed_task_captures_error_excerpt(tmp_path: Path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stale_threshold_read_from_env(tmp_path: Path, monkeypatch):
-    """Verify get_task_manager reads OPENHARNESS_TASK_STALE_THRESHOLD_SECONDS from env."""
     monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("OPENHARNESS_TASK_STALE_THRESHOLD_SECONDS", "42.0")
-    # Reset the singleton so it picks up the new env value
     from openharness.tasks.manager import reset_task_manager
 
     reset_task_manager()
@@ -208,26 +233,61 @@ async def test_stale_threshold_read_from_env(tmp_path: Path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_stale_watchdog_marks_stale_task_failed(tmp_path: Path, monkeypatch):
-    """Verify stale watchdog marks long-running tasks with no heartbeat as failed."""
+async def test_stale_threshold_honors_zero_from_env(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(tmp_path / "data"))
-    # Use a 2 second threshold - task has no heartbeat after initial set
-    manager = BackgroundTaskManager(stale_threshold_seconds=2.0)
-    manager.start_stale_watchdog()
+    monkeypatch.setenv("OPENHARNESS_TASK_STALE_THRESHOLD_SECONDS", "0")
+    from openharness.tasks.manager import reset_task_manager
 
-    # Create a task with a very short sleep so process exits quickly
-    # but we'll block the output reader to prevent heartbeat updates
+    reset_task_manager()
+    try:
+        from openharness.tasks.manager import get_task_manager
+
+        manager = get_task_manager()
+        assert manager._stale_threshold_seconds == 0.0
+    finally:
+        reset_task_manager()
+
+
+@pytest.mark.asyncio
+async def test_zero_stale_threshold_disables_stale_marking(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(tmp_path / "data"))
+    manager = BackgroundTaskManager(stale_threshold_seconds=0.0)
+
     task = await manager.create_shell_task(
         command="sleep 60",
-        description="stalled_task",
+        description="zero_threshold_task",
         cwd=tmp_path,
     )
-    assert task.status == "running"
+    task.status = "failed"
+    assert task.last_heartbeat_at is not None
+    task.last_heartbeat_at -= 10
 
-    # Simulate time passing by clearing heartbeat (process still "alive" in test context)
-    task.last_heartbeat_at = task.last_heartbeat_at - 10  # 10 seconds ago
+    await manager._mark_stale_tasks()
 
-    # Track listener calls for double-notification check
+    updated = manager.get_task(task.id)
+    assert updated is not None
+    assert updated.status == "failed"
+    assert updated.terminal_at is None
+
+    await manager.stop_task(task.id)
+    await manager.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stale_watchdog_terminalizes_failed_non_terminal_task(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(tmp_path / "data"))
+    manager = BackgroundTaskManager(stale_threshold_seconds=2.0)
+
+    task = await manager.create_shell_task(
+        command="sleep 60",
+        description="failed_non_terminal_task",
+        cwd=tmp_path,
+    )
+    task.status = "failed"
+    task.terminal_at = None
+    assert task.last_heartbeat_at is not None
+    task.last_heartbeat_at -= 10
+
     call_count = 0
 
     async def _listener(t):
@@ -242,15 +302,37 @@ async def test_stale_watchdog_marks_stale_task_failed(tmp_path: Path, monkeypatc
     updated = manager.get_task(task.id)
     assert updated is not None
     assert updated.status == "failed"
+    assert updated.terminal_at is not None
     assert updated.error_summary is not None
     assert "heartbeat" in updated.error_summary or "stalled" in updated.error_summary
-    # CRITICAL fix verification: subprocess and waiter must be cleaned up
-    assert task.id not in manager._processes, "process should be removed after stale marking"
-    assert task.id not in manager._waiters, "waiter should be removed after stale marking"
-    # Listener should have been called exactly once (not twice)
-    assert call_count == 1, f"Expected 1 listener call, got {call_count}"
+    assert task.id not in manager._processes
+    assert task.id not in manager._waiters
+    assert call_count == 1
 
-    manager.stop_stale_watchdog()
+    await manager.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stale_watchdog_does_not_kill_quiet_running_task(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(tmp_path / "data"))
+    manager = BackgroundTaskManager(stale_threshold_seconds=2.0)
+
+    task = await manager.create_shell_task(
+        command="sleep 60",
+        description="quiet_running_task",
+        cwd=tmp_path,
+    )
+    assert task.last_heartbeat_at is not None
+    task.last_heartbeat_at -= 10
+
+    await manager._mark_stale_tasks()
+
+    updated = manager.get_task(task.id)
+    assert updated is not None
+    assert updated.status == "running"
+    assert updated.terminal_at is None
+
+    await manager.stop_task(task.id)
     await manager.aclose()
 
 

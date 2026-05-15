@@ -80,23 +80,24 @@ class BackgroundTaskManager:
         """Periodically check for stale running tasks and mark them failed."""
         while True:
             try:
-                await asyncio.sleep(60)
                 await self._mark_stale_tasks()
             except asyncio.CancelledError:
                 break
             except Exception:
                 log.exception("Stale watchdog error")
+            await asyncio.sleep(60)
 
     async def _mark_stale_tasks(self) -> None:
-        """Mark long-running tasks with no recent heartbeat as stale/failed."""
+        """Mark failed tasks that reached no terminal bookkeeping as terminal."""
+        if self._stale_threshold_seconds <= 0:
+            return
         now = time.time()
         stale_tasks: list[TaskRecord] = []
         for task in self._tasks.values():
-            if task.status != "running":
+            if task.status != "failed" or task.terminal_at is not None:
                 continue
-            if task.last_heartbeat_at is None:
-                continue
-            if now - task.last_heartbeat_at > self._stale_threshold_seconds:
+            last_activity_at = task.last_heartbeat_at or task.ended_at or task.started_at or task.created_at
+            if now - last_activity_at > self._stale_threshold_seconds:
                 stale_tasks.append(task)
 
         for task in stale_tasks:
@@ -416,10 +417,15 @@ class BackgroundTaskManager:
         restart_count = int(task.metadata.get("restart_count", "0")) + 1
         task.metadata["restart_count"] = str(restart_count)
         task.metadata["status_note"] = "Task restarted; prior interactive context was not preserved."
+        now = time.time()
         task.status = "running"
-        task.started_at = time.time()
+        task.started_at = now
         task.ended_at = None
         task.return_code = None
+        task.last_heartbeat_at = now
+        task.terminal_at = None
+        task.error_summary = None
+        task.last_log_excerpt = None
         with task.output_file.open("ab") as handle:
             handle.write(_TASK_RESTART_NOTICE.encode("utf-8"))
         return await self._start_process(task.id)
@@ -496,7 +502,9 @@ def get_task_manager() -> BackgroundTaskManager:
             _DEFAULT_MANAGER.stop_stale_watchdog()
             _DEFAULT_MANAGER.close()
         settings = load_settings()
-        stale_threshold_seconds = settings.task_stale_threshold_seconds or DEFAULT_STALE_THRESHOLD_SECONDS
+        stale_threshold_seconds = settings.task_stale_threshold_seconds
+        if stale_threshold_seconds is None:
+            stale_threshold_seconds = DEFAULT_STALE_THRESHOLD_SECONDS
         _DEFAULT_MANAGER = BackgroundTaskManager(stale_threshold_seconds=stale_threshold_seconds)
         _DEFAULT_MANAGER_KEY = current_key
         from openharness.services.auto_review import hook_auto_review

@@ -846,7 +846,7 @@ def _apply_env_overrides(settings: Settings) -> Settings:
         updates["max_turns"] = int(max_turns)
 
     task_stale_threshold_seconds = os.environ.get("OPENHARNESS_TASK_STALE_THRESHOLD_SECONDS")
-    if task_stale_threshold_seconds:
+    if task_stale_threshold_seconds is not None:
         updates["task_stale_threshold_seconds"] = float(task_stale_threshold_seconds)
 
     context_window_tokens = os.environ.get("OPENHARNESS_CONTEXT_WINDOW_TOKENS")
