@@ -7223,6 +7223,266 @@ Findings:
     assert "repo_ok reports true" in prompt
 
 
+def test_repair_prompt_uses_previous_attempt_feedback_not_latest_artifact(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Test card",
+        body="Original task description",
+    )
+    (runs_dir / f"{card.id}-attempt-01-verification.md").write_text(
+        """# Verification Report: test-card
+
+## FAILED :: agent:code-reviewer (diff vs main)
+
+### stdout
+```text
+Severity: CRITICAL
+Findings:
+  - src/manager.py:99 correctness Correct previous attempt finding
+Summary: Previous attempt summary with blocking rationale.
+```
+""",
+        encoding="utf-8",
+    )
+    (runs_dir / f"{card.id}-attempt-03-verification.md").write_text(
+        """# Verification Report: test-card
+
+## FAILED :: agent:code-reviewer (diff vs main)
+
+### stdout
+```text
+Severity: CRITICAL
+Findings:
+  - src/manager.py:120 correctness Future attempt finding should not leak
+Summary: Future attempt summary.
+```
+""",
+        encoding="utf-8",
+    )
+
+    prompt = store._prepare_repair_prompt(
+        card,
+        store.load_policies(),
+        attempt_count=2,
+        prior_summary="Previous attempt summary",
+        failure_stage="local_verification_failed",
+        failure_summary="agent:code-reviewer (diff vs main) rc=1",
+    )
+
+    assert "Correct previous attempt finding" in prompt
+    assert "Previous attempt summary with blocking rationale" in prompt
+    assert "Future attempt finding should not leak" not in prompt
+
+
+def test_repair_prompt_omits_feedback_when_expected_attempt_missing(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Test card",
+        body="Original task description",
+    )
+    (runs_dir / f"{card.id}-attempt-03-verification.md").write_text(
+        """# Verification Report: test-card
+
+## FAILED :: agent:code-reviewer (diff vs main)
+
+### stdout
+```text
+Severity: CRITICAL
+Findings:
+  - src/manager.py:120 correctness Future attempt finding should not leak
+Summary: Future attempt summary.
+```
+""",
+        encoding="utf-8",
+    )
+
+    prompt = store._prepare_repair_prompt(
+        card,
+        store.load_policies(),
+        attempt_count=2,
+        prior_summary="Previous attempt summary",
+        failure_stage="local_verification_failed",
+        failure_summary="agent:code-reviewer (diff vs main) rc=1",
+    )
+
+    assert "Repair context:" in prompt
+    assert "Future attempt finding should not leak" not in prompt
+    assert "Previous attempt #" not in prompt
+
+
+def test_repair_prompt_does_not_use_architect_attempt_for_reviewer_feedback(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Test card",
+        body="Original task description",
+    )
+    card = store.update_status(
+        card.id,
+        status="failed",
+        metadata_updates={"repair_architect_attempt": 1},
+    )
+    (runs_dir / f"{card.id}-attempt-01-verification.md").write_text(
+        """# Verification Report: test-card
+
+## FAILED :: agent:code-reviewer (diff vs main)
+
+### stdout
+```text
+Severity: CRITICAL
+Findings:
+  - src/manager.py:99 correctness Stale older reviewer finding
+Summary: Stale older rationale.
+```
+""",
+        encoding="utf-8",
+    )
+    (runs_dir / f"{card.id}-attempt-01-repair-architect.md").write_text(
+        "# Repair Architect Plan\n\nUse the recorded plan for the retry.\n",
+        encoding="utf-8",
+    )
+
+    prompt = store._prepare_repair_prompt(
+        card,
+        store.load_policies(),
+        attempt_count=3,
+        prior_summary="Previous attempt summary",
+        failure_stage="local_verification_failed",
+        failure_summary="agent:code-reviewer (diff vs main) rc=1",
+    )
+
+    assert "Stale older reviewer finding" not in prompt
+    assert "Use the recorded plan for the retry" in prompt
+
+
+def test_repair_prompt_handles_invalid_repair_architect_attempt_metadata(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Test card",
+        body="Original task description",
+    )
+    card = store.update_status(
+        card.id,
+        status="failed",
+        metadata_updates={"repair_architect_attempt": "not-an-int"},
+    )
+    (runs_dir / f"{card.id}-attempt-01-verification.md").write_text(
+        """# Verification Report: test-card
+
+## FAILED :: agent:code-reviewer (diff vs main)
+
+### stdout
+```text
+Severity: CRITICAL
+Findings:
+  - src/manager.py:99 correctness Previous reviewer finding
+Summary: Previous reviewer rationale.
+```
+""",
+        encoding="utf-8",
+    )
+
+    prompt = store._prepare_repair_prompt(
+        card,
+        store.load_policies(),
+        attempt_count=2,
+        prior_summary="Previous attempt summary",
+        failure_stage="local_verification_failed",
+        failure_summary="agent:code-reviewer (diff vs main) rc=1",
+    )
+
+    assert "Previous reviewer finding" in prompt
+    assert "Previous reviewer rationale" in prompt
+
+
+def test_repair_prompt_prefers_recorded_architect_attempt_metadata(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Test card",
+        body="Original task description",
+    )
+    card = store.update_status(
+        card.id,
+        status="failed",
+        metadata_updates={
+            "repair_architect_attempt": 9,
+            "last_failure_stage": "local_verification_failed",
+            "last_failure_summary": "agent:code-reviewer (diff vs main) rc=1",
+        },
+    )
+    (runs_dir / f"{card.id}-attempt-10-verification.md").write_text(
+        """# Verification Report: test-card
+
+## FAILED :: agent:code-reviewer (diff vs main)
+
+### stdout
+```text
+Severity: CRITICAL
+Findings:
+  - src/manager.py:99 correctness Latest reviewer finding
+Summary: Latest reviewer rationale.
+```
+""",
+        encoding="utf-8",
+    )
+    (runs_dir / f"{card.id}-attempt-09-repair-architect.md").write_text(
+        "# Repair Architect Plan\n\nUse the recorded plan for the retry.\n",
+        encoding="utf-8",
+    )
+
+    prompt = store._prepare_repair_prompt(
+        card,
+        store.load_policies(),
+        attempt_count=11,
+        prior_summary="Previous attempt summary",
+        failure_stage="local_verification_failed",
+        failure_summary="agent:code-reviewer (diff vs main) rc=1",
+    )
+
+    assert "Latest reviewer finding" in prompt
+    assert "Latest reviewer rationale" in prompt
+    assert "Use the recorded plan for the retry" in prompt
+
+
 def test_repair_prompt_injects_architect_plan_on_remote_review_failure(
     tmp_path: Path,
 ) -> None:
@@ -7434,6 +7694,40 @@ Summary: High priority issues found.
     assert "Severity: HIGH" in feedback
     assert "N+1 query detected" in feedback
     assert "Large function should be split" in feedback
+
+
+def test_extract_reviewer_feedback_preserves_summary_rationale(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card_id = "test-card-summary"
+
+    verification_report = runs_dir / f"{card_id}-attempt-01-verification.md"
+    verification_report.write_text(
+        """# Verification Report
+
+## FAILED :: agent:code-reviewer (diff vs main)
+
+### stdout
+```text
+Severity: CRITICAL
+Findings:
+  - src/tasks/manager.py:99 correctness Watchdog kills healthy silent jobs
+Summary: Stale detection must use process state instead of only output heartbeat.
+```
+""",
+        encoding="utf-8",
+    )
+
+    feedback = store._extract_reviewer_feedback(card_id)
+
+    assert "Severity: CRITICAL" in feedback
+    assert "Watchdog kills healthy silent jobs" in feedback
+    assert "Summary:" in feedback
+    assert "process state instead of only output heartbeat" in feedback
 
 
 def test_extract_reviewer_feedback_handles_medium_and_low_severity(tmp_path: Path) -> None:

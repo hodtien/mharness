@@ -4008,20 +4008,21 @@ class RepoAutopilotStore:
             check=True,
         )
 
-    def _extract_reviewer_feedback(self, card_id: str) -> str:
+    def _extract_reviewer_feedback(self, card_id: str, failed_attempt: int | None = None) -> str:
         """Extract non-NONE code-reviewer issues from verification report.
 
         Returns formatted feedback string, or empty string if no issues found.
         """
-        # Find most recent attempt verification file
-        attempt_files = sorted(
-            self._runs_dir.glob(f"{card_id}-attempt-*-verification.md"),
-            reverse=True
-        )
-        if attempt_files:
-            verification_file = attempt_files[0]
+        if failed_attempt is not None:
+            verification_file = self._runs_dir / f"{card_id}-attempt-{failed_attempt:02d}-verification.md"
         else:
-            verification_file = self._runs_dir / f"{card_id}-verification.md"
+            attempt_files = sorted(
+                self._runs_dir.glob(f"{card_id}-attempt-*-verification.md"), reverse=True
+            )
+            if attempt_files:
+                verification_file = attempt_files[0]
+            else:
+                verification_file = self._runs_dir / f"{card_id}-verification.md"
 
         if not verification_file.exists():
             return ""
@@ -4031,49 +4032,49 @@ class RepoAutopilotStore:
         except Exception:
             return ""
 
-        # Look for code-reviewer section with reviewer issues.
-        issues = []
+        issues: list[str] = []
+        summaries: list[str] = []
         lines = content.split("\n")
         in_reviewer_section = False
         in_findings = False
-        current_severity = None
+        current_severity: str | None = None
 
         for line in lines:
-            # Detect code-reviewer section
+            stripped = line.strip()
             if "agent:code-reviewer" in line.lower():
                 in_reviewer_section = True
                 continue
 
-            # Exit reviewer section on next major heading
             if in_reviewer_section and line.startswith("## ") and "code-reviewer" not in line.lower():
                 break
 
             if not in_reviewer_section:
                 continue
 
-            # Parse severity
-            if line.strip().startswith("Severity:"):
-                severity_text = line.split(":", 1)[1].strip().upper()
+            if stripped.startswith("Severity:"):
+                severity_text = stripped.split(":", 1)[1].strip().upper()
                 if severity_text in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
                     current_severity = severity_text
 
-            # Parse findings section
-            if "Findings:" in line:
+            if stripped.startswith("Findings:"):
                 in_findings = True
                 continue
 
-            # Collect finding bullets
-            if in_findings and line.strip().startswith("-"):
-                issues.append(line.strip())
+            if stripped.startswith("Summary:"):
+                summaries.append(stripped)
+                in_findings = False
+                continue
 
-            # Stop at summary or next section
-            if in_findings and (line.strip().startswith("Summary:") or line.startswith("##")):
+            if in_findings and stripped.startswith("-"):
+                issues.append(stripped)
+
+            if in_findings and line.startswith("##"):
                 in_findings = False
 
         if not issues or not current_severity:
             return ""
 
-        return "\n".join([f"Severity: {current_severity}"] + issues)
+        return "\n".join([f"Severity: {current_severity}"] + issues + summaries)
 
     def _repair_architect_plan_path(self, card_id: str, failed_attempt: int) -> Path:
         return self._runs_dir / f"{card_id}-attempt-{failed_attempt:02d}-repair-architect.md"
@@ -4127,7 +4128,7 @@ class RepoAutopilotStore:
         if not repair_cfg.get("architect_enabled", True):
             return None
 
-        reviewer_feedback = self._extract_reviewer_feedback(card.id)
+        reviewer_feedback = self._extract_reviewer_feedback(card.id, failed_attempt=failed_attempt)
         severity = _parse_review_severity(reviewer_feedback)
         if severity == "none" or severity not in self._repair_architect_severities(policies):
             return None
@@ -4286,12 +4287,21 @@ class RepoAutopilotStore:
             "local_verification_failed",
             "remote_review_failed",
         ):
-            reviewer_feedback = self._extract_reviewer_feedback(card.id)
+            reviewer_attempt = attempt_count - 1
+            reviewer_feedback = self._extract_reviewer_feedback(
+                card.id, failed_attempt=reviewer_attempt
+            )
+            try:
+                architect_attempt = int(
+                    card.metadata.get("repair_architect_attempt") or reviewer_attempt
+                )
+            except (TypeError, ValueError):
+                architect_attempt = reviewer_attempt
             if reviewer_feedback:
                 extras.extend(
                     [
                         "",
-                        f"[Previous attempt #{attempt_count - 1} failed code review. "
+                        f"[Previous attempt #{reviewer_attempt} failed code review. "
                         "Code reviewer identified these issues that MUST be fixed before any other work:]",
                         "",
                         reviewer_feedback,
@@ -4299,7 +4309,24 @@ class RepoAutopilotStore:
                         "[End of reviewer constraints — address ALL CRITICAL/HIGH findings explicitly, mapping each to a concrete code change before continuing.]",
                     ]
                 )
-            architect_plan = self._extract_repair_architect_plan(card.id, attempt_count - 1)
+            architect_plan = ""
+            plan_path_text = _safe_text(card.metadata.get("repair_architect_plan_path"))
+            if plan_path_text:
+                plan_path = Path(plan_path_text).expanduser()
+                if not plan_path.is_absolute():
+                    plan_path = self._cwd / plan_path
+                try:
+                    resolved_plan_path = plan_path.resolve()
+                    resolved_runs_dir = self._runs_dir.resolve()
+                    if (
+                        resolved_plan_path.exists()
+                        and resolved_runs_dir in resolved_plan_path.parents
+                    ):
+                        architect_plan = resolved_plan_path.read_text(encoding="utf-8").strip()
+                except Exception:
+                    architect_plan = ""
+            if not architect_plan:
+                architect_plan = self._extract_repair_architect_plan(card.id, architect_attempt)
             if architect_plan:
                 extras.extend(
                     [
