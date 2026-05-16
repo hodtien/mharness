@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, type ModelProfile } from "../api/client";
 import { useSession } from "../store/session";
+import { toast } from "../store/toast";
 import ChangePasswordModal from "./ChangePasswordModal";
 
 type PermissionMode = "default" | "plan" | "full_auto";
@@ -96,8 +97,9 @@ export function ModelPicker() {
       setSearch("");
       try {
         await api.patchModes({ model: modelId });
-      } catch {
+      } catch (error) {
         ingest({ type: "state_snapshot", state: { ...appState, model: current } });
+        toast.error(`Failed to update model: ${error instanceof Error ? error.message : "Unknown error"}`);
       } finally {
         setUpdating(false);
       }
@@ -276,9 +278,10 @@ export function PermissionModeChip() {
       setOpen(false);
       try {
         await api.patchModes({ permission_mode: mode });
-      } catch {
+      } catch (error) {
         // Revert on failure
         ingest({ type: "state_snapshot", state: { ...appState, permission_mode: current } });
+        toast.error(`Failed to update permission mode: ${error instanceof Error ? error.message : "Unknown error"}`);
       } finally {
         setUpdating(false);
       }
