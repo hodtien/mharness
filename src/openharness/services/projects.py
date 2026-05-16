@@ -48,7 +48,12 @@ _TEMP_LIKE_PATTERNS = (
     re.compile(r"^/private/(?!var/folders/)"),  # exclude macOS /private/var/folders
 )
 
-_WORKTREE_LIKE_PATTERN = re.compile(r"/\.git/worktrees?/")
+_WORKTREE_LIKE_PATTERNS = (
+    re.compile(r"/\.git/worktrees?/"),  # Standard git worktree directories
+    re.compile(r"\.openharness/worktrees?/"),  # Harness worktree storage
+    re.compile(r"[\./]worktrees?/"),  # Standalone worktrees directory (.worktrees or /worktrees)
+    re.compile(r"/worktrees?/autopilot\+"),  # Autopilot+ prefixed worktrees
+)
 
 
 def _is_temp_like(path: str) -> bool:
@@ -76,8 +81,18 @@ def _is_temp_like(path: str) -> bool:
 
 
 def _is_worktree_like(path: str) -> bool:
-    """Return True if ``path`` is inside a git worktree directory."""
-    return "/.git/worktrees" in path or "/.git/worktree/" in path
+    """Return True if ``path`` is a git worktree or harness-managed worktree.
+
+    Detects:
+    - Paths inside ``.git/worktrees`` or ``.git/worktree`` directories.
+    - Paths under ``.openharness/worktrees`` or ``.openharness/worktree``.
+    - Paths under ``.worktrees`` or ``worktrees`` subdirectories.
+    - Paths containing ``/worktrees/autopilot+`` segment (autopilot+ worktree names).
+    """
+    for pattern in _WORKTREE_LIKE_PATTERNS:
+        if pattern.search(path):
+            return True
+    return False
 
 
 def _projects_path() -> Path:

@@ -577,3 +577,124 @@ describe("shortenPath utility", () => {
     expect(pathPara!.textContent).toContain("…");
   });
 });
+
+// ── New Project Modal ───────────────────────────────────────────────────────────
+
+describe("ProjectsPage new project modal", () => {
+  it("opens new project modal when clicking New Project button", async () => {
+    mockFetch(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    fireEvent.click(screen.getByRole("button", { name: /^\+ New Project$/ }));
+    await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
+    expect(screen.getByPlaceholderText("My App")).toBeTruthy();
+    expect(screen.getByPlaceholderText("/path/to/project")).toBeTruthy();
+  });
+
+  it("closes modal on Cancel click and resets form state", async () => {
+    mockFetch(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    fireEvent.click(screen.getByRole("button", { name: /^\+ New Project$/ }));
+    await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
+
+    // Fill in some values
+    fireEvent.change(screen.getByPlaceholderText("My App"), { target: { value: "Test Project" } });
+    fireEvent.change(screen.getByPlaceholderText("/path/to/project"), { target: { value: "/workspace/test" } });
+
+    // Click Cancel
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel$/ }));
+    await waitFor(() => expect(screen.queryByText("New Project")).toBeNull());
+
+    // Reopen modal - form should be reset
+    fireEvent.click(screen.getByRole("button", { name: /^\+ New Project$/ }));
+    await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
+    expect((screen.getByPlaceholderText("My App") as HTMLInputElement).value).toBe("");
+    expect((screen.getByPlaceholderText("/path/to/project") as HTMLInputElement).value).toBe("");
+  });
+
+  it("closes modal on X button click", async () => {
+    mockFetch(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    fireEvent.click(screen.getByRole("button", { name: /^\+ New Project$/ }));
+    await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /^Close modal$/ }));
+    await waitFor(() => expect(screen.queryByText("New Project")).toBeNull());
+  });
+
+  it("closes modal on Escape key", async () => {
+    mockFetch(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    fireEvent.click(screen.getByRole("button", { name: /^\+ New Project$/ }));
+    await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
+
+    fireEvent.keyDown(screen.getByText("New Project").closest("div")!, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByText("New Project")).toBeNull());
+  });
+
+  it("closes modal on overlay click (outside modal content)", async () => {
+    mockFetch(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    fireEvent.click(screen.getByRole("button", { name: /^\+ New Project$/ }));
+    await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
+
+    // Click on the overlay (first div with fixed inset-0)
+    const overlay = screen.getByText("New Project").closest("div")!.parentElement!;
+    fireEvent.click(overlay);
+    await waitFor(() => expect(screen.queryByText("New Project")).toBeNull());
+  });
+
+  it("disables Create button when name is empty", async () => {
+    mockFetch(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    fireEvent.click(screen.getByRole("button", { name: /^\+ New Project$/ }));
+    await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
+
+    // Only fill path, leave name empty
+    fireEvent.change(screen.getByPlaceholderText("/path/to/project"), { target: { value: "/workspace/test" } });
+
+    const createBtn = screen.getByRole("button", { name: /^Create$/ });
+    expect(createBtn).toBeDisabled();
+  });
+
+  it("disables Create button when path is empty", async () => {
+    mockFetch(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    fireEvent.click(screen.getByRole("button", { name: /^\+ New Project$/ }));
+    await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
+
+    // Only fill name, leave path empty
+    fireEvent.change(screen.getByPlaceholderText("My App"), { target: { value: "Test Project" } });
+
+    const createBtn = screen.getByRole("button", { name: /^Create$/ });
+    expect(createBtn).toBeDisabled();
+  });
+
+  it("enables Create button when name and path are filled", async () => {
+    mockFetch(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    fireEvent.click(screen.getByRole("button", { name: /^\+ New Project$/ }));
+    await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
+
+    fireEvent.change(screen.getByPlaceholderText("My App"), { target: { value: "Test Project" } });
+    fireEvent.change(screen.getByPlaceholderText("/path/to/project"), { target: { value: "/workspace/test" } });
+
+    const createBtn = screen.getByRole("button", { name: /^Create$/ });
+    expect(createBtn).not.toBeDisabled();
+  });
+});
