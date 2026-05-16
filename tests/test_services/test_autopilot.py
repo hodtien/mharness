@@ -1541,12 +1541,12 @@ def test_autopilot_run_card_repairs_after_local_verification_failure(
         "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
     )
     monkeypatch.setattr(
-        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
-        lambda self, pr_snapshot, policies: True,
-    )
-    monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
         fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
     )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
@@ -2694,12 +2694,12 @@ def test_autopilot_existing_pr_card_can_auto_merge(tmp_path: Path, monkeypatch) 
         "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
     )
     monkeypatch.setattr(
-        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
-        lambda self, pr_snapshot, policies: True,
-    )
-    monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
         fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
     )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._merge_pull_request",
@@ -3754,12 +3754,12 @@ def test_existing_pr_remote_code_review_failure_repairs_when_attempts_remain(
         fake_wait_for_pr_ci,
     )
     monkeypatch.setattr(
-        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
-        lambda self, pr_snapshot, policies: True,
-    )
-    monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
         fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
     )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
@@ -3769,6 +3769,72 @@ def test_existing_pr_remote_code_review_failure_repairs_when_attempts_remain(
     import asyncio
 
     result = asyncio.run(store._process_existing_pr_card(card, 91, _remote_review_policy()))
+    updated = store.get_card(card.id)
+
+    assert result.status == "queued"
+    assert updated is not None
+    assert updated.status == "queued"
+    assert updated.metadata["human_gate_pending"] is False
+    assert updated.metadata["autopilot_managed"] is True
+    assert updated.metadata["attempt_count"] == 1
+    assert updated.metadata["last_failure_stage"] == "remote_review_failed"
+    assert updated.metadata["last_failure_summary"] == "severity=critical"
+
+
+def test_existing_pr_remote_review_failure_retries_when_ci_passes_but_merge_blocked(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="github_pr",
+        title="GitHub PR #92: Existing autopilot PR",
+        body="open",
+        source_ref="pr:92",
+    )
+
+    async def fake_wait_for_pr_ci(self, pr_number: int, policies):
+        return _green_pr_snapshot(pr_number)
+
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=1,
+            status="failed",
+            stderr="severity=critical",
+        )
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci",
+        fake_wait_for_pr_ci,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: False,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
+        lambda self, pr_number, comment: None,
+    )
+
+    import asyncio
+
+    result = asyncio.run(store._process_existing_pr_card(card, 92, _remote_review_policy()))
     updated = store.get_card(card.id)
 
     assert result.status == "queued"
@@ -3831,12 +3897,12 @@ def test_existing_pr_remote_review_failure_stops_at_repeated_failure_cap(
         fake_wait_for_pr_ci,
     )
     monkeypatch.setattr(
-        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
-        lambda self, pr_snapshot, policies: True,
-    )
-    monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
         fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
     )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._comment_on_pr",
@@ -3981,12 +4047,12 @@ def test_remote_review_failed_stops_at_repeated_failure_cap(tmp_path: Path, monk
         "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
     )
     monkeypatch.setattr(
-        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
-        lambda self, pr_snapshot, policies: True,
-    )
-    monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
         fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
     )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._maybe_run_repair_architect_plan",
@@ -4143,12 +4209,12 @@ def test_remote_review_failed_under_repeated_failure_cap_retries(
         "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
     )
     monkeypatch.setattr(
-        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
-        lambda self, pr_snapshot, policies: True,
-    )
-    monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
         fake_remote_review,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
+        lambda self, pr_snapshot, policies: True,
     )
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._maybe_run_repair_architect_plan",
@@ -6410,6 +6476,25 @@ def test_existing_pr_card_conflicting_branch_passes_through_ci(tmp_path: Path, m
             [],
         )
 
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
+        call_order.append("review")
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=0,
+            status="skipped",
+            stdout="No PR diff detected.",
+        )
+
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._is_git_repo",
         lambda self, cwd: True,
@@ -6446,6 +6531,10 @@ def test_existing_pr_card_conflicting_branch_passes_through_ci(tmp_path: Path, m
         "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
     )
     monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
         lambda self, pr_snapshot, policies: False,
     )
@@ -6466,7 +6555,7 @@ def test_existing_pr_card_conflicting_branch_passes_through_ci(tmp_path: Path, m
     updated = store.get_card(card.id)
     assert updated is not None
     assert updated.metadata.get("human_gate_pending") is True
-    assert call_order == ["sync", "ci"]
+    assert call_order == ["sync", "ci", "review"]
 
 
 def test_repair_exhausted_managed_pr_card_passes_through_ci(
@@ -6512,6 +6601,25 @@ def test_repair_exhausted_managed_pr_card_passes_through_ci(
             "All remote checks passed.",
             {"url": "https://example/pr/42", "labels": [], "isDraft": False},
             [],
+        )
+
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
+        call_order.append("review")
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=0,
+            status="skipped",
+            stdout="No PR diff detected.",
         )
 
     monkeypatch.setattr(
@@ -6954,6 +7062,25 @@ def test_existing_pr_card_skips_branch_sync_for_foreign_worktree(
             [],
         )
 
+    async def fake_remote_review(
+        self,
+        card,
+        pr_number,
+        *,
+        policies,
+        model,
+        base_branch="main",
+        stream=None,
+        checkpoint_attempt=1,
+    ):
+        call_order.append("review")
+        return RepoVerificationStep(
+            command="agent:code-reviewer",
+            returncode=0,
+            status="skipped",
+            stdout="No PR diff detected.",
+        )
+
     monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._is_git_repo",
         lambda self, cwd: True,
@@ -6990,6 +7117,10 @@ def test_existing_pr_card_skips_branch_sync_for_foreign_worktree(
         "openharness.autopilot.service.RepoAutopilotStore._wait_for_pr_ci", fake_wait_for_pr_ci
     )
     monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_remote_code_review_step",
+        fake_remote_review,
+    )
+    monkeypatch.setattr(
         "openharness.autopilot.service.RepoAutopilotStore._automerge_eligible",
         lambda self, pr_snapshot, policies: False,
     )
@@ -7004,7 +7135,7 @@ def test_existing_pr_card_skips_branch_sync_for_foreign_worktree(
     updated = store.get_card(card.id)
     assert updated is not None
     assert updated.metadata.get("base_branch") == "main"
-    assert call_order == ["ci"]
+    assert call_order == ["ci", "review"]
 
 
 def test_reap_dead_worker_cards_resets_orphaned_cards(tmp_path: Path) -> None:

@@ -4839,93 +4839,73 @@ class RepoAutopilotStore:
                 pr_number=pr_number,
                 pr_url=pr_url,
             )
-        if self._automerge_eligible(pr_snapshot, policies):
-            stream_writer.emit("phase_start", {"phase": "remote_review", "attempt": attempt_count})
-            remote_review_step = await self._run_remote_code_review_step(
-                card,
-                pr_number,
-                policies=policies,
-                model=effective_review_model,
-                base_branch=self._base_branch(policies),
-                stream=stream_writer,
-                checkpoint_attempt=attempt_count,
+        automerge_eligible = self._automerge_eligible(pr_snapshot, policies)
+        stream_writer.emit("phase_start", {"phase": "remote_review", "attempt": attempt_count})
+        remote_review_step = await self._run_remote_code_review_step(
+            card,
+            pr_number,
+            policies=policies,
+            model=effective_review_model,
+            base_branch=self._base_branch(policies),
+            stream=stream_writer,
+            checkpoint_attempt=attempt_count,
+        )
+        stream_writer.emit(
+            "phase_end",
+            {
+                "phase": "remote_review",
+                "attempt": attempt_count,
+                "ok": remote_review_step.status not in {"failed", "error"},
+            },
+        )
+        atomic_write_text(
+            current_verification_report,
+            self._render_verification_report(card, [remote_review_step]),
+        )
+        if remote_review_step.status in {"failed", "error"}:
+            summary = (
+                remote_review_step.stderr
+                or remote_review_step.stdout
+                or "remote code review blocked merge"
             )
-            stream_writer.emit(
-                "phase_end",
-                {
-                    "phase": "remote_review",
-                    "attempt": attempt_count,
-                    "ok": remote_review_step.status not in {"failed", "error"},
-                },
+            repeat_meta = self._failure_repeat_metadata(
+                card, stage="remote_review_failed", summary=summary
             )
-            atomic_write_text(
-                current_verification_report,
-                self._render_verification_report(card, [remote_review_step]),
-            )
-            if remote_review_step.status in {"failed", "error"}:
-                summary = (
-                    remote_review_step.stderr
-                    or remote_review_step.stdout
-                    or "remote code review blocked merge"
-                )
-                repeat_meta = self._failure_repeat_metadata(
-                    card, stage="remote_review_failed", summary=summary
-                )
-                remote_review_meta = {
-                    "linked_pr_number": pr_number,
-                    "linked_pr_url": pr_url,
-                    "human_gate_pending": False,
-                    "remote_review_status": remote_review_step.status,
-                    "last_failure_stage": "remote_review_failed",
-                    "last_failure_summary": summary,
-                    **repeat_meta,
-                }
-                max_attempts = self._max_attempts(policies)
-                if (
-                    attempt_count < max_attempts
-                    and repeat_meta["repeated_failure_count"]
-                    < self._max_repeated_failure_attempts(policies)
-                ):
-                    self.update_status(
-                        card.id,
-                        status="queued",
-                        note="existing PR remote review failed; queued repair retry",
-                        metadata_updates={
-                            **remote_review_meta,
-                            "autopilot_managed": True,
-                            "attempt_count": attempt_count,
-                        },
-                    )
-                    self.append_journal(
-                        kind="remote_review_failed_retry",
-                        summary=f"Existing PR remote review failed — queued repair retry (attempt {attempt_count})",
-                        task_id=card.id,
-                        metadata={"pr_number": pr_number, "attempt_count": attempt_count},
-                    )
-                    self._comment_on_pr(pr_number, self._comment_ci_failed(attempt_count, summary))
-                    return RepoRunResult(
-                        card_id=card.id,
-                        status="queued",
-                        run_report_path=str(current_run_report),
-                        verification_report_path=str(current_verification_report),
-                        verification_steps=[remote_review_step],
-                        pr_number=pr_number,
-                        pr_url=pr_url,
-                    )
-
+            remote_review_meta = {
+                "linked_pr_number": pr_number,
+                "linked_pr_url": pr_url,
+                "human_gate_pending": False,
+                "remote_review_status": remote_review_step.status,
+                "last_failure_stage": "remote_review_failed",
+                "last_failure_summary": summary,
+                **repeat_meta,
+            }
+            max_attempts = self._max_attempts(policies)
+            if (
+                attempt_count < max_attempts
+                and repeat_meta["repeated_failure_count"]
+                < self._max_repeated_failure_attempts(policies)
+            ):
                 self.update_status(
                     card.id,
-                    status="completed",
-                    note=f"existing PR #{pr_number} requires human gate after remote review",
+                    status="queued",
+                    note="existing PR remote review failed; queued repair retry",
                     metadata_updates={
                         **remote_review_meta,
-                        "human_gate_pending": True,
+                        "autopilot_managed": True,
+                        "attempt_count": attempt_count,
                     },
                 )
-                self._comment_on_pr(pr_number, self._comment_terminal_failure(summary))
+                self.append_journal(
+                    kind="remote_review_failed_retry",
+                    summary=f"Existing PR remote review failed — queued repair retry (attempt {attempt_count})",
+                    task_id=card.id,
+                    metadata={"pr_number": pr_number, "attempt_count": attempt_count},
+                )
+                self._comment_on_pr(pr_number, self._comment_ci_failed(attempt_count, summary))
                 return RepoRunResult(
                     card_id=card.id,
-                    status="completed",
+                    status="queued",
                     run_report_path=str(current_run_report),
                     verification_report_path=str(current_verification_report),
                     verification_steps=[remote_review_step],
@@ -4933,68 +4913,91 @@ class RepoAutopilotStore:
                     pr_url=pr_url,
                 )
 
-            self._merge_pull_request(pr_number)
             self.update_status(
                 card.id,
-                status="merged",
-                note=f"existing PR #{pr_number} merged automatically",
-                metadata_updates={"linked_pr_number": pr_number, "linked_pr_url": pr_url},
+                status="completed",
+                note=f"existing PR #{pr_number} requires human gate after remote review",
+                metadata_updates={
+                    **remote_review_meta,
+                    "human_gate_pending": True,
+                },
             )
-            self._comment_on_pr(pr_number, self._comment_merged(pr_number))
-            try:
-                with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
-                    self._pull_base_branch(base_branch=self._base_branch(policies))
-            except Exception as exc:
-                self.append_journal(
-                    kind="merge_warning",
-                    summary=f"post-merge pull failed: {exc}",
-                    task_id=card.id,
-                    metadata={"pr_number": pr_number},
-                )
-            else:
-                try:
-                    with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
-                        self._install_editable()
-                except Exception as exc:
-                    self.append_journal(
-                        kind="merge_warning",
-                        summary=f"post-merge install failed: {exc}",
-                        task_id=card.id,
-                        metadata={"pr_number": pr_number},
-                    )
-            try:
-                self._journal_base_advanced_for_active_cards(base_branch=self._base_branch(policies), merged_card_id=card.id)
-            except Exception as exc:
-                self.append_journal(
-                    kind="base_advanced_warning",
-                    summary=f"failed to journal base_advanced after merge: {exc}",
-                    task_id=card.id,
-                )
+            self._comment_on_pr(pr_number, self._comment_terminal_failure(summary))
             return RepoRunResult(
                 card_id=card.id,
-                status="merged",
+                status="completed",
                 run_report_path=str(current_run_report),
                 verification_report_path=str(current_verification_report),
                 verification_steps=[remote_review_step],
                 pr_number=pr_number,
                 pr_url=pr_url,
             )
+
+        if not automerge_eligible:
+            self.update_status(
+                card.id,
+                status="completed",
+                note=f"existing PR #{pr_number} is green; human gate pending",
+                metadata_updates={
+                    "linked_pr_number": pr_number,
+                    "linked_pr_url": pr_url,
+                    "human_gate_pending": True,
+                },
+            )
+            self._comment_on_pr(pr_number, self._comment_human_gate(pr_number))
+            return RepoRunResult(
+                card_id=card.id,
+                status="completed",
+                run_report_path=str(current_run_report),
+                verification_report_path=str(current_verification_report),
+                verification_steps=[remote_review_step],
+                pr_number=pr_number,
+                pr_url=pr_url,
+            )
+
+        self._merge_pull_request(pr_number)
         self.update_status(
             card.id,
-            status="completed",
-            note=f"existing PR #{pr_number} is green; human gate pending",
-            metadata_updates={
-                "linked_pr_number": pr_number,
-                "linked_pr_url": pr_url,
-                "human_gate_pending": True,
-            },
+            status="merged",
+            note=f"existing PR #{pr_number} merged automatically",
+            metadata_updates={"linked_pr_number": pr_number, "linked_pr_url": pr_url},
         )
-        self._comment_on_pr(pr_number, self._comment_human_gate(pr_number))
+        self._comment_on_pr(pr_number, self._comment_merged(pr_number))
+        try:
+            with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
+                self._pull_base_branch(base_branch=self._base_branch(policies))
+        except Exception as exc:
+            self.append_journal(
+                kind="merge_warning",
+                summary=f"post-merge pull failed: {exc}",
+                task_id=card.id,
+                metadata={"pr_number": pr_number},
+            )
+        else:
+            try:
+                with RepoFileLock(self._main_checkout_lock_path, timeout=60.0):
+                    self._install_editable()
+            except Exception as exc:
+                self.append_journal(
+                    kind="merge_warning",
+                    summary=f"post-merge install failed: {exc}",
+                    task_id=card.id,
+                    metadata={"pr_number": pr_number},
+                )
+        try:
+            self._journal_base_advanced_for_active_cards(base_branch=self._base_branch(policies), merged_card_id=card.id)
+        except Exception as exc:
+            self.append_journal(
+                kind="base_advanced_warning",
+                summary=f"failed to journal base_advanced after merge: {exc}",
+                task_id=card.id,
+            )
         return RepoRunResult(
             card_id=card.id,
-            status="completed",
+            status="merged",
             run_report_path=str(current_run_report),
             verification_report_path=str(current_verification_report),
+            verification_steps=[remote_review_step],
             pr_number=pr_number,
             pr_url=pr_url,
         )
