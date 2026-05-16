@@ -1834,6 +1834,15 @@ def test_autopilot_run_card_stops_when_required_repair_architect_disabled(
         "openharness.autopilot.service.RepoAutopilotStore._comment_on_issue",
         lambda self, issue_number, comment: None,
     )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._git_push_branch",
+        lambda self, cwd, branch, **kwargs: None,
+    )
+    
+    def fake_run_git(args, *, cwd=None, check=False, **kwargs):
+        return SimpleNamespace(stdout="", stderr="", returncode=0)
+    
+    monkeypatch.setattr(store, "_run_git", fake_run_git)
 
     import asyncio
 
@@ -1872,6 +1881,7 @@ def test_autopilot_run_card_stops_when_repair_architect_fails(
     )
     policies = store.load_policies()
     policies["verification"]["code_review"]["enabled"] = False
+    policies["autopilot"]["repair"]["architect_fallback_on_failure"] = False
     agent_calls: list[str | None] = []
 
     async def fake_create_worktree(self, repo_path, slug, branch=None, agent_id=None):
@@ -1976,6 +1986,122 @@ def test_autopilot_run_card_stops_when_repair_architect_fails(
     assert agent_calls == ["repair_architect"]
 
 
+def test_autopilot_run_card_repair_architect_fallback_on_failure(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Test that when repair architect fails, it falls back to direct repair when fallback is enabled."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(
+        source_kind="manual_idea",
+        title="Architect repair fallback test",
+        body="When architect fails, should fall back to direct repair",
+    )
+    policies = store.load_policies()
+    policies["verification"]["code_review"]["enabled"] = False
+    policies["autopilot"]["repair"]["architect_fallback_on_failure"] = True
+    agent_calls: list[str | None] = []
+    agent_call_count = {"implement": 0, "repair_architect": 0}
+
+    async def fake_create_worktree(self, repo_path, slug, branch=None, agent_id=None):
+        return SimpleNamespace(path=worktree)
+
+    async def fake_remove_worktree(self, slug):
+        return True
+
+    async def fake_run_agent_prompt(
+        self,
+        prompt: str,
+        *,
+        model,
+        max_turns,
+        permission_mode,
+        cwd=None,
+        phase=None,
+        **kwargs,
+    ):
+        agent_calls.append(phase)
+        if phase == "repair_architect":
+            agent_call_count["repair_architect"] += 1
+            raise RuntimeError("Exceeded maximum turn limit (20)")
+        agent_call_count["implement"] += 1
+        # First implement fails, second implement (after fallback) succeeds
+        if agent_call_count["implement"] == 1:
+            return "worker attempt 1 (will fail verification)"
+        return "worker attempt 2 (after fallback, passes)"
+
+    def fake_run_verification_steps(self, policies, *, cwd=None):
+        # Fail on first attempt, pass after fallback (second implement call)
+        if agent_call_count["implement"] < 2:
+            return [
+                RepoVerificationStep(
+                    command="agent:code-reviewer (diff vs main)",
+                    returncode=1,
+                    status="failed",
+                    stdout=(
+                        "Severity: HIGH\n"
+                        "Findings:\n"
+                        "  - src/openharness/tasks/manager.py:92 correctness stale job not terminalized\n"
+                        "Summary: Requires architect repair."
+                    ),
+                    stderr="severity=high",
+                )
+            ]
+        return []
+
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.create_worktree", fake_create_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.WorktreeManager.remove_worktree", fake_remove_worktree
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.load_policies",
+        lambda self: policies,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore.run_preflight",
+        lambda self, card: PreflightResult(passed=True, checks=[], fatal=[], transient=[]),
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._is_git_repo", lambda self, cwd: True
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_agent_prompt",
+        fake_run_agent_prompt,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._run_verification_steps",
+        fake_run_verification_steps,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._sync_worktree_to_base",
+        lambda self, cwd, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._comment_on_issue",
+        lambda self, issue_number, comment: None,
+    )
+
+    import asyncio
+
+    asyncio.run(store.run_card(card.id))
+    updated = store.get_card(card.id)
+
+    # Verify fallback was triggered: architect failed but second implement was called
+    assert agent_calls == ["implement", "repair_architect", "implement"]
+    assert updated is not None
+    # Verify fallback was activated
+    assert updated.metadata.get("repair_architect_fallback_active") is True
+    journal = store.load_journal(limit=100)
+    fallback_entries = [e for e in journal if e.kind == "repair_architect_fallback"]
+    assert len(fallback_entries) == 1
+    assert "falling back to direct repair" in fallback_entries[0].summary
+
+
 def test_autopilot_run_card_remote_review_architect_failure_human_gates(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -1992,6 +2118,7 @@ def test_autopilot_run_card_remote_review_architect_failure_human_gates(
     policies = store.load_policies()
     policies["verification"]["code_review"]["enabled"] = False
     policies["autopilot"]["github"]["auto_merge"]["mode"] = "always"
+    policies["autopilot"]["repair"]["architect_fallback_on_failure"] = False
     agent_calls: list[str | None] = []
     pr_comments: list[tuple[int, str]] = []
 
