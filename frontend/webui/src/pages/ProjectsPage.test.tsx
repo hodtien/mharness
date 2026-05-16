@@ -1,3 +1,4 @@
+import "@testing-library/jest-dom";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ProjectsPage from "./ProjectsPage";
@@ -704,9 +705,13 @@ describe("ProjectsPage new project modal", () => {
     fireEvent.click(screen.getByRole("button", { name: /^\+ New Project$/ }));
     await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
 
-    // Click on the overlay (first div with fixed inset-0)
-    const overlay = screen.getByText("New Project").closest("div")!.parentElement!;
-    fireEvent.click(overlay);
+    // Click on the overlay backdrop (the div with fixed inset-0 that closes on click)
+    // The overlay is behind the modal content and has onClick={closeNewModal}
+    // We use the pointer event to target coordinates that land on the overlay
+    // The modal is centered, so clicking at position (10, 10) lands on the overlay
+    const overlay = document.querySelector<HTMLElement>('[class*="fixed inset-0"]');
+    expect(overlay).toBeTruthy();
+    fireEvent.click(overlay!);
     await waitFor(() => expect(screen.queryByText("New Project")).toBeNull());
   });
 
