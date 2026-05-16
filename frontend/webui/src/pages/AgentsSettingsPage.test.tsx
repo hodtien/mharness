@@ -114,7 +114,7 @@ const sampleModels = {
 
 interface FetchOverrides {
   patch?: (name: string, body: Record<string, unknown>) => { status?: number; data: unknown };
-  policyAgents?: {
+  policyAgents?: (() => never) | {
     implement_agent: string | null;
     review_agent: string | null;
     operational_agents: string[];
@@ -132,8 +132,12 @@ function setupFetch(overrides: FetchOverrides = {}) {
       return Promise.resolve(jsonResponse(sampleModels));
     }
     if (url === "/api/pipeline/policy/agents" && (!init?.method || init.method === "GET")) {
+      const override = overrides.policyAgents;
+      if (typeof override === "function") {
+        return override();
+      }
       return Promise.resolve(jsonResponse(
-        overrides.policyAgents ?? {
+        override ?? {
           implement_agent: "custom-worker",
           review_agent: "custom-reviewer",
           operational_agents: ["custom-worker", "custom-reviewer"],
@@ -364,6 +368,30 @@ describe("AgentsSettingsPage", () => {
     expect(patch?.url).toBe("/api/agents/Default%20Chat%20Agent");
     const body = JSON.parse(String(patch?.init?.body ?? "{}"));
     expect(body.effort).toBe("high");
+  });
+
+  it("renders agents and models even when policy agents endpoint fails", async () => {
+    mockLocalStorage();
+    setupFetch({
+      policyAgents: () => {
+        throw new Error("Service unavailable");
+      },
+    });
+
+    render(
+      <BrowserRouter>
+        <AgentsSettingsPage />
+      </BrowserRouter>,
+    );
+
+    // Page should still render the agent list despite policy agents failure
+    await waitFor(() => expect(screen.getAllByText("Default Chat Agent")[0]).toBeTruthy());
+    expect(screen.getByText("researcher")).toBeTruthy();
+    // Lightweight warning should appear instead of full-page error
+    expect(screen.getByText(/Policy agents unavailable/i)).toBeTruthy();
+    // Autopilot badges should not appear (operational names unknown)
+    expect(screen.queryByText("Autopilot Worker")).toBeNull();
+    expect(screen.queryByText("Autopilot Review")).toBeNull();
   });
 
   it("shows error toast when PATCH fails", async () => {
