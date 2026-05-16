@@ -405,11 +405,23 @@ test.describe("1. Navigation & Page Headers", () => {
     for (const path of [
       "/settings/modes",
       "/settings/provider",
+      "/settings/providers",
       "/settings/models",
       "/settings/agents",
       "/settings/cron",
+      "/settings/schedule",
     ]) {
       await gotoAuthed(page, path);
+      await expect(page.locator('[aria-label="Primary"]')).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
+    }
+  });
+
+  test("settings aliases: /providers and /schedule do not fall back to /chat", async ({ page }) => {
+    for (const path of ["/settings/providers", "/settings/schedule"]) {
+      await gotoAuthed(page, path);
+      const url = page.url();
+      expect(url).toContain(path);
       await expect(page.locator('[aria-label="Primary"]')).toBeVisible({ timeout: 10_000 });
       await expect(page.locator("h1").first()).toBeVisible({ timeout: 10_000 });
     }

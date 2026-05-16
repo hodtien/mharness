@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, useSearchParams } from "react-router-dom";
+import { NavLink, useLocation, useSearchParams } from "react-router-dom";
 import { api, type SchedulerDiagnosticsResponse } from "../api/client";
 import ProjectSelector from "./ProjectSelector";
 import { useSession } from "../store/session";
@@ -198,16 +198,17 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
 // ── Control Center entry ────────────────────────────────────────────────────
 
 function ControlEntry({ alert, onClose }: { alert: boolean; onClose: () => void }) {
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("project");
-  const to = projectId ? `/settings?project=${encodeURIComponent(projectId)}` : "/settings";
+  const baseTo = projectId ? `/settings?project=${encodeURIComponent(projectId)}` : "/settings";
   return (
     <NavLink
-      to={to}
+      to={baseTo}
       onClick={onClose}
       className={({ isActive }) =>
         `sidebar-nav-link flex items-center gap-1.5 rounded-md border px-2 text-[13px] transition ${
-          isActive
+          isActive || location.pathname.startsWith("/settings")
             ? "border-[var(--accent-strong)]/40 bg-[var(--accent-bg)] text-[var(--accent)]"
             : "border-transparent text-[var(--text-dim)] hover:border-[var(--border)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
         }`

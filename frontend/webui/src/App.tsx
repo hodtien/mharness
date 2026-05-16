@@ -230,6 +230,10 @@ export default function App() {
             element={<ProviderSettingsPage />}
           />
           <Route
+            path="/settings/providers"
+            element={<ProviderSettingsPage />}
+          />
+          <Route
             path="/settings/models"
             element={<ModelsSettingsPage />}
           />
@@ -243,6 +247,10 @@ export default function App() {
           />
           <Route
             path="/settings/cron"
+            element={<CronSettingsPage />}
+          />
+          <Route
+            path="/settings/schedule"
             element={<CronSettingsPage />}
           />
           <Route
