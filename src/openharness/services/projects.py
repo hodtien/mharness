@@ -49,10 +49,10 @@ _TEMP_LIKE_PATTERNS = (
 )
 
 _WORKTREE_LIKE_PATTERNS = (
-    re.compile(r"/\.git/worktrees?/"),  # Standard git worktree directories
-    re.compile(r"\.openharness/worktrees?/"),  # Harness worktree storage
-    re.compile(r"[\./]worktrees?/"),  # Standalone worktrees directory (.worktrees or /worktrees)
-    re.compile(r"/worktrees?/autopilot\+"),  # Autopilot+ prefixed worktrees
+    re.compile(r"(?:^|/)\.git/worktrees?/"),  # Standard git worktree directories
+    re.compile(r"(?:^|/)\.openharness/worktrees?/"),  # Harness worktree storage
+    re.compile(r"(?:^|/)(?:\.worktrees?|worktrees?)/"),  # Standalone worktrees directory
+    re.compile(r"(?:^|/)worktrees?/autopilot\+"),  # Autopilot+ prefixed worktrees
 )
 
 
