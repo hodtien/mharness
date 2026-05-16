@@ -4,6 +4,7 @@ import { BrowserRouter, MemoryRouter, Route, Routes } from "react-router-dom";
 import { PermissionModeChip } from "./Header";
 import Header from "./Header";
 import { useSession } from "../store/session";
+import { useToastStore } from "../store/toast";
 import { ModelPicker } from "./Header";
 
 function mockLocalStorage() {
@@ -124,6 +125,29 @@ describe("PermissionModeChip", () => {
       expect(useSession.getState().appState?.permission_mode).toBe("default");
     });
   });
+
+  it("shows error toast when PATCH fails", async () => {
+    setSessionState("default");
+    useToastStore.setState({ toasts: [] });
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ ok: false, status: 500, statusText: "err", text: () => Promise.resolve("boom") }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PermissionModeChip />);
+    fireEvent.click(screen.getByRole("button", { name: /DEFAULT/ }));
+    const planOption = screen
+      .getAllByRole("menuitem")
+      .find((el) => /PLAN/.test(el.textContent || ""));
+    fireEvent.click(planOption!);
+
+    // Wait for toast to be added to the store
+    await waitFor(() => {
+      expect(useToastStore.getState().toasts).toHaveLength(1);
+    });
+    expect(useToastStore.getState().toasts[0].kind).toBe("error");
+    expect(useToastStore.getState().toasts[0].message).toMatch(/failed to update permission mode/i);
+  });
 });
 
 describe("ModelPicker", () => {
@@ -227,6 +251,43 @@ describe("ModelPicker", () => {
         }),
       );
     });
+  });
+
+  it("reverts model selection and shows error toast when PATCH fails", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/models" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(makeClaudeRouterModels()),
+        });
+      }
+      if (url === "/api/modes" && init?.method === "PATCH") {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          statusText: "err",
+          text: () => Promise.resolve("boom"),
+        });
+      }
+      return Promise.reject(new Error(`unexpected: ${url} ${init?.method || "GET"}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    useToastStore.setState({ toasts: [] });
+
+    render(<ModelPicker />);
+    fireEvent.click(screen.getByRole("button", { name: /cc\/claude-sonnet-4-6/i }));
+
+    const option = await screen.findByText(/Claude Haiku 4 \(cc\/claude-haiku-4\)/);
+    fireEvent.click(option);
+
+    expect(useSession.getState().appState?.model).toBe("cc/claude-haiku-4");
+
+    await waitFor(() => {
+      expect(useSession.getState().appState?.model).toBe("cc/claude-sonnet-4-6");
+      expect(useToastStore.getState().toasts).toHaveLength(1);
+    });
+    expect(useToastStore.getState().toasts[0].kind).toBe("error");
+    expect(useToastStore.getState().toasts[0].message).toMatch(/failed to update model/i);
   });
 
   it("filters models by search", async () => {
