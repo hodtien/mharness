@@ -69,21 +69,39 @@ export default function AgentsSettingsPage() {
 
   const { feedback: saveFeedback, errorMessage: saveErrorMessage, showSaving, showSaved, showError: showSaveError } = useFormFeedback();
 
+  const [policyAgentsError, setPolicyAgentsError] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.listAgents(), api.listModels(), api.getAutopilotPolicyAgents()])
-      .then(([agentsResp, modelsResp, policyAgentsResp]) => {
+    Promise.all([api.listAgents(), api.listModels()])
+      .then(([agentsResp, modelsResp]) => {
         if (cancelled) return;
         setAgents(agentsResp);
         setAllModels(modelsResp);
-        setAutopilotWorkerAgentName(policyAgentsResp.implement_agent);
-        setAutopilotReviewAgentName(policyAgentsResp.review_agent);
       })
       .catch((err) => {
         if (!cancelled) setError(String(err));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Load policy agent names best-effort (enrichment only — badge/link metadata).
+  // Failure is surfaced as a lightweight warning, not a full page error.
+  useEffect(() => {
+    let cancelled = false;
+    api.getAutopilotPolicyAgents()
+      .then((policyAgentsResp) => {
+        if (cancelled) return;
+        setAutopilotWorkerAgentName(policyAgentsResp.implement_agent);
+        setAutopilotReviewAgentName(policyAgentsResp.review_agent);
+      })
+      .catch((err) => {
+        if (!cancelled) setPolicyAgentsError(String(err));
       });
     return () => {
       cancelled = true;
@@ -312,6 +330,12 @@ export default function AgentsSettingsPage() {
         {error && (
           <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
             {error}
+          </div>
+        )}
+
+        {policyAgentsError && (
+          <div className="rounded-lg border border-yellow-400/30 bg-yellow-500/10 p-3 text-xs text-yellow-200">
+            Policy agents unavailable — Autopilot Worker/Review badges hidden. {policyAgentsError}
           </div>
         )}
 
