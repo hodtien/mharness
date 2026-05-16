@@ -76,4 +76,13 @@ describe("PathDisplay", () => {
     await vi.advanceTimersByTime(2500);
     expect(btn.textContent).toBe("⎘");
   });
+
+  it("shows error toast when clipboard write is rejected", async () => {
+    const mock = mockClipboard();
+    mock.writeText.mockRejectedValue(new Error("Clipboard unavailable"));
+    render(<PathDisplay path="/any/path" />);
+    await fireEvent.click(screen.getByRole("button"));
+    // No checkmark on failure
+    expect(screen.getByRole("button").textContent).toBe("⎘");
+  });
 });

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "../store/toast";
 
 interface PathDisplayProps {
   /** Full path to display and copy */
@@ -35,7 +36,7 @@ export function PathDisplay({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // clipboard unavailable — silently ignore
+      toast.error("Copy failed");
     }
   };
 
