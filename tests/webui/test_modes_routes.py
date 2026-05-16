@@ -10,11 +10,16 @@ Covers the scenarios required by the task:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 
 from openharness.config.settings import load_settings
+from openharness.state.app_state import AppState
+from openharness.state.store import AppStateStore
 from openharness.webui.server.app import create_app
+from openharness.webui.server.routes import modes as modes_routes
 
 EXPECTED_FIELDS = (
     "permission_mode",
@@ -40,6 +45,18 @@ def _isolate_config_dir(tmp_path, monkeypatch):
 
 def _client(tmp_path) -> TestClient:
     return TestClient(create_app(token="test-token", cwd=tmp_path, model="sonnet"))
+
+
+def _active_session_bundle(model: str = "sonnet"):
+    app_state = AppStateStore(
+        AppState(
+            model=model,
+            permission_mode="default",
+            theme="system",
+        )
+    )
+    engine = SimpleNamespace(model=model, set_model=lambda new_model: setattr(engine, "model", new_model))
+    return SimpleNamespace(app_state=app_state, engine=engine)
 
 
 def test_get_modes_returns_expected_fields(tmp_path) -> None:
@@ -102,6 +119,61 @@ def test_patch_modes_model_updates_response_and_persists(tmp_path, monkeypatch) 
 
     follow = client.get("/api/modes", headers=AUTH).json()
     assert follow["model"] == "gpt-4o-mini"
+
+
+def test_patch_modes_save_settings_failure_leaves_runtime_unchanged(tmp_path, monkeypatch) -> None:
+    """Persistence failure must not mutate the active session runtime state."""
+    client = _client(tmp_path)
+    host = client.app.state.webui_session_manager.create_session().host
+    bundle = _active_session_bundle(model="sonnet")
+    host._bundle = bundle
+
+    original_state = bundle.app_state.get()
+    original_engine_model = bundle.engine.model
+
+    def fail_save_settings(_settings) -> None:
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(modes_routes, "save_settings", fail_save_settings)
+
+    response = client.patch(
+        "/api/modes",
+        json={"model": "gpt-4o-mini"},
+        headers=AUTH,
+    )
+
+    assert response.status_code == 500
+    assert bundle.app_state.get() is original_state
+    assert bundle.app_state.get().model == "sonnet"
+    assert bundle.engine.model == original_engine_model == "sonnet"
+
+
+def test_patch_modes_runtime_failure_does_not_fail_request(tmp_path, monkeypatch) -> None:
+    """Runtime state mutation failure after successful persistence does not return 500."""
+    client = _client(tmp_path)
+    host = client.app.state.webui_session_manager.create_session().host
+    bundle = _active_session_bundle(model="sonnet")
+    host._bundle = bundle
+
+    def bad_set_model(_model: str) -> None:
+        raise RuntimeError("engine is readonly")
+
+    bundle.engine.set_model = bad_set_model
+
+    response = client.patch(
+        "/api/modes",
+        json={"model": "gpt-4o-mini"},
+        headers=AUTH,
+    )
+
+    # The request succeeds because settings were persisted first.
+    assert response.status_code == 200
+    # Settings on disk reflect the change.
+    settings = load_settings()
+    assert settings.model == "gpt-4o-mini"
+    # Runtime state was not mutated (engine.set_model raised).
+    assert bundle.app_state.get().model == "sonnet"
+    assert bundle.engine.model == "sonnet"
 
 
 def test_patch_modes_invalid_effort_returns_422(tmp_path) -> None:
