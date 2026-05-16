@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import HistoryDetailDrawer from "./HistoryDetailDrawer";
 import EmptyState from "../components/EmptyState";
@@ -40,6 +41,16 @@ interface HistoryPanelProps {
 type LoadState = "loading" | "ready" | "error";
 
 const HISTORY_ENDPOINT = "/api/history";
+
+/**
+ * Build a history API URL with optional project_id query param.
+ */
+function buildHistoryUrl(base: string, projectId: string | null): string {
+  if (!projectId) return base;
+  const url = new URL(base, window.location.origin);
+  url.searchParams.set("project", projectId);
+  return url.toString();
+}
 
 export function formatRelativeTime(createdAt: number): string {
   if (!createdAt || !Number.isFinite(createdAt)) return "—";
@@ -162,6 +173,9 @@ export default function HistoryPanel({
   onDeleted,
   onDetailSelect,
 }: HistoryPanelProps) {
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get("project");
+
   const [sessions, setSessions] = useState<HistorySession[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -185,7 +199,8 @@ export default function HistoryPanel({
       setState("loading");
       setError(null);
       try {
-        const data = await apiFetch<HistorySession[] | { sessions: HistorySession[] }>(endpoint, { signal });
+        const url = buildHistoryUrl(endpoint, projectId);
+        const data = await apiFetch<HistorySession[] | { sessions: HistorySession[] }>(url, { signal });
         const list: HistorySession[] = Array.isArray(data)
           ? data
           : Array.isArray((data as { sessions: HistorySession[] })?.sessions)
@@ -199,7 +214,7 @@ export default function HistoryPanel({
         setState("error");
       }
     },
-    [endpoint],
+    [endpoint, projectId],
   );
 
   useEffect(() => {
@@ -236,7 +251,8 @@ export default function HistoryPanel({
 
       setBusyId(session.session_id);
       try {
-        await apiFetch(`${endpoint}/${encodeURIComponent(session.session_id)}`, {
+        const deleteUrl = buildHistoryUrl(`${endpoint}/${encodeURIComponent(session.session_id)}`, projectId);
+        await apiFetch(deleteUrl, {
           method: "DELETE",
         });
         setSessions((prev) =>
@@ -250,7 +266,7 @@ export default function HistoryPanel({
         setBusyId(null);
       }
     },
-    [busyId, endpoint, onDeleted],
+    [busyId, endpoint, projectId, onDeleted],
   );
 
   const closeDrawer = useCallback(() => {
