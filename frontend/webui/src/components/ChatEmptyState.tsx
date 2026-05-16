@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useSession } from "../store/session";
 import { getAuthSemanticState } from "../utils/authStatusSemantics";
 
@@ -18,12 +19,22 @@ function StatusItem({ label, value }: { label: string; value: string }) {
 }
 
 export default function ChatEmptyState({ onSend }: { onSend: (text: string) => void }) {
+  const navigate = useNavigate();
   const appState = useSession((s) => s.appState);
 
   const actions: Action[] = [
     { label: "Resume recent session", icon: "↺", onClick: () => onSend("/history") },
     { label: "Open Autopilot board", icon: "◈", onClick: () => onSend("/autopilot") },
-    { label: "Create Autopilot idea", icon: "✎", onClick: () => onSend("/autopilot") },
+    {
+      label: "Create Autopilot idea",
+      icon: "✎",
+      onClick: () => {
+        // Navigate to Autopilot with new=1 to open the idea creation modal
+        const params = new URLSearchParams(window.location.search);
+        const basePath = "/autopilot";
+        navigate(`${basePath}?${params.toString()}&new=1`);
+      },
+    },
     { label: "Check system status", icon: "◉", onClick: () => onSend("/status") },
     { label: "/help", icon: "?", onClick: () => onSend("/help") },
   ];
