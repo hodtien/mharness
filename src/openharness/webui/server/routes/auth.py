@@ -14,14 +14,18 @@ from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from openharness.webui.server.auth_store import (
+    check_throttle,
     change_password as _change_password,
     clear_tokens,
     create_tokens,
     get_token_pair,
     is_access_token_valid,
     is_default_password,
+    record_failed_login,
     refresh_tokens,
+    reset_failed_login_attempts,
     store_tokens,
+    validate_password_strength,
     verify_password,
 )
 
@@ -77,7 +81,7 @@ class ChangePasswordRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     old_password: str
-    new_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8)
 
 
 class StatusResponse(BaseModel):
@@ -124,11 +128,30 @@ def login(request: LoginRequest) -> LoginResponse:
             "is_default_password": true,
         }
     """
+    # Check throttle before verifying password
+    locked, retry_after = check_throttle()
+    if locked:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many failed attempts. Try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
     if not verify_password(request.password):
+        _, retry_after = record_failed_login()
+        if retry_after:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Too many failed attempts. Try again in {retry_after} seconds.",
+                headers={"Retry-After": str(retry_after)},
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid password",
         )
+
+    # Successful login — reset failed attempt counter
+    reset_failed_login_attempts()
 
     pair = create_tokens(expires_in=ACCESS_TOKEN_TTL, refresh_expires_in=REFRESH_TOKEN_TTL)
     store_tokens(pair)
@@ -185,6 +208,14 @@ def change_password(request: ChangePasswordRequest) -> ChangePasswordResponse:
     password as ``new_password``.  All existing tokens are revoked and the
     caller must log in again with the new password.
     """
+    # Validate new password strength first (before touching old password)
+    valid, msg = validate_password_strength(request.new_password)
+    if not valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=msg,
+        )
+
     ok = _change_password(request.old_password, request.new_password)
     if not ok:
         raise HTTPException(

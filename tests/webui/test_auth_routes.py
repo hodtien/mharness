@@ -174,7 +174,7 @@ def test_change_password_clears_default_flag_revokes_tokens_and_rejects_old_pass
 
     response = client.post(
         "/api/auth/change-password",
-        json={"old_password": "123456", "new_password": "changed-password"},
+        json={"old_password": "123456", "new_password": "Changed123!"},
     )
 
     assert response.status_code == 200, response.text
@@ -190,7 +190,7 @@ def test_change_password_clears_default_flag_revokes_tokens_and_rejects_old_pass
     )
     assert revoked.status_code == 401
 
-    new_login = client.post("/api/auth/login", json={"password": "changed-password"})
+    new_login = client.post("/api/auth/login", json={"password": "Changed123!"})
     assert new_login.status_code == 200, new_login.text
 
 
@@ -240,3 +240,140 @@ def test_invalid_refresh_returns_401_clears_tokens_and_allows_password_login_fal
     fallback = client.post("/api/auth/login", json={"password": "123456"})
     assert fallback.status_code == 200, fallback.text
     assert fallback.json()["access_token"]
+
+
+# ---------------------------------------------------------------------------
+# Throttling tests
+# ---------------------------------------------------------------------------
+
+
+def _bad_login(client: TestClient, i: int) -> None:
+    """Attempt a bad login, asserting it fails but is not a 429 (yet)."""
+    r = client.post("/api/auth/login", json={"password": f"wrong-{i}"})
+    assert r.status_code == 401, f"attempt {i} gave {r.status_code} instead of 401: {r.text}"
+
+
+def test_repeated_failed_login_attempts_trigger_429_after_5(
+    client: TestClient,
+) -> None:
+    """Five wrong passwords are 401; the 6th triggers a 429 lockout."""
+    for i in range(1, 5):
+        _bad_login(client, i)
+    r6 = client.post("/api/auth/login", json={"password": "wrong-6"})
+    assert r6.status_code == 429, f"Expected 429 but got {r6.status_code}: {r6.text}"
+    assert "Retry-After" in r6.headers, r6.headers
+    assert r6.json()["detail"].startswith("Too many failed attempts")
+
+
+def test_lockout_rejects_all_passwords(
+    client: TestClient,
+) -> None:
+    """Once locked out, even the correct password returns 429."""
+    for i in range(1, 5):
+        _bad_login(client, i)
+    fifth = client.post("/api/auth/login", json={"password": "wrong-5"})
+    assert fifth.status_code == 429, fifth.text
+
+    r = client.post("/api/auth/login", json={"password": "123456"})
+    assert r.status_code == 429
+
+
+def test_successful_login_resets_failed_attempt_counter(
+    client: TestClient,
+) -> None:
+    """A successful login clears the failed-attempt counter."""
+    # Accumulate 4 failures
+    for i in range(1, 5):
+        _bad_login(client, i)
+    # Succeed before the lockout threshold is reached
+    body = _login(client)
+    assert body["access_token"]
+    # Counter is reset — we can fail 4 more times again
+    for i in range(10, 14):
+        _bad_login(client, i)
+    fifth = client.post("/api/auth/login", json={"password": "wrong-last"})
+    assert fifth.status_code == 429
+
+
+def test_correct_password_rejected_during_lockout(
+    client: TestClient,
+) -> None:
+    """The correct password must also return 429 during lockout (no oracle)."""
+    for i in range(1, 5):
+        _bad_login(client, i)
+    fifth = client.post("/api/auth/login", json={"password": "wrong-5"})
+    assert fifth.status_code == 429
+
+    r = client.post("/api/auth/login", json={"password": "123456"})
+    assert r.status_code == 429
+    assert "Retry-After" in r.headers
+
+
+# ---------------------------------------------------------------------------
+# Password strength tests
+# ---------------------------------------------------------------------------
+
+
+def test_change_password_rejects_too_short(client: TestClient) -> None:
+    _login(client)
+    r = client.post(
+        "/api/auth/change-password",
+        json={"old_password": "123456", "new_password": "Abc1!"},
+    )
+    assert r.status_code == 422  # Pydantic min_length validation
+
+
+def test_change_password_rejects_no_lowercase(client: TestClient) -> None:
+    _login(client)
+    r = client.post(
+        "/api/auth/change-password",
+        json={"old_password": "123456", "new_password": "UPPERCASE123!"},
+    )
+    assert r.status_code == 400
+    assert "lowercase" in r.json()["detail"]
+
+
+def test_change_password_rejects_no_uppercase(client: TestClient) -> None:
+    _login(client)
+    r = client.post(
+        "/api/auth/change-password",
+        json={"old_password": "123456", "new_password": "lowercase123!"},
+    )
+    assert r.status_code == 400
+    assert "uppercase" in r.json()["detail"]
+
+
+def test_change_password_rejects_no_digit(client: TestClient) -> None:
+    _login(client)
+    r = client.post(
+        "/api/auth/change-password",
+        json={"old_password": "123456", "new_password": "NoDigitsHere!"},
+    )
+    assert r.status_code == 400
+    assert "digit" in r.json()["detail"]
+
+
+def test_change_password_rejects_common_passwords(client: TestClient) -> None:
+    _login(client)
+    # These match the weak-allowlist entries exactly after lowercasing
+    for weak in ("Password1", "Qwerty123", "Letmein123"):
+        r = client.post(
+            "/api/auth/change-password",
+            json={"old_password": "123456", "new_password": weak},
+        )
+        assert r.status_code == 400, f"{weak!r} should be rejected but got {r.status_code}"
+        assert "common" in r.json()["detail"].lower(), r.json()["detail"]
+
+
+def test_change_password_accepts_strong_password(client: TestClient) -> None:
+    _login(client)
+    r = client.post(
+        "/api/auth/change-password",
+        json={"old_password": "123456", "new_password": "Str0ng!Pass"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is True
+
+    # New password must work
+    new_login = client.post("/api/auth/login", json={"password": "Str0ng!Pass"})
+    assert new_login.status_code == 200, new_login.text
