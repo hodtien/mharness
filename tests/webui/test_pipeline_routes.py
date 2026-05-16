@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from openharness.autopilot.session_store import save_checkpoint
 from openharness.autopilot.types import PreflightCheck, PreflightResult
+from openharness.services.projects import create_project
 from openharness.webui.server.app import create_app
 
 AUTH = {"Authorization": "Bearer test-token"}
@@ -57,6 +58,53 @@ def test_list_cards_returns_enqueued_cards(tmp_path) -> None:
     assert len(cards) == 2
     titles = {c["title"] for c in cards}
     assert titles == {"First card", "Second card"}
+
+
+def test_list_cards_reads_requested_project_registry(tmp_path) -> None:
+    client = _client(tmp_path)
+    other_project = tmp_path / "context-cloud"
+    other_project.mkdir()
+    project = create_project(name="ContextCloud", path=str(other_project))
+
+    assert client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Harness card"}).status_code == 201
+    registry_dir = other_project / ".openharness" / "autopilot"
+    registry_dir.mkdir(parents=True)
+    registry = {
+        "cards": [
+            {
+                "id": "context-card",
+                "fingerprint": "context-card-fingerprint",
+                "title": "ContextCloud card",
+                "status": "queued",
+                "source_kind": "manual_idea",
+                "source_ref": "manual:context-card",
+                "score": 120,
+                "score_reasons": [],
+                "labels": [],
+                "created_at": 1.0,
+                "updated_at": 1.0,
+                "metadata": {},
+            }
+        ],
+        "updated_at": 1.0,
+    }
+    (registry_dir / "registry.json").write_text(json.dumps(registry), encoding="utf-8")
+
+    response = client.get(f"/api/pipeline/cards?project_id={project.id}", headers=AUTH)
+
+    assert response.status_code == 200
+    cards = response.json()["cards"]
+    assert [card["title"] for card in cards] == ["ContextCloud card"]
+
+
+def test_list_cards_unknown_project_id_returns_404(tmp_path) -> None:
+    client = _client(tmp_path)
+    assert client.post("/api/pipeline/cards", headers=AUTH, json={"title": "Harness card"}).status_code == 201
+
+    response = client.get("/api/pipeline/cards?project_id=missing", headers=AUTH)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == {"error": "project_not_found"}
 
 
 def test_list_cards_includes_metadata_fields(tmp_path) -> None:

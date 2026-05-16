@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import PipelinePage, { matchesActivityFilter, ActivityFilter } from "./PipelinePage";
+import { useSession } from "../store/session";
 
 function mockLocalStorage() {
   let store: Record<string, string> = {};
@@ -108,6 +109,29 @@ describe("matchesActivityFilter", () => {
 describe("PipelinePage", () => {
   beforeEach(() => {
     mockLocalStorage();
+    useSession.getState().setActiveProjectId(null);
+  });
+
+  it("requests cards for the active project", async () => {
+    useSession.getState().setActiveProjectId("context-cloud");
+    const fetchMock = vi.fn((url: string) => {
+      if (url === "/api/pipeline/cards?project_id=context-cloud") {
+        return Promise.resolve(jsonResponse({ cards: [], updated_at: 0 }));
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BrowserRouter>
+        <PipelinePage />
+      </BrowserRouter>,
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      "/api/pipeline/cards?project_id=context-cloud",
+      expect.anything(),
+    ));
   });
 
   it("renders board with correct lanes (Queue, Running, Review, Failed/Paused, Done/Merged)", async () => {

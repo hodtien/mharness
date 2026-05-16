@@ -1763,6 +1763,7 @@ export default function PipelinePage() {
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [policyDefaultModel, setPolicyDefaultModel] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeProjectId = useSession((s) => s.activeProjectId);
   const projectSwitchedAt = useSession((s) => s.projectSwitchedAt);
   /** Override terminal collapse: when true, show all terminal cards regardless of limit */
   const [showAllTerminal, setShowAllTerminal] = useState(false);
@@ -1792,19 +1793,26 @@ export default function PipelinePage() {
       .catch(() => setPolicyDefaultModel(null));
   }, []);
 
+  const cardsPath = useMemo(() => {
+    const params = new URLSearchParams();
+    if (activeProjectId) params.set("project_id", activeProjectId);
+    const query = params.toString();
+    return `/api/pipeline/cards${query ? `?${query}` : ""}`;
+  }, [activeProjectId]);
+
   const refreshCards = useCallback(() => {
-    apiFetch<{ cards: PipelineCard[]; updated_at: number }>("/api/pipeline/cards")
+    apiFetch<{ cards: PipelineCard[]; updated_at: number }>(cardsPath)
       .then((data) => {
         setCards(data.cards);
         setLastUpdated(Date.now() / 1000);
         setSecondsAgo(0);
       })
       .catch((err) => console.error("refresh cards failed:", err));
-  }, []);
+  }, [cardsPath]);
 
   useEffect(() => {
     let cancelled = false;
-    apiFetch<{ cards: PipelineCard[]; updated_at: number }>("/api/pipeline/cards")
+    apiFetch<{ cards: PipelineCard[]; updated_at: number }>(cardsPath)
       .then((cardsData) => {
         if (cancelled) return;
         setCards(cardsData.cards);
@@ -1820,7 +1828,7 @@ export default function PipelinePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [cardsPath]);
 
   // Re-fetch cards when the active project changes.
   useEffect(() => {

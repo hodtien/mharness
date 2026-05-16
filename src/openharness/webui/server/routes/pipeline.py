@@ -31,6 +31,7 @@ from openharness.autopilot.session_store import (
 )
 from openharness.config.paths import get_project_autopilot_policy_path
 from openharness.autopilot.types import RepoAutopilotRegistry, RepoJournalEntry, RepoTaskCard, RepoTaskStatus
+from openharness.services.projects import get_project
 from openharness.webui.server.state import WebUIState, get_state, get_task_manager, require_stream_token, require_token
 
 _CARD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -205,14 +206,18 @@ def list_pipeline_journal(
 
 
 @router.get("/cards", dependencies=_AUTH_DEPENDENCY)
-def list_pipeline_cards(state: WebUIState = Depends(get_state)) -> dict:
+def list_pipeline_cards(project_id: str | None = None, state: WebUIState = Depends(get_state)) -> dict:
     """Return the autopilot task card list from the per-repo registry.
 
     Reads ``.openharness/autopilot/registry.json``. Returns an empty card list
     if the file does not exist or is malformed, matching the behaviour of
     :meth:`openharness.autopilot.service.RepoAutopilotService._load_registry`.
     """
-    registry_path = state.cwd / ".openharness" / "autopilot" / "registry.json"
+    project = get_project(project_id) if project_id else None
+    if project_id and project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "project_not_found"})
+    cwd = Path(project.path) if project else state.cwd
+    registry_path = cwd / ".openharness" / "autopilot" / "registry.json"
     if not registry_path.is_file():
         return {"cards": [], "updated_at": 0.0}
     try:
