@@ -1852,11 +1852,11 @@ class RepoAutopilotStore:
                         except RepairArchitectFailedError as exc:
                             architect_failure_summary = str(exc)
                             repair_cfg = (policies.get("autopilot", {}).get("repair", {}) or {})
-                            # Don't fallback if architect is explicitly disabled
-                            architect_explicitly_disabled = "is disabled" in architect_failure_summary
+                            # Don't fallback if architect is explicitly disabled or filtered out by config
+                            architect_required_by_config = "is disabled" in architect_failure_summary or "is filtered out" in architect_failure_summary
                             fallback_enabled = (
                                 repair_cfg.get("architect_fallback_on_failure", True)
-                                and not architect_explicitly_disabled
+                                and not architect_required_by_config
                             )
                             
                             if fallback_enabled:
@@ -2161,11 +2161,11 @@ class RepoAutopilotStore:
                             except RepairArchitectFailedError as exc:
                                 architect_failure_summary = str(exc)
                                 repair_cfg = (policies.get("autopilot", {}).get("repair", {}) or {})
-                                # Don't fallback if architect is explicitly disabled
-                                architect_explicitly_disabled = "is disabled" in architect_failure_summary
+                                # Don't fallback if architect is explicitly disabled or filtered out by config
+                                architect_required_by_config = "is disabled" in architect_failure_summary or "is filtered out" in architect_failure_summary
                                 fallback_enabled = (
                                     repair_cfg.get("architect_fallback_on_failure", True)
-                                    and not architect_explicitly_disabled
+                                    and not architect_required_by_config
                                 )
                                 
                                 if fallback_enabled:
@@ -2596,11 +2596,11 @@ class RepoAutopilotStore:
                                 except RepairArchitectFailedError as exc:
                                     architect_failure_summary = str(exc)
                                     repair_cfg = (policies.get("autopilot", {}).get("repair", {}) or {})
-                                    # Don't fallback if architect is explicitly disabled
-                                    architect_explicitly_disabled = "is disabled" in architect_failure_summary
+                                    # Don't fallback if architect is explicitly disabled or filtered out by config
+                                    architect_required_by_config = "is disabled" in architect_failure_summary or "is filtered out" in architect_failure_summary
                                     fallback_enabled = (
                                         repair_cfg.get("architect_fallback_on_failure", True)
-                                        and not architect_explicitly_disabled
+                                        and not architect_required_by_config
                                     )
                                     
                                     if fallback_enabled:
