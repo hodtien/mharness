@@ -14,7 +14,7 @@ from types import MethodType, SimpleNamespace
 
 from openharness.autopilot import PreflightCheck, PreflightResult, RepoAutopilotStore, RepoTaskCard, RepoVerificationStep
 from openharness.swarm.worktree import WorktreeInfo
-from openharness.autopilot.service import _DEFAULT_AUTOPILOT_POLICY, _DEFAULT_VERIFICATION_POLICY
+from openharness.autopilot.service import _DEFAULT_AUTOPILOT_POLICY, _DEFAULT_VERIFICATION_POLICY, _parse_review_severity
 from openharness.autopilot.session_store import save_checkpoint
 from openharness.config.paths import (
     get_project_active_repo_context_path,
@@ -8619,6 +8619,42 @@ Summary: High priority issues found.
     assert "Severity: HIGH" in feedback
     assert "N+1 query detected" in feedback
     assert "Large function should be split" in feedback
+
+
+def test_review_severity_ignores_prefixed_severity_words() -> None:
+    assert _parse_review_severity("Severity: high-level summary") == "none"
+    assert _parse_review_severity("Severity: criticality unknown") == "none"
+
+
+def test_extract_reviewer_feedback_handles_inline_high_severity_findings(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runs_dir = repo / ".openharness" / "autopilot" / "runs"
+    runs_dir.mkdir(parents=True)
+
+    store = RepoAutopilotStore(repo)
+    card_id = "test-card-inline-high"
+
+    verification_report = runs_dir / f"{card_id}-attempt-01-verification.md"
+    verification_report.write_text(
+        """# Verification Report
+
+## FAILED :: agent:code-reviewer (diff vs main)
+
+### stdout
+```text
+Severity: HIGH Findings:
+  - src/openharness/services/projects.py:54 bug Broad worktree pattern matches path prefixes.
+Summary: High priority issue found.
+```
+""",
+        encoding="utf-8",
+    )
+
+    feedback = store._extract_reviewer_feedback(card_id)
+
+    assert "Severity: HIGH" in feedback
+    assert "Broad worktree pattern" in feedback
 
 
 def test_extract_reviewer_feedback_preserves_summary_rationale(tmp_path: Path) -> None:

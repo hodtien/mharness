@@ -252,7 +252,7 @@ def _parse_review_severity(text: str) -> str:
     if not text:
         return "none"
     explicit = re.search(
-        r"^\s*Severity:\s*(CRITICAL|HIGH|MEDIUM|LOW|NONE)\s*$", text, re.IGNORECASE | re.MULTILINE
+        r"^\s*Severity:\s*(CRITICAL|HIGH|MEDIUM|LOW|NONE)(?:\s|$)", text, re.IGNORECASE | re.MULTILINE
     )
     if explicit:
         return explicit.group(1).lower()
@@ -4353,12 +4353,13 @@ class RepoAutopilotStore:
             if not in_reviewer_section:
                 continue
 
-            if stripped.startswith("Severity:"):
-                severity_text = stripped.split(":", 1)[1].strip().upper()
+            severity_match = re.match(r"^Severity:\s*(CRITICAL|HIGH|MEDIUM|LOW|NONE)(?:\s|$)", stripped, re.IGNORECASE)
+            if severity_match:
+                severity_text = severity_match.group(1).upper()
                 if severity_text in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
                     current_severity = severity_text
 
-            if stripped.startswith("Findings:"):
+            if "Findings:" in stripped:
                 in_findings = True
                 continue
 
