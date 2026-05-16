@@ -2184,6 +2184,10 @@ class RepoAutopilotStore:
                                     metadata_updates.update(
                                         {
                                             "repair_architect_fallback_active": True,
+                                            # Clear stale persisted architect metadata
+                                            "repair_architect_plan_path": None,
+                                            "repair_architect_attempt": None,
+                                            "repair_architect_direct_repair_pending": False,
                                         }
                                     )
                                     architect_plan_path = None
@@ -2619,6 +2623,10 @@ class RepoAutopilotStore:
                                         remote_review_meta.update(
                                             {
                                                 "repair_architect_fallback_active": True,
+                                                # Clear stale persisted architect metadata
+                                                "repair_architect_plan_path": None,
+                                                "repair_architect_attempt": None,
+                                                "repair_architect_direct_repair_pending": False,
                                             }
                                         )
                                         architect_plan_path = None
