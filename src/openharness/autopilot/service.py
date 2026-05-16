@@ -157,7 +157,7 @@ _DEFAULT_AUTOPILOT_POLICY = {
         "architect_agent": "architect",
         "architect_model": "claude-architect",
         "architect_on_severity": ["critical", "high", "medium", "low"],
-        "architect_max_turns": 4,
+        "architect_max_turns": 20,
         "architect_max_diff_chars": 80000,
     },
 }
