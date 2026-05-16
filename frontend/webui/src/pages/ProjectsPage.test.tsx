@@ -157,23 +157,23 @@ describe("ProjectsPage view filters", () => {
     }
   });
 
-  it('hides temp-like projects when switching to "Existing" filter', async () => {
-    const tempProjects: ProjectsResponse = {
+  it('shows only existing (non-missing) projects in the "Existing" filter', async () => {
+    const mixedProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p1", name: "Real App", path: "/workspace/real-app", is_temp_like: false }),
-        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+        makeProject({ id: "p1", name: "Real App", path: "/workspace/real-app", exists: true }),
+        makeProject({ id: "p2", name: "Gone", path: "/nonexistent/gone", exists: false }),
       ],
-      active_project_id: "p1",
+      active_project_id: null,
     };
-    mockListProjects(tempProjects);
+    mockListProjects(mixedProjects);
     render(<ProjectsPage />);
     await waitForProjects(2);
 
-    // Switch to Existing filter
+    // Switch to Existing filter — only non-missing projects are shown
     fireEvent.click(screen.getByRole("tab", { name: /^Existing$/ }));
     await waitForProjects(1);
     expect(projectHeading("Real App")).toBeTruthy();
-    expect(screen.queryByRole("heading", { level: 2, name: "Pytest Temp" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "Gone" })).toBeNull();
   });
 
   it('shows temp-like projects when switching to "Temp / Test" filter', async () => {
