@@ -207,7 +207,20 @@ def change_password(request: ChangePasswordRequest) -> ChangePasswordResponse:
     Requires the current password as ``old_password`` and the desired new
     password as ``new_password``.  All existing tokens are revoked and the
     caller must log in again with the new password.
+
+    Failed ``old_password`` attempts are tracked against the same throttle/
+    lockout counter used by ``/login`` so that brute-forcing the old password
+    triggers the same protection.
     """
+    # Check throttle before touching the old password (same guard as /login)
+    locked, retry_after = check_throttle()
+    if locked:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many failed attempts. Try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
     # Validate new password strength first (before touching old password)
     valid, msg = validate_password_strength(request.new_password)
     if not valid:
@@ -218,11 +231,21 @@ def change_password(request: ChangePasswordRequest) -> ChangePasswordResponse:
 
     ok = _change_password(request.old_password, request.new_password)
     if not ok:
+        # Record the failed attempt and check for lockout
+        _, retry_after = record_failed_login()
+        if retry_after:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Too many failed attempts. Try again in {retry_after} seconds.",
+                headers={"Retry-After": str(retry_after)},
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid current password",
         )
 
+    # Successful change — reset failed attempt counter
+    reset_failed_login_attempts()
     clear_tokens()
     return ChangePasswordResponse(ok=True, is_default_password=is_default_password())
 
