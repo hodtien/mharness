@@ -194,6 +194,26 @@ def test_change_password_clears_default_flag_revokes_tokens_and_rejects_old_pass
     assert new_login.status_code == 200, new_login.text
 
 
+def test_repeated_failed_change_password_attempts_trigger_429_after_5(
+    client: TestClient,
+) -> None:
+    _login(client)
+    for i in range(1, 5):
+        r = client.post(
+            "/api/auth/change-password",
+            json={"old_password": f"wrong-{i}", "new_password": "Changed123!"},
+        )
+        assert r.status_code == 401, f"attempt {i} gave {r.status_code} instead of 401: {r.text}"
+
+    r6 = client.post(
+        "/api/auth/change-password",
+        json={"old_password": "wrong-6", "new_password": "Changed123!"},
+    )
+    assert r6.status_code == 429, f"Expected 429 but got {r6.status_code}: {r6.text}"
+    assert "Retry-After" in r6.headers, r6.headers
+    assert r6.json()["detail"].startswith("Too many failed attempts")
+
+
 def test_missing_refresh_returns_401_clears_tokens_and_allows_password_login_fallback(
     client: TestClient,
     isolated_home: Path,
