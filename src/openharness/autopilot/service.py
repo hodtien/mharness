@@ -159,6 +159,7 @@ _DEFAULT_AUTOPILOT_POLICY = {
         "architect_on_severity": ["critical", "high", "medium", "low"],
         "architect_max_turns": 20,
         "architect_max_diff_chars": 80000,
+        "architect_fallback_on_failure": True,
     },
 }
 _DEFAULT_VERIFICATION_POLICY = {
@@ -1850,33 +1851,65 @@ class RepoAutopilotStore:
                             )
                         except RepairArchitectFailedError as exc:
                             architect_failure_summary = str(exc)
-                            self.update_status(
-                                card.id,
-                                status="failed",
-                                note=architect_failure_summary,
-                                metadata_updates={
-                                    "last_failure_stage": "repair_architect_failed",
-                                    "last_failure_summary": architect_failure_summary,
-                                    "repair_architect_failure_summary": architect_failure_summary,
-                                    "repair_architect_underlying_failure_stage": exc.failure_stage,
-                                    "repair_architect_underlying_failure_summary": exc.failure_summary,
-                                },
+                            repair_cfg = (policies.get("autopilot", {}).get("repair", {}) or {})
+                            # Don't fallback if architect is explicitly disabled
+                            architect_explicitly_disabled = "is disabled" in architect_failure_summary
+                            fallback_enabled = (
+                                repair_cfg.get("architect_fallback_on_failure", True)
+                                and not architect_explicitly_disabled
                             )
-                            if issue_number is not None:
-                                self._comment_on_issue(
-                                    issue_number,
-                                    self._comment_terminal_failure(architect_failure_summary),
+                            
+                            if fallback_enabled:
+                                # Fallback: log the architect failure but continue with direct repair
+                                self.append_journal(
+                                    kind="repair_architect_fallback",
+                                    summary=f"Repair architect failed, falling back to direct repair: {architect_failure_summary}",
+                                    task_id=card.id,
+                                    metadata={
+                                        "attempt_count": attempt_count,
+                                        "underlying_failure_stage": exc.failure_stage,
+                                        "underlying_failure_summary": exc.failure_summary,
+                                    },
                                 )
-                            return RepoRunResult(
-                                card_id=card.id,
-                                status="failed",
-                                assistant_summary=architect_failure_summary,
-                                run_report_path=str(current_run_report),
-                                verification_report_path=str(current_verification_report),
-                                verification_steps=[],
-                                attempt_count=attempt_count,
-                                worktree_path=str(working_cwd),
-                            )
+                                # Clear the retry flag and continue to direct repair
+                                self.update_status(
+                                    card.id,
+                                    status="repairing",
+                                    metadata_updates={
+                                        "repair_architect_retry_requested": False,
+                                        "repair_architect_fallback_active": True,
+                                    },
+                                )
+                                architect_repair_path = None
+                            else:
+                                # No fallback: fail the task immediately
+                                self.update_status(
+                                    card.id,
+                                    status="failed",
+                                    note=architect_failure_summary,
+                                    metadata_updates={
+                                        "last_failure_stage": "repair_architect_failed",
+                                        "last_failure_summary": architect_failure_summary,
+                                        "repair_architect_failure_summary": architect_failure_summary,
+                                        "repair_architect_underlying_failure_stage": exc.failure_stage,
+                                        "repair_architect_underlying_failure_summary": exc.failure_summary,
+                                    },
+                                )
+                                if issue_number is not None:
+                                    self._comment_on_issue(
+                                        issue_number,
+                                        self._comment_terminal_failure(architect_failure_summary),
+                                    )
+                                return RepoRunResult(
+                                    card_id=card.id,
+                                    status="failed",
+                                    assistant_summary=architect_failure_summary,
+                                    run_report_path=str(current_run_report),
+                                    verification_report_path=str(current_verification_report),
+                                    verification_steps=[],
+                                    attempt_count=attempt_count,
+                                    worktree_path=str(working_cwd),
+                                )
                     if architect_repair_path is not None:
                         assistant_summary = (
                             "Repair architect applied direct changes after the previous "
@@ -2127,34 +2160,63 @@ class RepoAutopilotStore:
                                 )
                             except RepairArchitectFailedError as exc:
                                 architect_failure_summary = str(exc)
-                                self.update_status(
-                                    card.id,
-                                    status="failed",
-                                    note=architect_failure_summary,
-                                    metadata_updates={
-                                        **metadata_updates,
-                                        "last_failure_stage": "repair_architect_failed",
-                                        "last_failure_summary": architect_failure_summary,
-                                        "repair_architect_failure_summary": architect_failure_summary,
-                                        "repair_architect_underlying_failure_stage": exc.failure_stage,
-                                        "repair_architect_underlying_failure_summary": exc.failure_summary,
-                                    },
+                                repair_cfg = (policies.get("autopilot", {}).get("repair", {}) or {})
+                                # Don't fallback if architect is explicitly disabled
+                                architect_explicitly_disabled = "is disabled" in architect_failure_summary
+                                fallback_enabled = (
+                                    repair_cfg.get("architect_fallback_on_failure", True)
+                                    and not architect_explicitly_disabled
                                 )
-                                if issue_number is not None:
-                                    self._comment_on_issue(
-                                        issue_number,
-                                        self._comment_terminal_failure(architect_failure_summary),
+                                
+                                if fallback_enabled:
+                                    # Fallback: log the architect failure but continue with direct repair
+                                    self.append_journal(
+                                        kind="repair_architect_fallback",
+                                        summary=f"Repair architect failed, falling back to direct repair: {architect_failure_summary}",
+                                        task_id=card.id,
+                                        metadata={
+                                            "attempt_count": attempt_count,
+                                            "underlying_failure_stage": exc.failure_stage,
+                                            "underlying_failure_summary": exc.failure_summary,
+                                        },
                                     )
-                                return RepoRunResult(
-                                    card_id=card.id,
-                                    status="failed",
-                                    assistant_summary=assistant_summary,
-                                    run_report_path=str(current_run_report),
-                                    verification_report_path=str(current_verification_report),
-                                    verification_steps=verification_steps,
-                                    attempt_count=attempt_count,
-                                    worktree_path=str(working_cwd),
-                                )
+                                    # Continue to retry without architect guidance
+                                    metadata_updates.update(
+                                        {
+                                            "repair_architect_fallback_active": True,
+                                        }
+                                    )
+                                    architect_plan_path = None
+                                else:
+                                    # No fallback: fail the task immediately
+                                    self.update_status(
+                                        card.id,
+                                        status="failed",
+                                        note=architect_failure_summary,
+                                        metadata_updates={
+                                            **metadata_updates,
+                                            "last_failure_stage": "repair_architect_failed",
+                                            "last_failure_summary": architect_failure_summary,
+                                            "repair_architect_failure_summary": architect_failure_summary,
+                                            "repair_architect_underlying_failure_stage": exc.failure_stage,
+                                            "repair_architect_underlying_failure_summary": exc.failure_summary,
+                                        },
+                                    )
+                                    if issue_number is not None:
+                                        self._comment_on_issue(
+                                            issue_number,
+                                            self._comment_terminal_failure(architect_failure_summary),
+                                        )
+                                    return RepoRunResult(
+                                        card_id=card.id,
+                                        status="failed",
+                                        assistant_summary=assistant_summary,
+                                        run_report_path=str(current_run_report),
+                                        verification_report_path=str(current_verification_report),
+                                        verification_steps=verification_steps,
+                                        attempt_count=attempt_count,
+                                        worktree_path=str(working_cwd),
+                                    )
                             if architect_plan_path is not None:
                                 architect_repair_path = architect_plan_path
                                 metadata_updates.update(
@@ -2533,53 +2595,82 @@ class RepoAutopilotStore:
                                     )
                                 except RepairArchitectFailedError as exc:
                                     architect_failure_summary = str(exc)
-                                    self.update_status(
-                                        card.id,
-                                        status="completed",
-                                        note=f"PR #{linked_pr_number} requires human gate after repair architect failure",
-                                        metadata_updates={
-                                            **remote_review_meta,
-                                            "human_gate_pending": True,
-                                            "last_failure_stage": "repair_architect_failed",
-                                            "last_failure_summary": architect_failure_summary,
-                                            "repair_architect_failure_summary": architect_failure_summary,
-                                            "repair_architect_underlying_failure_stage": exc.failure_stage,
-                                            "repair_architect_underlying_failure_summary": exc.failure_summary,
-                                        },
+                                    repair_cfg = (policies.get("autopilot", {}).get("repair", {}) or {})
+                                    # Don't fallback if architect is explicitly disabled
+                                    architect_explicitly_disabled = "is disabled" in architect_failure_summary
+                                    fallback_enabled = (
+                                        repair_cfg.get("architect_fallback_on_failure", True)
+                                        and not architect_explicitly_disabled
                                     )
-                                    self.append_journal(
-                                        kind="human_gate_pending",
-                                        summary=(
-                                            "Repair architect failed; human gate required "
-                                            f"for PR #{linked_pr_number}"
-                                        ),
-                                        task_id=card.id,
-                                        metadata={
-                                            "pr_number": linked_pr_number,
-                                            "remote_review_status": remote_review_step.status,
-                                        },
-                                    )
-                                    self._comment_on_pr(
-                                        linked_pr_number,
-                                        self._comment_terminal_failure(architect_failure_summary),
-                                    )
-                                    if issue_number is not None:
-                                        self._comment_on_issue(
-                                            issue_number,
+                                    
+                                    if fallback_enabled:
+                                        # Fallback: log the architect failure but continue with direct repair
+                                        self.append_journal(
+                                            kind="repair_architect_fallback",
+                                            summary=f"Repair architect failed, falling back to direct repair: {architect_failure_summary}",
+                                            task_id=card.id,
+                                            metadata={
+                                                "attempt_count": attempt_count,
+                                                "underlying_failure_stage": exc.failure_stage,
+                                                "underlying_failure_summary": exc.failure_summary,
+                                            },
+                                        )
+                                        # Continue to retry without architect guidance
+                                        remote_review_meta.update(
+                                            {
+                                                "repair_architect_fallback_active": True,
+                                            }
+                                        )
+                                        architect_plan_path = None
+                                    else:
+                                        # No fallback: set human gate
+                                        self.update_status(
+                                            card.id,
+                                            status="completed",
+                                            note=f"PR #{linked_pr_number} requires human gate after repair architect failure",
+                                            metadata_updates={
+                                                **remote_review_meta,
+                                                "human_gate_pending": True,
+                                                "last_failure_stage": "repair_architect_failed",
+                                                "last_failure_summary": architect_failure_summary,
+                                                "repair_architect_failure_summary": architect_failure_summary,
+                                                "repair_architect_underlying_failure_stage": exc.failure_stage,
+                                                "repair_architect_underlying_failure_summary": exc.failure_summary,
+                                            },
+                                        )
+                                        self.append_journal(
+                                            kind="human_gate_pending",
+                                            summary=(
+                                                "Repair architect failed; human gate required "
+                                                f"for PR #{linked_pr_number}"
+                                            ),
+                                            task_id=card.id,
+                                            metadata={
+                                                "pr_number": linked_pr_number,
+                                                "remote_review_status": remote_review_step.status,
+                                            },
+                                        )
+                                        self._comment_on_pr(
+                                            linked_pr_number,
                                             self._comment_terminal_failure(architect_failure_summary),
                                         )
-                                    return RepoRunResult(
-                                        card_id=card.id,
-                                        status="completed",
-                                        assistant_summary=assistant_summary,
-                                        run_report_path=str(current_run_report),
-                                        verification_report_path=str(current_verification_report),
-                                        verification_steps=verification_steps,
-                                        attempt_count=attempt_count,
-                                        worktree_path=str(working_cwd),
-                                        pr_number=linked_pr_number,
-                                        pr_url=pr_url,
-                                    )
+                                        if issue_number is not None:
+                                            self._comment_on_issue(
+                                                issue_number,
+                                                self._comment_terminal_failure(architect_failure_summary),
+                                            )
+                                        return RepoRunResult(
+                                            card_id=card.id,
+                                            status="completed",
+                                            assistant_summary=assistant_summary,
+                                            run_report_path=str(current_run_report),
+                                            verification_report_path=str(current_verification_report),
+                                            verification_steps=verification_steps,
+                                            attempt_count=attempt_count,
+                                            worktree_path=str(working_cwd),
+                                            pr_number=linked_pr_number,
+                                            pr_url=pr_url,
+                                        )
                                 if architect_plan_path is not None:
                                     architect_repair_path = architect_plan_path
                                     remote_review_meta.update(
@@ -4359,7 +4450,7 @@ class RepoAutopilotStore:
         agent_name = _safe_text(repair_cfg.get("architect_agent")) or "architect"
         model = _safe_text(repair_cfg.get("architect_model")) or "claude-architect"
         agent_system_prompt = self._repair_architect_system_prompt(agent_name)
-        raw_turns = repair_cfg.get("architect_max_turns", 4)
+        raw_turns = repair_cfg.get("architect_max_turns", 20)
         max_turns: int | None = None if raw_turns in (None, "", 0) else int(raw_turns)
         command = f"agent:{agent_name} direct repair (attempt {failed_attempt})"
 
@@ -4542,6 +4633,25 @@ class RepoAutopilotStore:
                         "[End of repair architect guidance — follow the CRITICAL/HIGH finding map as acceptance criteria for this retry.]",
                     ]
                 )
+            else:
+                # Fallback: if no architect guidance is available, provide direct repair instructions
+                fallback_active = bool(card.metadata.get("repair_architect_fallback_active"))
+                if fallback_active:
+                    extras.extend(
+                        [
+                            "",
+                            "[Repair architect failed to produce guidance. Proceed with direct repair based on reviewer findings.]",
+                            "",
+                        ]
+                    )
+                else:
+                    extras.extend(
+                        [
+                            "",
+                            "[No repair architect guidance available for this retry. Proceed with direct repair based on reviewer findings.]",
+                            "",
+                        ]
+                    )
 
         extras.extend(
             [
