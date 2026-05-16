@@ -2000,11 +2000,22 @@ def test_autopilot_run_card_repair_architect_fallback_on_failure(
         title="Architect repair fallback test",
         body="When architect fails, should fall back to direct repair",
     )
+    # Simulate stale metadata from a previous architect attempt
+    store.update_status(
+        card.id,
+        status="queued",
+        metadata_updates={
+            "repair_architect_plan_path": "/stale/path/from/previous/attempt",
+            "repair_architect_attempt": 1,
+            "repair_architect_direct_repair_pending": True,
+        },
+    )
     policies = store.load_policies()
     policies["verification"]["code_review"]["enabled"] = False
     policies["autopilot"]["repair"]["architect_fallback_on_failure"] = True
     agent_calls: list[str | None] = []
     agent_call_count = {"implement": 0, "repair_architect": 0}
+    captured_prompts: list[str] = []
 
     async def fake_create_worktree(self, repo_path, slug, branch=None, agent_id=None):
         return SimpleNamespace(path=worktree)
@@ -2024,6 +2035,8 @@ def test_autopilot_run_card_repair_architect_fallback_on_failure(
         **kwargs,
     ):
         agent_calls.append(phase)
+        if phase == "implement":
+            captured_prompts.append(prompt)
         if phase == "repair_architect":
             agent_call_count["repair_architect"] += 1
             raise RuntimeError("Exceeded maximum turn limit (20)")
@@ -2094,8 +2107,17 @@ def test_autopilot_run_card_repair_architect_fallback_on_failure(
     # Verify fallback was triggered: architect failed but second implement was called
     assert agent_calls == ["implement", "repair_architect", "implement"]
     assert updated is not None
-    # Verify fallback was activated
+    # Verify fallback was activated and stale architect metadata was cleared
     assert updated.metadata.get("repair_architect_fallback_active") is True
+    assert updated.metadata.get("repair_architect_plan_path") is None
+    assert updated.metadata.get("repair_architect_attempt") is None
+    assert updated.metadata.get("repair_architect_direct_repair_pending") is False
+    # Verify the retry prompt (second implement call) does NOT contain stale plan text
+    implement_prompts = [p for p in captured_prompts]
+    assert len(implement_prompts) >= 1
+    # The second implement prompt (after fallback) should not have stale path
+    retry_prompt = implement_prompts[-1] if implement_prompts else ""
+    assert "/stale/path/from/previous/attempt" not in retry_prompt
     journal = store.load_journal(limit=100)
     fallback_entries = [e for e in journal if e.kind == "repair_architect_fallback"]
     assert len(fallback_entries) == 1
