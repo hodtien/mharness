@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within, cleanup } from "@testing-library/react";
+import "@testing-library/jest-dom";
 import { BrowserRouter } from "react-router-dom";
 import AgentsSettingsPage from "./AgentsSettingsPage";
 
@@ -388,7 +389,10 @@ describe("AgentsSettingsPage", () => {
     await waitFor(() => expect(screen.getAllByText("Default Chat Agent")[0]).toBeTruthy());
     expect(screen.getByText("researcher")).toBeTruthy();
     // Lightweight warning should appear instead of full-page error
-    expect(screen.getByText(/Policy agents unavailable/i)).toBeTruthy();
+    const warningEl = screen.getByText(/Policy agents unavailable/i);
+    expect(warningEl).toBeTruthy();
+    // Accessibility: warning is announced via role="alert" live region
+    expect(warningEl).toHaveAttribute("role", "alert");
     // Autopilot badges should not appear (operational names unknown)
     expect(screen.queryByText("Autopilot Worker")).toBeNull();
     expect(screen.queryByText("Autopilot Review")).toBeNull();

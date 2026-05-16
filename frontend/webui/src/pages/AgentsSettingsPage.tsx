@@ -334,7 +334,7 @@ export default function AgentsSettingsPage() {
         )}
 
         {policyAgentsError && (
-          <div className="rounded-lg border border-yellow-400/30 bg-yellow-500/10 p-3 text-xs text-yellow-200">
+          <div role="alert" className="rounded-lg border border-yellow-400/30 bg-yellow-500/10 p-3 text-xs text-yellow-200">
             Policy agents unavailable — Autopilot Worker/Review badges hidden. {policyAgentsError}
           </div>
         )}
