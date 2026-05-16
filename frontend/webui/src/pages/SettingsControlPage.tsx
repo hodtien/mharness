@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { NavLink, useSearchParams } from "react-router-dom";
-import { api, type CronConfigResponse } from "../api/client";
+import { api, type SchedulerDiagnosticsResponse } from "../api/client";
 import { useSession } from "../store/session";
 import type { AppStatePayload } from "../api/types";
 import PageHeader from "../components/PageHeader";
 import { PathDisplay } from "../components/PathDisplay";
 
 import { getAuthSemanticState } from "../utils/authStatusSemantics";
+import { formatSchedulerDiagnostics, formatCronStatus, formatFeatureStatus } from "../utils/schedulerDiagnostics";
 
 // ─── Icon glyphs ─────────────────────────────────────────────────────────────
 
@@ -121,19 +122,21 @@ const SECTIONS: ControlSection[] = [
 
 interface OperationalStatusProps {
   appState: AppStatePayload | null;
-  cronConfig: CronConfigResponse | null;
+  diagnostics: SchedulerDiagnosticsResponse | null;
   tasksRunning: number;
   tasksFailed: number;
 }
 
 function OperationalStatus({
   appState,
-  cronConfig,
+  diagnostics,
   tasksRunning,
   tasksFailed,
 }: OperationalStatusProps) {
-  const schedulerRunning = cronConfig?.scheduler_running ?? false;
   const authSemantic = getAuthSemanticState(appState?.auth_status);
+  const schedulerDisplay = formatSchedulerDiagnostics(diagnostics);
+  const cronDisplay = formatCronStatus(diagnostics);
+  const featureDisplay = formatFeatureStatus(diagnostics);
 
   return (
     <div
@@ -162,9 +165,19 @@ function OperationalStatus({
           tone={tasksFailed > 0 ? "danger" : "success"}
         />
         <StatusRow
-          label="Scheduler"
-          value={schedulerRunning ? "running" : "stopped"}
-          tone={schedulerRunning ? "success" : "neutral"}
+          label={schedulerDisplay.label}
+          value={schedulerDisplay.value}
+          tone={schedulerDisplay.tone}
+        />
+        <StatusRow
+          label={cronDisplay.label}
+          value={cronDisplay.value}
+          tone={cronDisplay.tone}
+        />
+        <StatusRow
+          label={featureDisplay.label}
+          value={featureDisplay.value}
+          tone={featureDisplay.tone}
         />
         <StatusRow
           label="MCP"
@@ -270,13 +283,16 @@ function SectionCard({
 // ─── Automation Status Callout ─────────────────────────────────────────────────
 
 function AutomationCallout({
-  schedulerRunning,
-  cronLength,
+  diagnostics,
 }: {
-  schedulerRunning: boolean;
-  cronLength: number;
+  diagnostics: SchedulerDiagnosticsResponse | null;
 }) {
-  if (schedulerRunning || cronLength === 0) return null;
+  if (!diagnostics) return null;
+  if (diagnostics.scheduler_process_alive) return null;
+  if (diagnostics.cron_entries_installed === 0) return null;
+
+  const cronLength = diagnostics.cron_entries_installed;
+  const featureEnabled = diagnostics.scheduling_feature_enabled;
 
   return (
     <div
@@ -288,8 +304,10 @@ function AutomationCallout({
         <div>
           <div className="font-medium">Scheduler stopped</div>
           <div className="mt-0.5 text-xs text-amber-200/70">
-            {cronLength} cron job{cronLength !== 1 ? "s" : ""} configured but the scheduler process is not running.
-            Go to <strong>Automation → Schedule</strong> to enable the scheduler.
+            {featureEnabled
+              ? `${cronLength} cron job${cronLength !== 1 ? "s" : ""} configured but the scheduler process is not running.`
+              : `Feature is disabled but ${cronLength} cron job${cronLength !== 1 ? "s are" : " is"} installed.`}
+            {" "}Go to <strong>Automation → Schedule</strong> to enable the scheduler.
           </div>
         </div>
       </div>
@@ -302,20 +320,15 @@ function AutomationCallout({
 export default function SettingsControlPage() {
   const appState = useSession((s) => s.appState);
   const tasks = useSession((s) => s.tasks);
-  const [cron, setCron] = useState<Array<Record<string, unknown>>>([]);
-  const [cronConfig, setCronConfig] = useState<CronConfigResponse | null>(null);
+  const [diagnostics, setDiagnostics] = useState<SchedulerDiagnosticsResponse | null>(null);
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("project");
 
   useEffect(() => {
     api
-      .listCron()
-      .then((d) => setCron(d.jobs || []))
-      .catch(() => setCron([]));
-    api
-      .getCronConfig()
-      .then((cfg) => setCronConfig(cfg))
-      .catch(() => setCronConfig(null));
+      .getSchedulerDiagnostics()
+      .then(setDiagnostics)
+      .catch(() => setDiagnostics(null));
   }, []);
 
   const tasksRunning = tasks.filter((t) =>
@@ -335,16 +348,13 @@ export default function SettingsControlPage() {
           {/* Operational status */}
           <OperationalStatus
             appState={appState}
-            cronConfig={cronConfig}
+            diagnostics={diagnostics}
             tasksRunning={tasksRunning}
             tasksFailed={tasksFailed}
           />
 
           {/* Automation stopped alert */}
-          <AutomationCallout
-            schedulerRunning={cronConfig?.scheduler_running ?? false}
-            cronLength={cron.length}
-          />
+          <AutomationCallout diagnostics={diagnostics} />
 
           {/* Settings sections grid */}
           <div className="grid gap-4 sm:grid-cols-2">

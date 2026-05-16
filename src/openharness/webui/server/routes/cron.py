@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from openharness.config.settings import CronScheduleConfig, load_settings, save_settings
 from openharness.services.cron import load_cron_jobs, preview_cron_next_runs
 from openharness.services.cron_scheduler import is_scheduler_running
+from openharness.services.diagnostics import get_diagnostics
 from openharness.webui.server.state import require_token
 
 router = APIRouter(
@@ -98,6 +99,21 @@ class CronConfigResponse(BaseModel):
     )
 
 
+class SchedulerDiagnosticsResponse(BaseModel):
+    """Unified scheduler / cron diagnostics payload."""
+
+    scheduling_feature_enabled: bool
+    cron_entries_installed: int
+    cron_entries_enabled: int
+    scheduler_process_alive: bool
+    scheduler_pid: int | None
+    last_tick_at: str | None
+    last_scan_at: str | None
+    active_worker_count: int
+    stale_worker_count: int
+    last_error: str | None
+
+
 class CronConfigPatch(BaseModel):
     """Body for PATCH /api/cron/config — all fields optional."""
 
@@ -127,6 +143,11 @@ def get_cron_config() -> CronConfigResponse:
     cfg = settings.cron_schedule
     return _build_cron_config_response(cfg)
 
+
+@router.get("/diagnostics", response_model=SchedulerDiagnosticsResponse)
+def get_scheduler_diagnostics() -> SchedulerDiagnosticsResponse:
+    """Return the unified scheduler / cron diagnostics payload."""
+    return SchedulerDiagnosticsResponse(**get_diagnostics())
 
 
 @router.patch("/config", response_model=CronConfigResponse)

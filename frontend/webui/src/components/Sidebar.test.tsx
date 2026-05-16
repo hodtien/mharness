@@ -126,14 +126,25 @@ describe("Sidebar", () => {
     expect(screen.queryByText("Model")).toBeNull();
   });
 
-  it("shows scheduler running and cron job count as separate statuses", async () => {
+  it("shows unified scheduler diagnostics labels", async () => {
     const fetchMock = vi.fn((url: string) => {
-      if (url.includes("/cron/config")) {
+      if (url.includes("/cron/diagnostics")) {
         return Promise.resolve({
           ok: true,
           status: 200,
           headers: { get: () => null },
-          json: () => Promise.resolve({ enabled: true, scheduler_running: true }),
+          json: () => Promise.resolve({
+            scheduling_feature_enabled: true,
+            cron_entries_installed: 2,
+            cron_entries_enabled: 1,
+            scheduler_process_alive: true,
+            scheduler_pid: 12345,
+            last_tick_at: null,
+            last_scan_at: null,
+            active_worker_count: 0,
+            stale_worker_count: 0,
+            last_error: null,
+          }),
         });
       }
       if (url.includes("/projects")) {
@@ -159,8 +170,10 @@ describe("Sidebar", () => {
       expect(screen.getByText("Scheduler")).toBeTruthy();
     });
     expect(screen.getByText("running")).toBeTruthy();
-    expect(screen.getByText("Cron jobs")).toBeTruthy();
+    expect(screen.getByText("Cron entries")).toBeTruthy();
     expect(screen.getByText("1/2 enabled")).toBeTruthy();
+    expect(screen.getByText("Feature")).toBeTruthy();
+    expect(screen.getByText("enabled")).toBeTruthy();
   });
 
   it("calls onClose when the mobile backdrop is clicked", () => {

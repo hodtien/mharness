@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, type CronConfigResponse, type CronConfigPatch } from "../api/client";
+import { api, type CronConfigResponse, type CronConfigPatch, type SchedulerDiagnosticsResponse } from "../api/client";
+import { formatSchedulerDiagnostics, formatCronStatus, formatFeatureStatus } from "../utils/schedulerDiagnostics";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import ErrorBanner from "../components/ErrorBanner";
 import { toast } from "../store/toast";
@@ -85,6 +86,7 @@ function formatNextRuns(runs: string[]): string[] {
 
 export default function CronSettingsPage() {
   const [config, setConfig] = useState<CronConfigResponse | null>(null);
+  const [diagnostics, setDiagnostics] = useState<SchedulerDiagnosticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -117,10 +119,19 @@ export default function CronSettingsPage() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    // Also load diagnostics for consistent status display
+    api
+      .getSchedulerDiagnostics()
+      .then((d) => { if (!cancelled) setDiagnostics(d); })
+      .catch(() => { if (!cancelled) setDiagnostics(null); });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const schedulerDisplay = formatSchedulerDiagnostics(diagnostics);
+  const cronDisplay = formatCronStatus(diagnostics);
+  const featureDisplay = formatFeatureStatus(diagnostics);
 
   const applyDraft = (patch: CronConfigPatch) => {
     setSaving(true);
@@ -234,14 +245,19 @@ export default function CronSettingsPage() {
                   value: config.tick_cron_description || config.tick_cron,
                 },
                 {
-                  label: "Feature",
-                  value: config.enabled ? "Enabled" : "Disabled",
-                  accent: (config.enabled ? "cyan" : "none") as "cyan" | "none",
+                  label: featureDisplay.label,
+                  value: featureDisplay.value,
+                  accent: (featureDisplay.tone === "success" ? "cyan" : "none") as "cyan" | "none",
                 },
                 {
-                  label: "Scheduler",
-                  value: config.scheduler_running ? "Running" : "Stopped",
-                  accent: (config.scheduler_running ? "cyan" : "none") as "cyan" | "none",
+                  label: schedulerDisplay.label,
+                  value: schedulerDisplay.value,
+                  accent: (schedulerDisplay.tone === "success" ? "cyan" : schedulerDisplay.tone === "warning" ? "amber" : "none") as "cyan" | "amber" | "none",
+                },
+                {
+                  label: cronDisplay.label,
+                  value: cronDisplay.value,
+                  accent: (cronDisplay.tone === "success" ? "cyan" : cronDisplay.tone === "warning" ? "amber" : "none") as "cyan" | "amber" | "none",
                 },
               ]
             : []),
