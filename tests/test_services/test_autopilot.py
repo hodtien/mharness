@@ -3309,6 +3309,47 @@ def test_local_code_review_zero_max_turns_disables_turn_limit(tmp_path: Path, mo
     assert seen["max_turns"] is None
 
 
+def test_local_code_review_agent_error_blocks_verification(tmp_path: Path, monkeypatch) -> None:
+    import asyncio
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    store = RepoAutopilotStore(repo)
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Review fails closed", body="")
+
+    monkeypatch.setattr(
+        store,
+        "_run_git",
+        lambda args, *, cwd=None, check=False: subprocess.CompletedProcess(
+            args,
+            0,
+            stdout="diff --git a/src/example.py b/src/example.py\n",
+            stderr="",
+        ),
+    )
+
+    async def fake_run_agent_prompt(*args, **kwargs):
+        raise RuntimeError("review agent unavailable")
+
+    monkeypatch.setattr(store, "_run_agent_prompt", fake_run_agent_prompt)
+
+    step = asyncio.run(
+        store._run_code_review_step(
+            card,
+            cwd=worktree,
+            base_branch="main",
+            policies={"verification": {"code_review": {"max_turns": 0}}},
+            model="test-model",
+        )
+    )
+
+    assert step.status == "error"
+    assert step.returncode == 1
+    assert "review agent unavailable" in step.stderr
+
+
 def test_remote_code_review_step_skips_when_disabled(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -3341,6 +3382,45 @@ def test_remote_code_review_step_skips_when_disabled(tmp_path: Path, monkeypatch
 
     assert step.status == "skipped"
     assert calls == {"gh": 0, "agent": 0}
+
+
+def test_remote_code_review_agent_error_blocks_merge(tmp_path: Path, monkeypatch) -> None:
+    import asyncio
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    store._repo_full_name = "hodtien/mharness"
+    card, _ = store.enqueue_card(source_kind="manual_idea", title="Remote review fails closed", body="")
+
+    monkeypatch.setattr(
+        store,
+        "_run_gh",
+        lambda args, *, cwd=None, check=False: subprocess.CompletedProcess(
+            args,
+            0,
+            stdout="diff --git a/src/example.py b/src/example.py\n",
+            stderr="",
+        ),
+    )
+
+    async def fake_run_agent_prompt(*args, **kwargs):
+        raise RuntimeError("remote review agent unavailable")
+
+    monkeypatch.setattr(store, "_run_agent_prompt", fake_run_agent_prompt)
+
+    step = asyncio.run(
+        store._run_remote_code_review_step(
+            card,
+            12,
+            policies=_remote_review_policy(),
+            model="test-model",
+        )
+    )
+
+    assert step.status == "error"
+    assert step.returncode == 1
+    assert "remote review agent unavailable" in step.stderr
 
 
 def test_remote_code_review_step_blocks_tracked_virtualenv(tmp_path: Path, monkeypatch) -> None:
@@ -3478,6 +3558,11 @@ def test_remote_code_review_prompt_requires_requirement_completeness(
     )
 
     assert step.status == "success"
+
+
+def test_default_review_policies_block_high_findings() -> None:
+    assert "high" in _DEFAULT_AUTOPILOT_POLICY["github"]["remote_code_review"]["block_on"]
+    assert "high" in _DEFAULT_VERIFICATION_POLICY["code_review"]["block_on"]
 
 
 def test_remote_code_review_step_blocks_on_critical(tmp_path: Path, monkeypatch) -> None:

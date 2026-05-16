@@ -5586,10 +5586,10 @@ class RepoAutopilotStore:
         except Exception as exc:
             return RepoVerificationStep(
                 command=command,
-                returncode=0,
-                status="skipped",
+                returncode=1,
+                status="error",
                 stdout="",
-                stderr=f"remote code-reviewer agent failed (skipped): {exc}",
+                stderr=f"remote code-reviewer agent failed: {exc}",
             )
 
         severity = _parse_review_severity(output)
@@ -5682,10 +5682,10 @@ class RepoAutopilotStore:
         except Exception as exc:
             return RepoVerificationStep(
                 command=f"agent:code-reviewer (diff vs {base_branch})",
-                returncode=0,
-                status="skipped",
+                returncode=1,
+                status="error",
                 stdout="",
-                stderr=f"code-reviewer agent failed (skipped): {exc}",
+                stderr=f"code-reviewer agent failed: {exc}",
             )
 
         severity = _parse_review_severity(output)
