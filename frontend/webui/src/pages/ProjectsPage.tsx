@@ -93,6 +93,21 @@ export default function ProjectsPage() {
   const [cleanupPreview, setCleanupPreview] = useState<number | null>(null);
   const [cleanupLoading, setCleanupLoading] = useState(false);
 
+  // Global keyboard handler for modal Escape key (handles focus outside modal content)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (showNewModal) {
+        closeNewModal();
+      } else if (showCleanupModal) {
+        setShowCleanupModal(false);
+        setCleanupPreview(null);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [showNewModal, showCleanupModal]);
+
   useEffect(() => {
     loadProjects();
   }, []);

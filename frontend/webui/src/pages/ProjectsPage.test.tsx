@@ -639,6 +639,43 @@ describe("ProjectsPage new project modal", () => {
     await waitFor(() => expect(screen.queryByText("New Project")).toBeNull());
   });
 
+  it("closes new project modal on Escape key even when focus is on overlay (outside content)", async () => {
+    mockFetch(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    fireEvent.click(screen.getByRole("button", { name: /^\+ New Project$/ }));
+    await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
+
+    // Focus is on the overlay (outside the inner modal content div)
+    // Simulate pressing Escape with focus on the outer overlay div
+    const overlay = screen.getByText("New Project").closest("div")!.parentElement!;
+    fireEvent.focus(overlay);
+    fireEvent.keyDown(overlay, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByText("New Project")).toBeNull());
+  });
+
+  it("closes cleanup modal on Escape key even when focus is on overlay (outside content)", async () => {
+    const tempProjects: ProjectsResponse = {
+      projects: [
+        makeProject({ id: "p1", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+      ],
+      active_project_id: null,
+    };
+    mockFetch(tempProjects);
+    render(<ProjectsPage />);
+    await waitForProjects(1);
+
+    fireEvent.click(screen.getByText("🧹 Cleanup"));
+    await waitFor(() => expect(screen.getByText("Cleanup Projects")).toBeTruthy());
+
+    // Focus is on the overlay (outside the inner modal content div)
+    const overlay = screen.getByText("Cleanup Projects").closest("div")!.parentElement!;
+    fireEvent.focus(overlay);
+    fireEvent.keyDown(overlay, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByText("Cleanup Projects")).toBeNull());
+  });
+
   it("closes modal on overlay click (outside modal content)", async () => {
     mockFetch(MOCK_PROJECTS_RESPONSE);
     render(<ProjectsPage />);

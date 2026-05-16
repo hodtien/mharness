@@ -218,6 +218,19 @@ class TestIsWorktreeLike:
         # Ensure normal worktrees directory not under our patterns is not flagged
         assert _is_worktree_like("/users/me/projects") is False
 
+    def test_path_prefix_not_matched(self) -> None:
+        """Regression: path prefixes containing 'worktrees' as part of another segment must not match."""
+        # /repo/worktree-project — 'worktree' is the last segment, not followed by /
+        assert _is_worktree_like("/repo/worktree-project") is False
+        # /repo/worktrees-old/app — 'worktrees-old' contains 'worktrees' as a prefix
+        assert _is_worktree_like("/repo/worktrees-old/app") is False
+        # /repo/worktree-project/src — 'worktree-project' contains 'worktree' as a prefix
+        assert _is_worktree_like("/repo/worktree-project/src") is False
+        # /home/repos/my-worktrees-app — 'my-worktrees-app' contains 'worktrees' as a prefix
+        assert _is_worktree_like("/home/repos/my-worktrees-app") is False
+        # /data/worktree-backup/file.txt — 'worktree-backup' contains 'worktree' as a prefix
+        assert _is_worktree_like("/data/worktree-backup/file.txt") is False
+
 
 class TestGetProjectMetadata:
     def test_existing_project(self, tmp_path: Path) -> None:
