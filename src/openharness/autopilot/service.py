@@ -3520,15 +3520,10 @@ class RepoAutopilotStore:
 
     def _base_branch_has_advanced(self, cwd: Path, *, base_branch: str) -> bool:
         completed = self._run_git(
-            ["rev-list", "--count", f"HEAD..origin/{base_branch}"],
+            ["merge-base", "--is-ancestor", f"origin/{base_branch}", "HEAD"],
             cwd=cwd,
         )
-        if completed.returncode != 0:
-            return False
-        try:
-            return int((completed.stdout or "0").strip() or "0") > 0
-        except ValueError:
-            return False
+        return completed.returncode != 0
 
     def _fetch_remote_branch(self, cwd: Path, *, branch: str) -> bool:
         completed = self._run_git(["fetch", "origin", branch], cwd=cwd)

@@ -4585,6 +4585,10 @@ def test_default_rebase_strategy_is_on_conflict() -> None:
     assert _DEFAULT_AUTOPILOT_POLICY["execution"]["rebase_strategy"] == "on_conflict"
 
 
+def test_default_pr_branch_sync_strategy_is_rebase() -> None:
+    assert _DEFAULT_AUTOPILOT_POLICY["execution"]["pr_branch_sync_strategy"] == "rebase"
+
+
 def test_rebase_none_skips_rebase(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -4617,8 +4621,9 @@ def test_rebase_on_advance_rebases_when_base_ahead(tmp_path: Path, monkeypatch) 
 
     def fake_run_git(args, *, cwd=None, check=False):
         calls.append(args)
-        stdout = "1" if args[:2] == ["rev-list", "--count"] else ""
-        return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+        if args == ["merge-base", "--is-ancestor", "origin/main", "HEAD"]:
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="")
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
 
     monkeypatch.setattr(store, "_run_git", fake_run_git)
     store._sync_worktree_to_base(
@@ -4647,8 +4652,8 @@ def test_reused_worktree_rebases_stale_local_branch_onto_remote_head(
             return subprocess.CompletedProcess(args, 0, stdout="0\n", stderr="")
         if args == ["rev-list", "--count", "HEAD..origin/autopilot/card"]:
             return subprocess.CompletedProcess(args, 0, stdout="1\n", stderr="")
-        if args == ["rev-list", "--count", "HEAD..origin/main"]:
-            return subprocess.CompletedProcess(args, 0, stdout="0\n", stderr="")
+        if args == ["merge-base", "--is-ancestor", "origin/main", "HEAD"]:
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
         return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
 
     monkeypatch.setattr(store, "_run_git", fake_run_git)
@@ -4669,7 +4674,7 @@ def test_reused_worktree_rebases_stale_local_branch_onto_remote_head(
         ["rev-list", "--count", "origin/autopilot/card..HEAD"],
         ["rev-list", "--count", "HEAD..origin/autopilot/card"],
         ["rebase", "origin/autopilot/card"],
-        ["rev-list", "--count", "HEAD..origin/main"],
+        ["merge-base", "--is-ancestor", "origin/main", "HEAD"],
     ]
 
 
@@ -6149,8 +6154,8 @@ def test_branch_sync_skips_rebase_when_remote_branch_and_base_are_current(
             return sp.CompletedProcess(args, 0, stdout="0\n", stderr="")
         if command[:3] == ("rev-list", "--count", "HEAD..origin/autopilot/ap-test"):
             return sp.CompletedProcess(args, 0, stdout="0\n", stderr="")
-        if command[:3] == ("rev-list", "--count", "HEAD..origin/main"):
-            return sp.CompletedProcess(args, 0, stdout="0\n", stderr="")
+        if command == ("merge-base", "--is-ancestor", "origin/main", "HEAD"):
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
         raise AssertionError(f"unexpected git command: {args}")
 
     def fake_remote_rebase(self, cwd, *, remote_branch, card_id=None):
@@ -6184,6 +6189,106 @@ def test_branch_sync_skips_rebase_when_remote_branch_and_base_are_current(
     assert summary == "Synced autopilot/ap-test onto origin/main."
     assert remote_rebases == []
     assert base_rebases == []
+
+
+def test_branch_sync_rebases_when_base_is_not_ancestor(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import subprocess as sp
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    base_rebases: list[str] = []
+
+    def fake_run_git(self, args, *, cwd=None, check=False):
+        command = tuple(args)
+        if command[:2] == ("checkout", "autopilot/ap-test"):
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
+        if command[:3] == ("fetch", "origin", "main"):
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
+        if command[:3] == ("fetch", "origin", "autopilot/ap-test"):
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
+        if command[:3] == ("rev-list", "--count", "origin/autopilot/ap-test..HEAD"):
+            return sp.CompletedProcess(args, 0, stdout="0\n", stderr="")
+        if command[:3] == ("rev-list", "--count", "HEAD..origin/autopilot/ap-test"):
+            return sp.CompletedProcess(args, 0, stdout="0\n", stderr="")
+        if command == ("merge-base", "--is-ancestor", "origin/main", "HEAD"):
+            return sp.CompletedProcess(args, 1, stdout="", stderr="")
+        raise AssertionError(f"unexpected git command: {args}")
+
+    def fake_base_rebase(self, cwd, *, base_branch, card_id=None):
+        base_rebases.append(base_branch)
+        return True
+
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_git", fake_run_git)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._rebase_head_onto_base",
+        fake_base_rebase,
+    )
+
+    ok, stage, summary = store._sync_pr_branch_before_push(
+        worktree,
+        base_branch="main",
+        head_branch="autopilot/ap-test",
+        policies=store.load_policies(),
+        card_id=None,
+    )
+
+    assert ok is True
+    assert stage == "branch_sync_done"
+    assert summary == "Synced autopilot/ap-test onto origin/main."
+    assert base_rebases == ["main"]
+
+
+
+def test_branch_sync_rebase_conflict_returns_branch_sync_conflict(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import subprocess as sp
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    store = RepoAutopilotStore(repo)
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+
+    def fake_run_git(self, args, *, cwd=None, check=False):
+        command = tuple(args)
+        if command[:2] == ("checkout", "autopilot/ap-test"):
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
+        if command[:3] == ("fetch", "origin", "main"):
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
+        if command[:3] == ("fetch", "origin", "autopilot/ap-test"):
+            return sp.CompletedProcess(args, 0, stdout="", stderr="")
+        if command[:3] == ("rev-list", "--count", "origin/autopilot/ap-test..HEAD"):
+            return sp.CompletedProcess(args, 0, stdout="0\n", stderr="")
+        if command[:3] == ("rev-list", "--count", "HEAD..origin/autopilot/ap-test"):
+            return sp.CompletedProcess(args, 0, stdout="0\n", stderr="")
+        if command == ("merge-base", "--is-ancestor", "origin/main", "HEAD"):
+            return sp.CompletedProcess(args, 1, stdout="", stderr="")
+        raise AssertionError(f"unexpected git command: {args}")
+
+    monkeypatch.setattr("openharness.autopilot.service.RepoAutopilotStore._run_git", fake_run_git)
+    monkeypatch.setattr(
+        "openharness.autopilot.service.RepoAutopilotStore._rebase_head_onto_base",
+        lambda self, cwd, *, base_branch, card_id=None: False,
+    )
+
+    ok, stage, summary = store._sync_pr_branch_before_push(
+        worktree,
+        base_branch="main",
+        head_branch="autopilot/ap-test",
+        policies=store.load_policies(),
+        card_id=None,
+    )
+
+    assert ok is False
+    assert stage == "branch_sync_conflict"
+    assert summary == "Could not rebase autopilot/ap-test onto origin/main."
+
 
 
 def test_branch_sync_no_force_push_by_default(tmp_path: Path, monkeypatch) -> None:
