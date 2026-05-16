@@ -1015,7 +1015,7 @@ describe("PipelinePage", () => {
       </BrowserRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /^Policy$/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /^Policy$/i }));
 
     const textarea = await screen.findByDisplayValue(/intake: {}/);
     fireEvent.change(textarea, { target: { value: "intake: {}\nfoo: bar\n" } });
@@ -1063,7 +1063,7 @@ describe("PipelinePage", () => {
       </BrowserRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /^Policy$/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /^Policy$/i }));
     await screen.findByDisplayValue(/bad:/);
 
     fireEvent.click(screen.getByRole("button", { name: /^Save$/i }));
@@ -1320,7 +1320,7 @@ describe("PipelinePage", () => {
     await waitFor(() => expect(screen.getAllByTestId("lane-failed_paused").length).toBeGreaterThanOrEqual(1));
 
     // Click Terminal filter
-    fireEvent.click(screen.getByRole("button", { name: /^Terminal$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Filter: Terminal cards$/ }));
 
     // All cards visible in lanes (filter removes collapse behavior)
     expect(await screen.findByText("Terminal task 0")).toBeTruthy();

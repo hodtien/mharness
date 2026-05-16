@@ -548,6 +548,7 @@ function Card({ card, onClick }: { card: PipelineCard; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
+      aria-label={`Open task ${card.id}: ${card.title}`}
       className={`w-full rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-4 text-left text-sm shadow-sm transition hover:border-[var(--accent)]/40 hover:bg-[var(--panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
         isCompleted ? "opacity-70 hover:opacity-100" : ""
       }${isActive ? "border-l-2 border-l-[var(--status-running-border)]" : ""}`}
@@ -2027,8 +2028,11 @@ export default function PipelinePage() {
       />
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1 border-b border-[var(--border)] px-4 pt-2">
+      <div role="tablist" aria-label="Autopilot view" className="flex items-center gap-1 border-b border-[var(--border)] px-4 pt-2">
           <button
+            role="tab"
+            aria-label="Board"
+            aria-selected={activeTab === "board"}
             onClick={() => setActiveTab("board")}
             className={`rounded-t-lg border px-4 py-2 text-sm font-medium transition ${
               activeTab === "board"
@@ -2039,6 +2043,9 @@ export default function PipelinePage() {
             Board
           </button>
           <button
+            role="tab"
+            aria-label="Policy"
+            aria-selected={activeTab === "policy"}
             onClick={() => setActiveTab("policy")}
             className={`rounded-t-lg border px-4 py-2 text-sm font-medium transition ${
               activeTab === "policy"
@@ -2070,9 +2077,15 @@ export default function PipelinePage() {
                 </div>
               ))}
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Board filter controls">
               {BOARD_FILTERS.map((filter) => (
-                <button key={filter.id} onClick={() => setBoardFilter(filter.id)} className={`rounded-md border px-2.5 py-1 text-xs ${boardFilter === filter.id ? "border-[var(--accent)] text-[var(--accent)]" : "border-[var(--border)] text-[var(--text-dim)]"}`}>
+                <button
+                  key={filter.id}
+                  aria-label={`Filter: ${filter.label} cards`}
+                  aria-pressed={boardFilter === filter.id}
+                  onClick={() => setBoardFilter(filter.id)}
+                  className={`rounded-md border px-2.5 py-1 text-xs ${boardFilter === filter.id ? "border-[var(--accent)] text-[var(--accent)]" : "border-[var(--border)] text-[var(--text-dim)]"}`}
+                >
                   {filter.label}
                 </button>
               ))}
