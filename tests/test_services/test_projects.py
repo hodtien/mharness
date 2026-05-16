@@ -190,10 +190,33 @@ class TestIsWorktreeLike:
         assert _is_worktree_like("/repo/.git/worktree/feature") is True
         assert _is_worktree_like("/repo/.git/worktrees/") is True
 
+    def test_harness_worktree_storage(self) -> None:
+        """Projects under ~/.openharness/worktrees should be detected as worktree-like."""
+        assert _is_worktree_like("/Users/me/.openharness/worktrees/autopilot+ap-feba8bc5") is True
+        assert _is_worktree_like("/home/user/.openharness/worktrees/feature-branch") is True
+        assert _is_worktree_like("/Users/me/.openharness/worktree/single-worktree") is True
+
+    def test_openharness_worktree_paths(self) -> None:
+        """Paths containing openharness worktree directories should be detected."""
+        assert _is_worktree_like("/Users/me/.openharness/worktrees/my-worktree/src/main.py") is True
+        assert _is_worktree_like("/home/user/.openharness/worktree/feature/file.ts") is True
+
+    def test_autopilot_worktree_name_pattern(self) -> None:
+        """Paths containing /worktrees/autopilot+ should be detected as worktree-like."""
+        assert _is_worktree_like("/some/path/worktrees/autopilot+task-id") is True
+        assert _is_worktree_like("/some/path/worktree/autopilot+task-id/src") is True
+
+    def test_standalone_worktrees_directory(self) -> None:
+        """Paths under .worktrees or worktrees subdirectories should be detected."""
+        assert _is_worktree_like("/repo/.worktrees/my-feature") is True
+        assert _is_worktree_like("/repo/worktrees/feature") is True
+
     def test_real_project(self) -> None:
         assert _is_worktree_like("/workspace/my-app") is False
         assert _is_worktree_like("/repo/.git/objects") is False
         assert _is_worktree_like("/repo/.git/refs/heads") is False
+        # Ensure normal worktrees directory not under our patterns is not flagged
+        assert _is_worktree_like("/users/me/projects") is False
 
 
 class TestGetProjectMetadata:

@@ -70,6 +70,23 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false);
   const [newError, setNewError] = useState<string | null>(null);
 
+  // Reset new project form state
+  const resetNewForm = () => {
+    setNewName("");
+    setNewPath("");
+    setNewDesc("");
+    setNewError(null);
+  };
+
+  // New project modal is valid when name and path are non-empty
+  const isNewFormValid = newName.trim().length > 0 && newPath.trim().length > 0;
+
+  // Close new project modal handler
+  const closeNewModal = () => {
+    setShowNewModal(false);
+    resetNewForm();
+  };
+
   // Cleanup modal
   const [showCleanupModal, setShowCleanupModal] = useState(false);
   const [cleanupFilter, setCleanupFilter] = useState<ViewFilter>("temp");
@@ -611,9 +628,26 @@ export default function ProjectsPage() {
 
       {/* New project modal */}
       {showNewModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 shadow-2xl">
-            <h2 className="mb-4 text-base font-semibold text-[var(--text)]">New Project</h2>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={closeNewModal}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => { if (e.key === "Escape") closeNewModal(); }}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-[var(--text)]">New Project</h2>
+              <button
+                type="button"
+                onClick={closeNewModal}
+                aria-label="Close modal"
+                className="shrink-0 rounded-lg p-1 text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
+              >
+                ✕
+              </button>
+            </div>
             <div className="space-y-3">
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-[var(--text-dim)]">Name</span>
@@ -649,7 +683,7 @@ export default function ProjectsPage() {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => { setShowNewModal(false); setNewError(null); }}
+                onClick={closeNewModal}
                 className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-4 py-2 text-sm text-[var(--text)] hover:border-[var(--border)]"
               >
                 Cancel
@@ -657,8 +691,8 @@ export default function ProjectsPage() {
               <button
                 type="button"
                 onClick={handleCreate}
-                disabled={creating}
-                className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-60"
+                disabled={creating || !isNewFormValid}
+                className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {creating ? "Creating…" : "Create"}
               </button>
@@ -669,9 +703,26 @@ export default function ProjectsPage() {
 
       {/* Cleanup confirmation modal */}
       {showCleanupModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 shadow-2xl">
-            <h2 className="mb-3 text-base font-semibold text-[var(--text)]">🧹 Cleanup Projects</h2>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => { setShowCleanupModal(false); setCleanupPreview(null); }}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => { if (e.key === "Escape") { setShowCleanupModal(false); setCleanupPreview(null); } }}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-[var(--text)]">🧹 Cleanup Projects</h2>
+              <button
+                type="button"
+                onClick={() => { setShowCleanupModal(false); setCleanupPreview(null); }}
+                aria-label="Close modal"
+                className="shrink-0 rounded-lg p-1 text-[var(--text-dim)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
+              >
+                ✕
+              </button>
+            </div>
             <p className="mb-3 text-sm text-[var(--text-dim)]">
               Remove registered project records for paths that no longer exist or are temporary test directories.
               <strong> This only unregisters the records — no directories are deleted.</strong>
