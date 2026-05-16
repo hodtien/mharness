@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ProjectsPage from "./ProjectsPage";
 import type { ProjectsResponse, Project } from "../api/client";
 
@@ -56,7 +56,7 @@ function mockListProjects(response: ProjectsResponse = MOCK_PROJECTS_RESPONSE) {
 function mockLocalStorage() {
   const store: Record<string, string> = {};
   vi.stubGlobal("localStorage", {
-    getItem: (key: string) => store[key] ?? null,
+    getItem: (key: string) => key === "oh_projects_filter" ? "all" : store[key] ?? null,
     setItem: (key: string, value: string) => { store[key] = value; },
     removeItem: (key: string) => { delete store[key]; },
     clear: () => { Object.keys(store).forEach((k) => delete store[k]); },
@@ -64,6 +64,7 @@ function mockLocalStorage() {
 }
 
 beforeEach(() => {
+  cleanup();
   vi.clearAllMocks();
   mockLocalStorage();
 });
@@ -137,18 +138,19 @@ describe("ProjectsPage rendering", () => {
 // ── View Filters ─────────────────────────────────────────────────────────────
 
 describe("ProjectsPage view filters", () => {
-  beforeEach(async () => {
+  it("shows All filter tab by default", async () => {
     mockListProjects();
     render(<ProjectsPage />);
     await waitForProjects(3);
-  });
-
-  it("shows All filter tab by default", async () => {
     const allTab = screen.getByRole("tab", { name: /^All$/ });
     expect(allTab).toBeTruthy();
   });
 
   it("shows filter tabs: All, Active, Existing, Missing, Temp / Test, Worktrees", async () => {
+    mockListProjects();
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
     const filters = ["All", "Active", "Existing", "Missing", "Temp / Test", "Worktrees"];
     for (const f of filters) {
       expect(screen.getByRole("tab", { name: new RegExp(`^${f}`) })).toBeTruthy();
