@@ -2122,6 +2122,11 @@ def test_autopilot_run_card_repair_architect_fallback_on_failure(
     fallback_entries = [e for e in journal if e.kind == "repair_architect_fallback"]
     assert len(fallback_entries) == 1
     assert "falling back to direct repair" in fallback_entries[0].summary
+    # Regression: the immediate post-fallback implement prompt must contain the
+    # fallback instruction so the worker receives the intended direct-repair signal.
+    assert len(implement_prompts) >= 2
+    post_fallback_prompt = implement_prompts[1]
+    assert "Repair architect failed to produce guidance" in post_fallback_prompt
 
 
 def test_autopilot_run_card_remote_review_architect_failure_human_gates(

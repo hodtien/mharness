@@ -1872,15 +1872,23 @@ class RepoAutopilotStore:
                                     },
                                 )
                                 # Clear the retry flag and continue to direct repair
-                                self.update_status(
+                                card = self.update_status(
                                     card.id,
                                     status="repairing",
                                     metadata_updates={
                                         "repair_architect_retry_requested": False,
                                         "repair_architect_fallback_active": True,
+                                        "last_failure_stage": prior_failure_stage or exc.failure_stage or "repair_architect_failed",
+                                        "last_failure_summary": architect_failure_summary,
                                     },
                                 )
                                 architect_repair_path = None
+                                # Ensure the repair prompt sees the fallback signal: update
+                                # failure metadata so _prepare_repair_prompt does not early-return
+                                # on a missing failure_stage.
+                                if not prior_failure_stage:
+                                    prior_failure_stage = exc.failure_stage or "repair_architect_failed"
+                                    prior_failure_summary = exc.failure_summary or architect_failure_summary
                             else:
                                 # No fallback: fail the task immediately
                                 self.update_status(
@@ -1922,6 +1930,7 @@ class RepoAutopilotStore:
                         )
                         architect_repair_path = None
                     else:
+                        card = self.get_card(card.id) or card
                         prompt = self._prepare_repair_prompt(
                             card,
                             policies,
