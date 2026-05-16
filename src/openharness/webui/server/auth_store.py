@@ -14,7 +14,7 @@ import json
 import logging
 import secrets
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -182,6 +182,8 @@ class WebUIAuth:
     password_iterations: int = _PASSWORD_ITERATIONS
     is_default_password: bool = True
     token_pair: StoredTokenPair | None = None
+    failed_login_attempts: list[int] = field(default_factory=list)
+    lockout_until: int | None = None  # Unix timestamp, None = not locked out
 
     def to_dict(self) -> dict[str, Any]:
         d = {
@@ -190,6 +192,8 @@ class WebUIAuth:
             "password_kdf": self.password_kdf,
             "password_iterations": self.password_iterations,
             "is_default_password": self.is_default_password,
+            "failed_login_attempts": self.failed_login_attempts,
+            "lockout_until": self.lockout_until,
         }
         if self.token_pair:
             d["token_pair"] = asdict(self.token_pair)
@@ -212,6 +216,8 @@ class WebUIAuth:
             password_iterations=int(data.get("password_iterations", _PASSWORD_ITERATIONS)),
             is_default_password=data.get("is_default_password", True),
             token_pair=token_pair,
+            failed_login_attempts=data.get("failed_login_attempts", []),
+            lockout_until=data.get("lockout_until"),
         )
 
 
@@ -273,12 +279,89 @@ def _create_default() -> WebUIAuth:
     return auth
 
 
+# ---------------- Throttling constants ----------------
+
+_MAX_FAILED_ATTEMPTS = 5
+_LOCKOUT_DURATION = 300  # 5 minutes
+_WINDOW_SECONDS = 900  # 15-minute sliding window
+
+
 # ---------------- Public API ----------------
 
 
 def get_auth() -> WebUIAuth:
     """Return the current auth state (singleton per process)."""
     return _load()
+
+
+def check_throttle() -> tuple[bool, int]:
+    """Check if the client is currently throttled/locked out.
+
+    Returns:
+        (is_locked, retry_after_seconds).  If locked, caller should return 429.
+    """
+    auth = _load()
+    now = int(time.time())
+    if auth.lockout_until is not None and auth.lockout_until > now:
+        return True, auth.lockout_until - now
+    # Expire old counts outside the sliding window
+    if auth.failed_login_attempts:
+        cutoff = now - _WINDOW_SECONDS
+        auth.failed_login_attempts = [t for t in auth.failed_login_attempts if t > cutoff]
+        if auth.failed_login_attempts:
+            _save(auth)
+    return False, 0
+
+
+def record_failed_login() -> tuple[bool, int]:
+    """Record a failed login attempt. Returns (is_locked, retry_after_seconds)."""
+    auth = _load()
+    now = int(time.time())
+
+    # Prune stale timestamps
+    cutoff = now - _WINDOW_SECONDS
+    auth.failed_login_attempts = [t for t in auth.failed_login_attempts if t > cutoff]
+    auth.failed_login_attempts.append(now)
+
+    if len(auth.failed_login_attempts) >= _MAX_FAILED_ATTEMPTS:
+        auth.lockout_until = now + _LOCKOUT_DURATION
+        _save(auth)
+        return True, _LOCKOUT_DURATION
+
+    _save(auth)
+    return False, 0
+
+
+def reset_failed_login_attempts() -> None:
+    """Clear failed-login state after a successful login."""
+    auth = _load()
+    auth.failed_login_attempts = []
+    auth.lockout_until = None
+    _save(auth)
+
+
+def validate_password_strength(password: str) -> tuple[bool, str]:
+    """Validate new password strength.
+
+    Returns (is_valid, error_message).  Rejects passwords that are too short
+    or are among the known weak list, then enforces complexity requirements.
+    """
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+    weak = {
+        "123456", "password", "qwerty", "admin", "letmein",
+        "welcome", "monkey", "dragon", "master", "changeme",
+        "password1", "qwerty123", "letmein123",
+    }
+    if password.lower() in weak:
+        return False, "Password is too common; choose a stronger password"
+    if not any(c.islower() for c in password):
+        return False, "Password must contain at least one lowercase letter"
+    if not any(c.isupper() for c in password):
+        return False, "Password must contain at least one uppercase letter"
+    if not any(c.isdigit() for c in password):
+        return False, "Password must contain at least one digit"
+    return True, ""
 
 
 def verify_password(password: str) -> bool:
