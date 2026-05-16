@@ -394,6 +394,21 @@ export interface CronConfigPatch {
   install_mode?: string;
 }
 
+// ---------------- Scheduler Diagnostics ----------------
+
+export interface SchedulerDiagnosticsResponse {
+  scheduling_feature_enabled: boolean;
+  cron_entries_installed: number;
+  cron_entries_enabled: number;
+  scheduler_process_alive: boolean;
+  scheduler_pid: number | null;
+  last_tick_at: string | null;
+  last_scan_at: string | null;
+  active_worker_count: number;
+  stale_worker_count: number;
+  last_error: string | null;
+}
+
 // ---------------- Projects ----------------
 
 export interface Project {
@@ -484,6 +499,7 @@ export const api = {
   listCron: () =>
     apiFetch<{ jobs: Array<Record<string, unknown>>; error?: string }>("/api/cron/jobs"),
   getCronConfig: () => apiFetch<CronConfigResponse>("/api/cron/config"),
+  getSchedulerDiagnostics: () => apiFetch<SchedulerDiagnosticsResponse>("/api/cron/diagnostics"),
   patchCronConfig: (patch: CronConfigPatch) =>
     apiFetch<CronConfigResponse>("/api/cron/config", {
       method: "PATCH",

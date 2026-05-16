@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { NavLink, useSearchParams } from "react-router-dom";
-import { api } from "../api/client";
+import { api, type SchedulerDiagnosticsResponse } from "../api/client";
 import ProjectSelector from "./ProjectSelector";
 import { useSession } from "../store/session";
 import { getAuthSemanticState } from "../utils/authStatusSemantics";
+import { formatSchedulerDiagnostics, formatCronStatus } from "../utils/schedulerDiagnostics";
 
 const STATUS_COLLAPSED_KEY = "oh:sidebar:status-collapsed";
 
@@ -27,8 +28,7 @@ interface Props {
 export default function Sidebar({ open, onClose, collapsed = false }: Props) {
   const tasks = useSession((s) => s.tasks);
   const appState = useSession((s) => s.appState);
-  const [cron, setCron] = useState<Array<Record<string, unknown>>>([]);
-  const [schedulerRunning, setSchedulerRunning] = useState<boolean>(false);
+  const [diagnostics, setDiagnostics] = useState<SchedulerDiagnosticsResponse | null>(null);
   const [statusCollapsed, setStatusCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem(STATUS_COLLAPSED_KEY) === "true";
@@ -39,25 +39,19 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
 
   useEffect(() => {
     api
-      .listCron()
-      .then((d) => setCron(d.jobs || []))
-      .catch(() => setCron([]));
+      .getSchedulerDiagnostics()
+      .then(setDiagnostics)
+      .catch(() => setDiagnostics(null));
   }, [tasks.length]);
 
-  useEffect(() => {
-    api
-      .getCronConfig()
-      .then((cfg) => setSchedulerRunning(cfg.scheduler_running ?? false))
-      .catch(() => setSchedulerRunning(false));
-  }, []);
-
+  const schedulerDisplay = formatSchedulerDiagnostics(diagnostics);
+  const cronDisplay = formatCronStatus(diagnostics);
   const runningJobs = tasks.filter((t) =>
     ["running", "active", "in_progress"].includes(t.status),
   ).length;
   const failedJobs = tasks.filter((t) =>
     ["failed", "error"].includes(t.status),
   ).length;
-  const enabledCron = cron.filter((j) => Boolean(j.enabled)).length;
   const mcpFailed = appState?.mcp_failed ?? 0;
 
   /** A brief "pulse" dot shown next to Control when there's something to notice */
@@ -133,14 +127,19 @@ export default function Sidebar({ open, onClose, collapsed = false }: Props) {
               tone={failedJobs > 0 ? "danger" : runningJobs > 0 ? "warning" : "success"}
             />
             <StatusField
-              label="Scheduler"
-              value={schedulerRunning ? "running" : "stopped"}
-              tone={schedulerRunning ? "success" : "neutral"}
+              label={schedulerDisplay.label}
+              value={schedulerDisplay.value}
+              tone={schedulerDisplay.tone}
             />
             <StatusField
-              label="Cron jobs"
-              value={`${enabledCron}/${cron.length} enabled`}
-              tone={enabledCron > 0 ? "success" : cron.length > 0 ? "warning" : "neutral"}
+              label={cronDisplay.label}
+              value={cronDisplay.value}
+              tone={cronDisplay.tone}
+            />
+            <StatusField
+              label="Feature"
+              value={diagnostics?.scheduling_feature_enabled ? "enabled" : "disabled"}
+              tone={diagnostics?.scheduling_feature_enabled ? "success" : "neutral"}
             />
             <StatusField
               label="MCP"
