@@ -47,6 +47,14 @@ interface Props {
 export default function HistoryDetailDrawer({ session, onClose, onResume }: Props) {
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("project") ?? undefined;
+
+  // Build detail URL with optional project for per-tab isolation.
+  const detailUrl = session
+    ? projectId
+      ? `/api/history/${encodeURIComponent(session.session_id)}?project=${encodeURIComponent(projectId)}`
+      : `/api/history/${encodeURIComponent(session.session_id)}`
+    : null;
+
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +74,7 @@ export default function HistoryDetailDrawer({ session, onClose, onResume }: Prop
     setError(null);
     setSnapshot(null);
 
-    apiFetch<SessionSnapshot>(`/api/history/${encodeURIComponent(session.session_id)}`, {
+    apiFetch<SessionSnapshot>(detailUrl!, {
       signal: ctl.signal,
     })
       .then((data) => {
@@ -80,7 +88,7 @@ export default function HistoryDetailDrawer({ session, onClose, onResume }: Prop
       });
 
     return () => ctl.abort();
-  }, [session]);
+  }, [session, detailUrl]);
 
   // Escape key closes the drawer.
   useEffect(() => {

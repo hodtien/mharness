@@ -27,21 +27,13 @@ const MOCK_RESPONSE: ProjectsResponse = {
 function mockFetch(response: ProjectsResponse = MOCK_RESPONSE) {
   vi.stubGlobal(
     "fetch",
-    vi.fn((url: string, init?: RequestInit) => {
+    vi.fn((url: string) => {
       if (url === "/api/projects") {
         return Promise.resolve({
           ok: true,
           status: 200,
           headers: { get: () => null },
           json: () => Promise.resolve(response),
-        });
-      }
-      if (url.startsWith("/api/projects/") && url.endsWith("/activate") && init?.method === "POST") {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          headers: { get: () => null },
-          json: () => Promise.resolve({ ok: true }),
         });
       }
       return Promise.reject(new Error(`unexpected url: ${url}`));
@@ -130,7 +122,7 @@ describe("ProjectSelector", () => {
     expect(manageLink.getAttribute("href")).toContain("project=proj-001");
   });
 
-  it("activates the selected project before updating the URL", async () => {
+  it("updates the active project in the URL-driven UI without calling project activation", async () => {
     mockFetch();
 
     render(
@@ -149,11 +141,9 @@ describe("ProjectSelector", () => {
       fireEvent.click(screen.getByRole("button", { name: /my app/i }));
     });
 
-    await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith(
-        "/api/projects/proj-001/activate",
-        expect.objectContaining({ method: "POST" }),
-      ),
+    expect(fetch).not.toHaveBeenCalledWith(
+      "/api/projects/proj-001/activate",
+      expect.anything(),
     );
     expect(screen.getByRole("button").textContent).toContain("My App");
   });
