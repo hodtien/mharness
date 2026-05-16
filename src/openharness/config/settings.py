@@ -27,6 +27,7 @@ from openharness.utils.fs import atomic_write_text
 
 # ANSI escape sequence pattern
 _ANSI_ESCAPE_PATTERN = re.compile(r"\x1b\[[0-9;]*m")
+DEFAULT_TASK_STALE_THRESHOLD_SECONDS = 15 * 60
 
 
 def strip_ansi_escape_sequences(text: str) -> str:
@@ -494,6 +495,7 @@ class Settings(BaseModel):
     active_profile: str = "claude-api"
     profiles: dict[str, ProviderProfile] = Field(default_factory=default_provider_profiles)
     max_turns: int = 200
+    task_stale_threshold_seconds: float | None = DEFAULT_TASK_STALE_THRESHOLD_SECONDS
 
     # Behavior
     system_prompt: str | None = None
@@ -842,6 +844,10 @@ def _apply_env_overrides(settings: Settings) -> Settings:
     max_turns = os.environ.get("OPENHARNESS_MAX_TURNS")
     if max_turns:
         updates["max_turns"] = int(max_turns)
+
+    task_stale_threshold_seconds = os.environ.get("OPENHARNESS_TASK_STALE_THRESHOLD_SECONDS")
+    if task_stale_threshold_seconds is not None:
+        updates["task_stale_threshold_seconds"] = float(task_stale_threshold_seconds)
 
     context_window_tokens = os.environ.get("OPENHARNESS_CONTEXT_WINDOW_TOKENS")
     if context_window_tokens:
