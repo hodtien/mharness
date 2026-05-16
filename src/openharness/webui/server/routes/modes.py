@@ -175,19 +175,27 @@ async def patch_modes(
             detail="At least one field must be provided",
         )
 
-    snapshot = _apply_to_app_states(manager, updates)
-
+    snapshot = None
     try:
-        if snapshot is None:
-            snapshot = _apply_to_settings(updates)
-        else:
-            _apply_to_settings(updates)
+        snapshot = _apply_to_settings(updates)
     except Exception as exc:
         log.warning("save_settings failed for PATCH /api/modes: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to persist settings: {exc}",
         ) from exc
+
+    # Only mutate active session state after settings have been persisted.
+    # This guarantees that a persistence failure never leaks a new model/effort
+    # into the running engine.  We do not fail the request if runtime mutation
+    # fails — the persisted settings are already correct and a future
+    # state_snapshot broadcast will reconcile the runtime.
+    try:
+        runtime_snapshot = _apply_to_app_states(manager, updates)
+        if runtime_snapshot is not None:
+            snapshot = runtime_snapshot
+    except Exception as exc:  # pragma: no cover - defensive
+        log.debug("runtime state update failed after persistence: %s", exc)
 
     if "permission_mode" in updates:
         state.permission_mode = updates["permission_mode"]  # type: ignore[assignment]
