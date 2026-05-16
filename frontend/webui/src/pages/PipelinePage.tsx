@@ -428,29 +428,20 @@ interface ColumnDef {
   statuses: RepoTaskStatus[];
   badgeColor: string;
   pulseWhenActive?: boolean;
-  /** When true, this column is part of the terminal group and can be collapsed */
-  terminal?: boolean;
 }
 
-/** Default number of terminal cards to show when collapsed */
-const TERMINAL_COLLAPSE_LIMIT = 5;
+const _LIMIT = 5;
 
 const COLUMNS: ColumnDef[] = [
   {
     id: "queue",
     label: "Queue",
-    statuses: ["queued", "accepted"],
+    statuses: ["queued", "accepted", "pending"],
     badgeColor: "bg-[var(--status-queue-bg)] text-[var(--status-queue-text)] border-[var(--status-queue-border)]",
   },
   {
-    id: "pending",
-    label: "Pending",
-    statuses: ["pending"],
-    badgeColor: "bg-[var(--status-pending-bg)] text-[var(--status-pending-text)] border-[var(--status-pending-border)]",
-  },
-  {
-    id: "in_progress",
-    label: "In Progress",
+    id: "running",
+    label: "Running",
     statuses: ["preparing", "running", "verifying", "repairing"],
     badgeColor: "bg-[var(--status-running-bg)] text-[var(--status-running-text)] border-[var(--status-running-border)]",
     pulseWhenActive: true,
@@ -462,25 +453,16 @@ const COLUMNS: ColumnDef[] = [
     badgeColor: "bg-[var(--status-review-bg)] text-[var(--status-review-text)] border-[var(--status-review-border)]",
   },
   {
-    id: "completed",
-    label: "Completed",
+    id: "failed_paused",
+    label: "Failed/Paused",
+    statuses: ["failed", "paused"],
+    badgeColor: "bg-[var(--status-failed-bg)] text-[var(--status-failed-text)] border-[var(--status-failed-border)]",
+  },
+  {
+    id: "done_merged",
+    label: "Done/Merged",
     statuses: ["completed", "merged"],
     badgeColor: "bg-[var(--status-done-bg)] text-[var(--status-done-text)] border-[var(--status-done-border)]",
-    terminal: true,
-  },
-  {
-    id: "failed",
-    label: "Failed",
-    statuses: ["failed"],
-    badgeColor: "bg-[var(--status-failed-bg)] text-[var(--status-failed-text)] border-[var(--status-failed-border)]",
-    terminal: true,
-  },
-  {
-    id: "rejected",
-    label: "Rejected",
-    statuses: ["rejected", "killed", "paused", "superseded"],
-    badgeColor: "bg-[var(--status-rejected-bg)] text-[var(--status-rejected-text)] border-[var(--status-rejected-border)]",
-    terminal: true,
   },
 ];
 
@@ -1700,6 +1682,67 @@ function Drawer({ card, onClose, onAction, onRun, onPause, onResume, onRetryNow,
   );
 }
 
+// ─── Terminal History Drawer ───────────────────────────────────────────────────
+
+interface TerminalHistoryDrawerProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+function TerminalHistoryDrawer({ open, onClose }: TerminalHistoryDrawerProps) {
+  const [cards, setCards] = useState<PipelineCard[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    apiFetch<{ cards: PipelineCard[] }>("/api/pipeline/cards")
+      .then((data) => setCards(data.cards))
+      .catch(() => {});
+  }, [open]);
+
+  if (!open) return null;
+
+  // Combine done/merged and failed/paused terminals, sorted by updated_at descending
+  const terminalStatuses = ["completed", "merged", "failed", "paused", "rejected", "killed", "superseded"];
+  const terminalCards = [...cards.filter((c) => terminalStatuses.includes(c.status))].sort(
+    (a, b) => b.updated_at - a.updated_at,
+  );
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-40 bg-black/50"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        className="fixed right-0 top-0 z-50 flex h-full w-[28rem] flex-col rounded-l-2xl border border-[var(--border)] bg-[var(--panel)] shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Terminal history"
+        data-testid="terminal-history-drawer"
+      >
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
+          <h2 className="text-base font-semibold text-[var(--text)]">Terminal history</h2>
+          <button
+            onClick={onClose}
+            className="rounded-md border border-[var(--border)] bg-[var(--panel-2)] p-1.5 text-sm text-[var(--text-dim)] transition hover:border-[var(--accent)]/40 hover:text-[var(--text)]"
+            aria-label="Close terminal history"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {terminalCards.length === 0 ? (
+            <p className="text-center text-sm text-[var(--text-dim)]">No terminal cards.</p>
+          ) : (
+            terminalCards.map((card) => <Card key={card.id} card={card} onClick={() => {}} />)
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 type ActiveTab = "board" | "policy";
@@ -1722,6 +1765,7 @@ export default function PipelinePage() {
   const projectSwitchedAt = useSession((s) => s.projectSwitchedAt);
   /** Override terminal collapse: when true, show all terminal cards regardless of limit */
   const [showAllTerminal, setShowAllTerminal] = useState(false);
+  const [terminalDrawerOpen, setTerminalDrawerOpen] = useState(false);
 
   // Attention strip counts
   const failedCount = cards.filter((c) => c.status === "failed" || c.status === "paused").length;
@@ -2036,15 +2080,43 @@ export default function PipelinePage() {
           </div>
           <div className="flex flex-1 overflow-x-auto p-4 gap-4">
             {(() => {
-              const activeCols = COLUMNS.filter((c) => !c.terminal);
-              const terminalCols = COLUMNS.filter((c) => c.terminal);
-              const totalTerminalCount = cards.filter((c) => terminalCols.some((col) => col.statuses.includes(c.status)) && matchesBoardFilter(c.status, boardFilter)).length;
+              // Split columns into main lanes and terminal columns (Done/Merged, Failed/Paused)
+              const mainCols = COLUMNS.filter((c) => c.id !== "done_merged" && c.id !== "failed_paused");
+              const doneMergedCol = COLUMNS.find((c) => c.id === "done_merged");
+              const failedPausedCol = COLUMNS.find((c) => c.id === "failed_paused");
+
+              // Collect Done/Merged cards with sorting (latest first by updated_at)
+              const doneMergedCards = doneMergedCol
+                ? [...cards.filter((c) => doneMergedCol.statuses.includes(c.status) && matchesBoardFilter(c.status, boardFilter))].sort(
+                    (a, b) => b.updated_at - a.updated_at,
+                  )
+                : [];
+              const doneMergedCount = doneMergedCards.length;
+
+              // Collect Failed/Paused cards with sorting (latest failed/paused first)
+              const failedPausedCards = failedPausedCol
+                ? [...cards.filter((c) => failedPausedCol.statuses.includes(c.status) && matchesBoardFilter(c.status, boardFilter))].sort(
+                    (a, b) => b.updated_at - a.updated_at,
+                  )
+                : [];
+              const failedPausedCount = failedPausedCards.length;
+
+              const LIMIT = _LIMIT;
+              const showMoreDone = doneMergedCount > LIMIT && !showAllTerminal;
+              const showMoreFailed = failedPausedCount > LIMIT && !showAllTerminal;
+
+              const visibleDoneCards = showAllTerminal ? doneMergedCards : doneMergedCards.slice(0, LIMIT);
+              const visibleFailedCards = showAllTerminal ? failedPausedCards : failedPausedCards.slice(0, LIMIT);
+              const hiddenDoneCount = doneMergedCount - LIMIT;
+              const hiddenFailedCount = failedPausedCount - LIMIT;
+
               return (
                 <>
-                  {activeCols.map((col) => {
+                  {/* Main lanes */}
+                  {mainCols.map((col) => {
                     const colCards = cards.filter((c) => col.statuses.includes(c.status) && matchesBoardFilter(c.status, boardFilter));
                     return (
-                      <div key={col.id} className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+                      <div key={col.id} className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]" data-testid={`lane-${col.id}`}>
                         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-3 py-2.5">
                           <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">{col.label}</span>
                           <span className={`flex h-5 min-w-5 items-center justify-center rounded-full border px-1.5 text-[10px] font-medium ${col.badgeColor}${col.pulseWhenActive && colCards.length > 0 ? " animate-pulse-subtle" : ""}`}>{colCards.length}</span>
@@ -2055,100 +2127,97 @@ export default function PipelinePage() {
                       </div>
                     );
                   })}
-                  {/* Terminal section */}
-                  {terminalCols.length > 0 && (
-                    <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel-2)]">
-                      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel-2)] px-3 py-2.5">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">Terminal history</span>
-                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full border bg-[var(--status-done-bg)] px-1.5 text-[10px] font-medium text-[var(--status-done-text)] border-[var(--status-done-border)]" data-testid="terminal-history-count">{totalTerminalCount}</span>
+
+                  {/* Failed/Paused lane */}
+                  {failedPausedCol && (
+                    <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]" data-testid="lane-failed_paused">
+                      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-3 py-2.5">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">{failedPausedCol.label}</span>
+                        <span className={`flex h-5 min-w-5 items-center justify-center rounded-full border px-1.5 text-[10px] font-medium ${failedPausedCol.badgeColor}`}>{failedPausedCount}</span>
                       </div>
                       <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                        {(() => {
-                          // Gather and flatten all terminal cards
-                          const allTerminalCards: Array<{ card: PipelineCard; colId: string; colLabel: string }> = [];
-                          for (const col of terminalCols) {
-                            const colCards = cards.filter((c) => col.statuses.includes(c.status) && matchesBoardFilter(c.status, boardFilter));
-                            for (const card of colCards) {
-                              allTerminalCards.push({ card, colId: col.id, colLabel: col.label });
-                            }
-                          }
-                          // Sort by most recent first
-                          allTerminalCards.sort((a, b) => b.card.updated_at - a.card.updated_at);
-                          const visibleTerminal = showAllTerminal || boardFilter === "terminal" ? allTerminalCards : allTerminalCards.slice(0, TERMINAL_COLLAPSE_LIMIT);
-                          const hiddenCount = allTerminalCards.length - visibleTerminal.length;
-
-                          // Group back by column for display
-                          const grouped: Record<string, Array<PipelineCard>> = {};
-                          for (const item of visibleTerminal) {
-                            if (!grouped[item.colId]) grouped[item.colId] = [];
-                            grouped[item.colId].push(item.card);
-                          }
-
-                          if (boardFilter !== "terminal" && allTerminalCards.length <= TERMINAL_COLLAPSE_LIMIT) {
-                            // Small count: render directly without grouping headers
-                            return (
-                              <>
-                                {terminalCols.map((col) => {
-                                  const colCards = cards.filter((c) => col.statuses.includes(c.status) && matchesBoardFilter(c.status, boardFilter));
-                                  return (
-                                    <div key={col.id}>
-                                      {colCards.map((card) => <Card key={card.id} card={card} onClick={() => setSelectedCard(card)} />)}
-                                    </div>
-                                  );
-                                })}
-                              </>
-                            );
-                          }
-
-                          return (
-                            <>
-                              {terminalCols.map((col) => {
-                                const colCards = grouped[col.id] ?? [];
-                                if (colCards.length === 0) return null;
-                                return (
-                                  <div key={col.id}>
-                                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-dim)] opacity-60">{col.label}</div>
-                                    {colCards.map((card) => <Card key={card.id} card={card} onClick={() => setSelectedCard(card)} />)}
-                                  </div>
-                                );
-                              })}
-                              {hiddenCount > 0 && boardFilter !== "terminal" && (
-                                <button
-                                  onClick={() => setShowAllTerminal(true)}
-                                  className="mt-2 w-full rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1.5 text-center text-xs text-[var(--accent)] hover:border-[var(--accent)]/40"
-                                  data-testid="show-more-terminal"
-                                >
-                                  +{hiddenCount} more
-                                </button>
-                              )}
-                            </>
-                          );
-                        })()}
-                        {boardFilter !== "terminal" && !showAllTerminal && totalTerminalCount > TERMINAL_COLLAPSE_LIMIT && (
-                          <button
-                            onClick={() => setShowAllTerminal(true)}
-                            className="mt-2 w-full rounded-md border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-2 py-1.5 text-center text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent)]/20"
-                            data-testid="show-all-terminal"
-                          >
-                            Show all {totalTerminalCount} terminal
-                          </button>
-                        )}
-                        {showAllTerminal && (
-                          <button
-                            onClick={() => setShowAllTerminal(false)}
-                            className="mt-2 w-full rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1.5 text-center text-xs text-[var(--text-dim)] hover:border-[var(--accent)]/40 hover:text-[var(--text)]"
-                            data-testid="collapse-terminal"
-                          >
-                            Collapse terminal
-                          </button>
+                        {failedPausedCount === 0 ? (
+                          <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--text-dim)]">No failed/paused cards.</div>
+                        ) : (
+                          <>
+                            {visibleFailedCards.map((card) => <Card key={card.id} card={card} onClick={() => setSelectedCard(card)} />)}
+                            {showMoreFailed && (
+                              <button
+                                onClick={() => {
+                                  setShowAllTerminal(true);
+                                  setTerminalDrawerOpen(true);
+                                }}
+                                className="mt-2 w-full rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1.5 text-center text-xs text-[var(--accent)] hover:border-[var(--accent)]/40"
+                                data-testid="show-more-failed"
+                              >
+                                +{hiddenFailedCount} more failed/paused
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Done/Merged lane */}
+                  {doneMergedCol && (
+                    <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]" data-testid="lane-done_merged">
+                      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-3 py-2.5">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">{doneMergedCol.label}</span>
+                        <span className={`flex h-5 min-w-5 items-center justify-center rounded-full border px-1.5 text-[10px] font-medium ${doneMergedCol.badgeColor}`}>{doneMergedCount}</span>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                        {doneMergedCount === 0 ? (
+                          <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--text-dim)]">No done/merged cards.</div>
+                        ) : (
+                          <>
+                            {visibleDoneCards.map((card) => <Card key={card.id} card={card} onClick={() => setSelectedCard(card)} />)}
+                            {showMoreDone && (
+                              <button
+                                onClick={() => {
+                                  setShowAllTerminal(true);
+                                  setTerminalDrawerOpen(true);
+                                }}
+                                className="mt-2 w-full rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1.5 text-center text-xs text-[var(--accent)] hover:border-[var(--accent)]/40"
+                                data-testid="show-more-done"
+                              >
+                                +{hiddenDoneCount} more done/merged
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Terminal History drawer trigger */}
+                  {(doneMergedCount + failedPausedCount) > 0 && (
+                    <div className="flex w-16 shrink-0 flex-col items-center justify-center">
+                      <button
+                        onClick={() => setTerminalDrawerOpen(true)}
+                        className="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--status-failed-border)] bg-[var(--status-failed-bg)] text-[var(--status-failed-text)] shadow-sm transition hover:bg-[var(--status-failed-text)]/20"
+                        title="Terminal history"
+                        aria-label="Open terminal history"
+                        data-testid="terminal-history-btn"
+                      >
+                        <span className="text-lg">📋</span>
+                      </button>
+                      <span className="mt-1.5 text-[10px] text-[var(--text-dim)]" data-testid="terminal-history-count">{doneMergedCount + failedPausedCount}</span>
                     </div>
                   )}
                 </>
               );
             })()}
           </div>
+
+          {/* Terminal History Drawer */}
+          <TerminalHistoryDrawer
+            open={terminalDrawerOpen}
+            onClose={() => {
+              setTerminalDrawerOpen(false);
+              setShowAllTerminal(false);
+            }}
+          />
         </>
       )}
 
