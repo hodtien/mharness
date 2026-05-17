@@ -283,6 +283,7 @@ export interface ProviderProfile {
   base_url?: string | null;
   has_credentials: boolean;
   is_active: boolean;
+  health_label: string;
   last_verified_at?: string | null;
   verification_latency_ms?: number | null;
   model_count?: number | null;

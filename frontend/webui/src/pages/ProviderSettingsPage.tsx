@@ -32,12 +32,6 @@ function providerIcon(provider: ProviderProfile): string {
   return "🔌";
 }
 
-function statusLabel(provider: ProviderProfile): "Active" | "Configured" | "Not configured" {
-  if (provider.is_active) return "Active";
-  if (provider.has_credentials) return "Configured";
-  return "Not configured";
-}
-
 function formatLatency(ms: number | undefined): string {
   if (ms === undefined) return "";
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
@@ -232,7 +226,7 @@ export default function ProviderSettingsPage() {
                       <div className="text-xs text-[var(--text-dim)]">{provider.provider}</div>
                     </div>
                   </div>
-                  <StatusBadge status={statusLabel(provider)} />
+                  <StatusBadge status={provider.health_label} />
                 </div>
                 <div className="mt-4 text-xs uppercase tracking-wide text-[var(--text-dim)]">Default model</div>
                 <div className="mt-1 truncate font-mono text-sm text-cyan-100">{provider.default_model || "—"}</div>
@@ -249,9 +243,9 @@ export default function ProviderSettingsPage() {
 
         {providers.length > 0 && (
           <p className="text-xs text-[var(--text-dim)]">
-            <strong className="font-medium text-[var(--text-dim)]">Active</strong> — currently used for new sessions.&nbsp;
-            <strong className="font-medium text-[var(--text-dim)]">Configured</strong> — credentials saved but not active.&nbsp;
-            <strong className="font-medium text-[var(--text-dim)]">Not configured</strong> — no API key stored yet.
+            <strong className="font-medium text-[var(--text-dim)]">Healthy</strong> — active route verified and reachable.&nbsp;
+            <strong className="font-medium text-[var(--text-dim)]">Configured</strong> — credentials saved, but not yet verified.&nbsp;
+            <strong className="font-medium text-[var(--text-dim)]">Missing credentials</strong> — no API key stored yet.
             Latency and &ldquo;last verified&rdquo; time appear after running <em>Verify</em>.
           </p>
         )}
@@ -315,13 +309,15 @@ function ConnectionStatusRow({ status }: { status: ConnectionStatus }) {
   );
 }
 
-function StatusBadge({ status }: { status: "Active" | "Configured" | "Not configured" }) {
+function StatusBadge({ status }: { status: string }) {
   const classes =
-    status === "Active"
-      ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
-      : status === "Configured"
-        ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-100"
-        : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)]";
+    status === "Healthy"
+      ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-100"
+      : status === "Warning" || status === "Probe failing"
+        ? "border-red-400/40 bg-red-400/10 text-red-200"
+        : status === "Missing credentials"
+          ? "border-amber-400/40 bg-amber-400/10 text-amber-100"
+          : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)]";
   return <span className={`rounded-full border px-2 py-1 text-xs ${classes}`}>{status}</span>;
 }
 

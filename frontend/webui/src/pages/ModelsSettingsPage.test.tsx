@@ -40,6 +40,7 @@ const sampleProviders = {
       base_url: null,
       has_credentials: false,
       is_active: false,
+      health_label: "Missing credentials",
     },
     {
       id: "claude-api",
@@ -50,6 +51,7 @@ const sampleProviders = {
       base_url: null,
       has_credentials: true,
       is_active: true,
+      health_label: "Healthy",
     },
   ],
 };

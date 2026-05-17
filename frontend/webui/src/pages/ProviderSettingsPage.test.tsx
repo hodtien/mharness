@@ -34,6 +34,7 @@ const sampleProviders = {
       base_url: "https://api.openai.com/v1",
       has_credentials: false,
       is_active: false,
+      health_label: "Missing credentials",
     },
     {
       id: "anthropic-default",
@@ -44,6 +45,7 @@ const sampleProviders = {
       base_url: null,
       has_credentials: true,
       is_active: true,
+      health_label: "Healthy",
     },
   ],
 };
@@ -62,10 +64,10 @@ describe("ProviderSettingsPage", () => {
       expect(screen.getAllByText("OpenAI").length).toBeGreaterThan(0);
     });
     expect(screen.getAllByText("Anthropic").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Not configured").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Healthy").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Missing credentials").length).toBeGreaterThan(0);
     expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0);
-    expect(screen.getByText(/currently used for new sessions/i)).toBeTruthy();
+    expect(screen.getByText(/healthy/i)).toBeTruthy();
     expect(screen.getByText(/latency and .*last verified/i)).toBeTruthy();
   });
 
