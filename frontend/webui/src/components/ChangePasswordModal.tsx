@@ -31,13 +31,35 @@ export default function ChangePasswordModal({ open, onClose, onChanged }: Change
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose, open]);
 
+  // Compute form validity for inline validation
+  const hasOldPassword = oldPassword.trim().length > 0;
+  const hasNewPassword = newPassword.trim().length > 0;
+  const passwordsMatch = newPassword === confirmPassword;
+  const isFormValid = hasOldPassword && hasNewPassword && passwordsMatch;
+
+  // Real-time validation message
+  const validationMessage = (() => {
+    if (!hasOldPassword && !hasNewPassword && confirmPassword.length === 0) return null;
+    if (!hasOldPassword) return "Enter current password.";
+    if (!hasNewPassword) return "Enter new password.";
+    if (!passwordsMatch) return "New passwords do not match.";
+    return null;
+  })();
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submitting) return;
-    if (!oldPassword || !newPassword) {
-      setError("Enter both passwords.");
+    // Validate current password required
+    if (!oldPassword.trim()) {
+      setError("Enter current password.");
       return;
     }
+    // Validate new password required
+    if (!newPassword.trim()) {
+      setError("Enter new password.");
+      return;
+    }
+    // Validate passwords match
     if (newPassword !== confirmPassword) {
       setError("New passwords do not match.");
       return;
@@ -61,17 +83,31 @@ export default function ChangePasswordModal({ open, onClose, onChanged }: Change
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <form
         onSubmit={handleSubmit}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="change-password-title"
         className="w-full max-w-sm rounded-lg border border-[var(--border)] bg-[var(--panel)] p-5 shadow-xl"
       >
-        <div className="mb-4">
-          <h2 className="text-sm font-semibold text-[var(--text)]">Change password</h2>
-          <p className="mt-1 text-xs text-[var(--text-dim)]">Update the local WebUI password.</p>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 id="change-password-title" className="text-sm font-semibold text-[var(--text)]">Change password</h2>
+            <p className="mt-1 text-xs text-[var(--text-dim)]">Update the local WebUI password.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close change password dialog"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--panel-2)] text-sm text-[var(--text-dim)] transition hover:text-[var(--text)]"
+          >
+            ×
+          </button>
         </div>
 
         <div className="space-y-3">
           <label className="block text-sm">
             <span className="mb-1.5 block text-xs font-medium text-[var(--text-dim)]">Current password</span>
             <input
+              id="current-password"
               type="password"
               value={oldPassword}
               onChange={(event) => setOldPassword(event.target.value)}
@@ -83,6 +119,7 @@ export default function ChangePasswordModal({ open, onClose, onChanged }: Change
           <label className="block text-sm">
             <span className="mb-1.5 block text-xs font-medium text-[var(--text-dim)]">New password</span>
             <input
+              id="new-password"
               type="password"
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
@@ -93,6 +130,7 @@ export default function ChangePasswordModal({ open, onClose, onChanged }: Change
           <label className="block text-sm">
             <span className="mb-1.5 block text-xs font-medium text-[var(--text-dim)]">Confirm new password</span>
             <input
+              id="confirm-password"
               type="password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
@@ -108,6 +146,13 @@ export default function ChangePasswordModal({ open, onClose, onChanged }: Change
           </div>
         ) : null}
 
+        {/* Inline validation message */}
+        {validationMessage && !error ? (
+          <div className="mt-3 text-xs text-amber-300" role="status" aria-live="polite">
+            {validationMessage}
+          </div>
+        ) : null}
+
         <div className="mt-5 flex items-center justify-end gap-2">
           <button
             type="button"
@@ -118,7 +163,7 @@ export default function ChangePasswordModal({ open, onClose, onChanged }: Change
           </button>
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !isFormValid}
             className="inline-flex min-h-9 items-center rounded-md border border-[var(--accent)]/40 bg-[var(--accent)]/20 px-3 text-xs font-medium text-[var(--accent)] transition hover:bg-[var(--accent)]/30 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {submitting ? "Saving..." : "Save"}

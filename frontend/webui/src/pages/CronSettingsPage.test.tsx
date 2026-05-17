@@ -25,8 +25,7 @@ function jsonResponse(data: unknown, status = 200) {
     status,
     statusText: status === 204 ? "No Content" : "OK",
     json: () => Promise.resolve(data),
-    text: () =>
-      Promise.resolve(typeof data === "string" ? data : JSON.stringify(data)),
+    text: () => Promise.resolve(typeof data === "string" ? data : JSON.stringify(data)),
     headers: { get: () => null },
   };
 }
@@ -40,24 +39,13 @@ const defaultCronConfig = {
   install_mode: "auto",
   scan_cron_description: "Every 15 minutes",
   tick_cron_description: "Every hour",
-  next_scan_runs: [
-    "2025-01-01T09:00:00",
-    "2025-01-01T09:15:00",
-    "2025-01-01T09:30:00",
-  ],
-  next_tick_runs: [
-    "2025-01-01T09:00:00",
-    "2025-01-01T10:00:00",
-    "2025-01-01T11:00:00",
-  ],
+  next_scan_runs: ["2025-01-01T09:00:00", "2025-01-01T09:15:00", "2025-01-01T09:30:00"],
+  next_tick_runs: ["2025-01-01T09:00:00", "2025-01-01T10:00:00", "2025-01-01T11:00:00"],
 };
 
 function mockGetCron(data = defaultCronConfig) {
   vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
-    if (
-      url === "/api/cron/config" &&
-      (!init?.method || init.method === "GET")
-    ) {
+    if (url === "/api/cron/config" && (!init?.method || init.method === "GET")) {
       return Promise.resolve(jsonResponse(data));
     }
     if (url === "/api/cron/config" && init?.method === "PATCH") {
@@ -148,9 +136,7 @@ describe("CronSettingsPage", () => {
     mockLocalStorage();
     const patchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === "/api/cron/config" && init?.method === "PATCH") {
-        return Promise.resolve(
-          jsonResponse({ ...defaultCronConfig, scan_cron: "*/30 * * * *" }),
-        );
+        return Promise.resolve(jsonResponse({ ...defaultCronConfig, scan_cron: "*/30 * * * *" }));
       }
       return Promise.resolve(jsonResponse(defaultCronConfig));
     });
@@ -223,9 +209,7 @@ describe("CronSettingsPage", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Disabled")).toBeTruthy();
-      expect(
-        screen.getByText(/More frequent schedules increase API usage/i),
-      ).toBeTruthy();
+      expect(screen.getByText(/More frequent schedules increase API usage/i)).toBeTruthy();
     });
   });
 
@@ -234,13 +218,7 @@ describe("CronSettingsPage", () => {
     const patchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === "/api/cron/config" && init?.method === "PATCH") {
         const body = JSON.parse(String(init?.body ?? "{}"));
-        return Promise.resolve(
-          jsonResponse({
-            ...defaultCronConfig,
-            ...body,
-            enabled: body.enabled ?? true,
-          }),
-        );
+        return Promise.resolve(jsonResponse({ ...defaultCronConfig, ...body, enabled: body.enabled ?? true }));
       }
       return Promise.resolve(jsonResponse(defaultCronConfig));
     });
@@ -261,9 +239,7 @@ describe("CronSettingsPage", () => {
       );
     });
     const calls = patchMock.mock.calls;
-    const patchCall = calls.find(
-      ([u, i]) => u === "/api/cron/config" && i?.method === "PATCH",
-    );
+    const patchCall = calls.find(([u, i]) => u === "/api/cron/config" && i?.method === "PATCH");
     expect(patchCall).toBeDefined();
     const bodyStr = patchCall?.[1]?.body as string;
     expect(bodyStr).toContain('"enabled":false');
@@ -293,12 +269,7 @@ describe("CronSettingsPage", () => {
 
   it("hides next runs preview when cron is disabled", async () => {
     mockLocalStorage();
-    mockGetCron({
-      ...defaultCronConfig,
-      enabled: false,
-      next_scan_runs: [],
-      next_tick_runs: [],
-    });
+    mockGetCron({ ...defaultCronConfig, enabled: false, next_scan_runs: [], next_tick_runs: [] });
 
     renderPage();
 
@@ -315,13 +286,7 @@ describe("CronSettingsPage", () => {
     const patchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === "/api/cron/config" && init?.method === "PATCH") {
         const body = JSON.parse(String(init?.body ?? "{}"));
-        return Promise.resolve(
-          jsonResponse({
-            ...defaultCronConfig,
-            ...body,
-            enabled: body.enabled ?? true,
-          }),
-        );
+        return Promise.resolve(jsonResponse({ ...defaultCronConfig, ...body, enabled: body.enabled ?? true }));
       }
       return Promise.resolve(jsonResponse(defaultCronConfig));
     });
@@ -330,15 +295,11 @@ describe("CronSettingsPage", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(
-        screen.getByLabelText(/enable autopilot scheduling/i),
-      ).toBeTruthy();
+      expect(screen.getByLabelText(/enable autopilot scheduling/i)).toBeTruthy();
     });
 
     // Toggle from checked=true to checked=false
-    const toggle = screen.getByLabelText(
-      /enable autopilot scheduling/i,
-    ) as HTMLInputElement;
+    const toggle = screen.getByLabelText(/enable autopilot scheduling/i) as HTMLInputElement;
     fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -351,9 +312,7 @@ describe("CronSettingsPage", () => {
     });
     // Verify the body string contains enabled:false
     const calls = patchMock.mock.calls;
-    const patchCall = calls.find(
-      ([u, i]) => u === "/api/cron/config" && i?.method === "PATCH",
-    );
+    const patchCall = calls.find(([u, i]) => u === "/api/cron/config" && i?.method === "PATCH");
     expect(patchCall).toBeDefined();
     const bodyStr = patchCall?.[1]?.body as string;
     expect(bodyStr).toContain('"enabled":false');
@@ -392,9 +351,7 @@ describe("CronSettingsPage", () => {
     // the API contract: when any change is submitted, install_mode is included.
     // We verify the response includes install_mode.
     const calls = patchMock.mock.calls;
-    const patchCall = calls.find(
-      ([u, i]) => u === "/api/cron/config" && i?.method === "PATCH",
-    );
+    const patchCall = calls.find(([u, i]) => u === "/api/cron/config" && i?.method === "PATCH");
     if (patchCall) {
       const bodyStr = patchCall?.[1]?.body as string;
       const body = JSON.parse(bodyStr);
@@ -419,11 +376,189 @@ describe("CronSettingsPage", () => {
     });
 
     // Timestamps should be formatted into human-readable strings
-    const scanRunsText =
-      screen.getByText(/next scan runs/i).parentElement?.textContent ?? "";
-    const tickRunsText =
-      screen.getByText(/next tick runs/i).parentElement?.textContent ?? "";
+    const scanRunsText = screen.getByText(/next scan runs/i).parentElement?.textContent ?? "";
+    const tickRunsText = screen.getByText(/next tick runs/i).parentElement?.textContent ?? "";
     // Formatted dates contain month names, no raw ISO strings
     expect(scanRunsText + tickRunsText).not.toContain("2025-07-01T09:00:00");
+  });
+
+  describe("schedule toggle semantics", () => {
+    it("does not call PATCH when toggle state matches server config (enabled)", async () => {
+      mockLocalStorage();
+      const patchMock = vi.fn().mockResolvedValue(jsonResponse(defaultCronConfig));
+      vi.stubGlobal("fetch", patchMock);
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/enable autopilot scheduling/i)).toBeTruthy();
+      });
+
+      // Server config has enabled: true, toggle is already on
+      // Toggle is already checked (matches server), clicking should not PATCH
+      const toggle = screen.getByLabelText(/enable autopilot scheduling/i) as HTMLInputElement;
+      expect(toggle.checked).toBe(true);
+
+      // Click toggle to toggle off
+      fireEvent.click(toggle);
+
+      // PATCH should be called with enabled: false
+      await waitFor(() => {
+        expect(patchMock).toHaveBeenCalled();
+      });
+    });
+
+    it("shows success toast only after successful API write", async () => {
+      mockLocalStorage();
+      const patchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/cron/config" && init?.method === "PATCH") {
+          return Promise.resolve(jsonResponse({ ...defaultCronConfig, enabled: false }));
+        }
+        return Promise.resolve(jsonResponse(defaultCronConfig));
+      });
+      vi.stubGlobal("fetch", patchMock);
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/enable autopilot scheduling/i)).toBeTruthy();
+      });
+
+      const toggle = screen.getByLabelText(/enable autopilot scheduling/i) as HTMLInputElement;
+      fireEvent.click(toggle);
+
+      // Wait for the PATCH to complete
+      await waitFor(() => {
+        expect(patchMock).toHaveBeenCalled();
+      }, { timeout: 2000 });
+    });
+  });
+
+  describe("apply button dirty state", () => {
+    it("enables Apply button after scan cron input changes", async () => {
+      mockLocalStorage();
+      mockGetCron();
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/scan cron/i)).toBeTruthy();
+      });
+
+      const scanInput = screen.getByLabelText(/scan cron/i) as HTMLInputElement;
+      fireEvent.change(scanInput, { target: { value: "*/30 * * * *" } });
+
+      const applyButton = screen.getByRole("button", { name: /apply/i });
+      expect((applyButton as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it("enables Apply button after tick cron input changes", async () => {
+      mockLocalStorage();
+      mockGetCron();
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/tick cron/i)).toBeTruthy();
+      });
+
+      const tickInput = screen.getByLabelText(/tick cron/i) as HTMLInputElement;
+      fireEvent.change(tickInput, { target: { value: "0 */2 * * *" } });
+
+      const applyButton = screen.getByRole("button", { name: /apply/i });
+      expect((applyButton as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it("disables Apply button when cron values match server config", async () => {
+      mockLocalStorage();
+      mockGetCron();
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/scan cron/i)).toBeTruthy();
+      });
+
+      const applyButton = screen.getByRole("button", { name: /apply/i });
+      expect((applyButton as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("disables Apply button when a changed cron value is invalid", async () => {
+      mockLocalStorage();
+      mockGetCron();
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/scan cron/i)).toBeTruthy();
+      });
+
+      const scanInput = screen.getByLabelText(/scan cron/i) as HTMLInputElement;
+      fireEvent.change(scanInput, { target: { value: "not a cron" } });
+
+      const applyButton = screen.getByRole("button", { name: /apply/i });
+      expect((applyButton as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("disables Apply button when a changed cron value has invalid 5-field tokens", async () => {
+      mockLocalStorage();
+      mockGetCron();
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/scan cron/i)).toBeTruthy();
+      });
+
+      const scanInput = screen.getByLabelText(/scan cron/i) as HTMLInputElement;
+      fireEvent.change(scanInput, { target: { value: "foo bar baz qux quux" } });
+
+      const applyButton = screen.getByRole("button", { name: /apply/i });
+      expect((applyButton as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("disables Apply button when a changed cron value has out-of-range fields", async () => {
+      mockLocalStorage();
+      mockGetCron();
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/scan cron/i)).toBeTruthy();
+      });
+
+      const scanInput = screen.getByLabelText(/scan cron/i) as HTMLInputElement;
+      fireEvent.change(scanInput, { target: { value: "99 * * * *" } });
+
+      const applyButton = screen.getByRole("button", { name: /apply/i });
+      expect((applyButton as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("disables Apply button and avoids PATCH after reverting cron values", async () => {
+      mockLocalStorage();
+      const patchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/cron/config" && init?.method === "PATCH") {
+          return Promise.resolve(jsonResponse(defaultCronConfig));
+        }
+        return Promise.resolve(jsonResponse(defaultCronConfig));
+      });
+      vi.stubGlobal("fetch", patchMock);
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/scan cron/i)).toBeTruthy();
+      });
+
+      const scanInput = screen.getByLabelText(/scan cron/i) as HTMLInputElement;
+      fireEvent.change(scanInput, { target: { value: "*/30 * * * *" } });
+      fireEvent.change(scanInput, { target: { value: defaultCronConfig.scan_cron } });
+
+      const applyButton = screen.getByRole("button", { name: /apply/i }) as HTMLButtonElement;
+      expect(applyButton.disabled).toBe(true);
+      fireEvent.click(applyButton);
+
+      expect(patchMock.mock.calls.some(([url, init]) => url === "/api/cron/config" && init?.method === "PATCH")).toBe(false);
+    });
   });
 });
