@@ -1,12 +1,26 @@
+import "@testing-library/jest-dom";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ProjectsPage from "./ProjectsPage";
 import type { ProjectsResponse, Project } from "../api/client";
+
+const fixtureProjectPath = (...segments: string[]) => `fixture://${segments.join("/")}`;
+
+const MY_APP_PATH = fixtureProjectPath("projects", "my-app");
+const CLI_TOOL_PATH = fixtureProjectPath("projects", "cli-tool");
+const WEB_DASHBOARD_PATH = fixtureProjectPath("deployments", "dashboard");
+const REAL_APP_PATH = fixtureProjectPath("projects", "real-app");
+const MISSING_PROJECT_PATH = fixtureProjectPath("missing", "gone");
+const TEMP_PROJECT_PATH = fixtureProjectPath("temp", "pytest123");
+const WORKTREE_PROJECT_PATH = fixtureProjectPath("worktrees", "feature");
+const SHORT_PROJECT_PATH = fixtureProjectPath("short", "abc");
+const SHORT_X_PROJECT_PATH = fixtureProjectPath("short", "x");
+const NEW_PROJECT_PATH = fixtureProjectPath("new", "test");
 
 const makeProject = (overrides: Partial<Project> & { id?: string; name?: string; path?: string }): Project => ({
   id: "proj-001",
   name: "My App",
-  path: "/workspace/my-app",
+  path: MY_APP_PATH,
   description: null,
   created_at: null,
   updated_at: null,
@@ -20,69 +34,118 @@ const makeProject = (overrides: Partial<Project> & { id?: string; name?: string;
 
 const MOCK_PROJECTS_RESPONSE: ProjectsResponse = {
   projects: [
-    makeProject({ id: "proj-001", name: "My App", path: "/workspace/my-app" }),
-    makeProject({ id: "proj-002", name: "CLI Tool", path: "/workspace/cli-tool", is_active: true }),
-    makeProject({ id: "proj-003", name: "Web Dashboard", path: "/var/www/dashboard", description: "Production dashboard" }),
+    makeProject({ id: "proj-001", name: "My App", path: MY_APP_PATH }),
+    makeProject({ id: "proj-002", name: "CLI Tool", path: CLI_TOOL_PATH, is_active: true }),
+    makeProject({ id: "proj-003", name: "Web Dashboard", path: WEB_DASHBOARD_PATH, description: "Production dashboard" }),
   ],
   active_project_id: "proj-002",
 };
 
-function mockFetch(response: any = MOCK_PROJECTS_RESPONSE) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((url: string) => {
-      if (url === "/api/projects") {
-        return Promise.resolve({ ok: true, json: async () => response });
+function mockProjectsApi(response: ProjectsResponse = MOCK_PROJECTS_RESPONSE) {
+  const readBody = (init?: RequestInit) => {
+    const raw = init?.body;
+    if (typeof raw === "string") return JSON.parse(raw);
+    if (raw instanceof URLSearchParams) return Object.fromEntries(raw);
+    return {};
+  };
+  const fetchMock = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url === "/api/auth/refresh") {
+      return { ok: false, status: 401, json: async () => ({}) };
+    }
+    if (url === "/api/auth/status") {
+      return { ok: true, status: 200, json: async () => ({ is_default_password: false }) };
+    }
+    if (url === "/api/projects") {
+      if (init?.method === "POST") {
+        const body = readBody(init);
+        const created = makeProject({
+          id: "created-project",
+          name: body.name,
+          path: body.path,
+          description: body.description ?? null,
+        });
+        return { ok: true, status: 200, json: async () => created };
       }
-      if (url.match(/^\/api\/projects\/([^/]+)$/)) {
-        return Promise.resolve({ ok: true, status: 204 });
+      return { ok: true, status: 200, json: async () => response };
+    }
+    if (url.match(/^\/api\/projects\/([^/]+)\/activate$/)) {
+      return { ok: true, status: 204, json: async () => ({ ok: true }) };
+    }
+    if (url === "/api/projects/cleanup" || url.startsWith("/api/projects/cleanup?")) {
+      const body = readBody(init);
+      const missingOnly = body.missing_only === true;
+      const tempLikeOnly = body.temp_like_only === true;
+      const worktreeLikeOnly = body.worktree_like_only === true;
+      const cleanupProjects = response.projects.filter((project) => {
+        if (response.active_project_id && project.id === response.active_project_id) return false;
+        return (missingOnly && project.exists === false)
+          || (tempLikeOnly && project.is_temp_like === true)
+          || (worktreeLikeOnly && project.is_worktree_like === true);
+      });
+      if (body.confirmed) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, deleted_count: cleanupProjects.length, deleted_ids: cleanupProjects.map((project) => project.id) }) };
       }
-      if (url === `/api/projects/${response.active_project_id}/activate`) {
-        return Promise.resolve({ ok: true, status: 204 });
+      return { ok: true, status: 200, json: async () => ({ ok: true, preview_count: cleanupProjects.length }) };
+    }
+    if (url.match(/^\/api\/projects\/([^/]+)$/)) {
+      if (init?.method === "DELETE") {
+        return { ok: true, status: 204 };
       }
-      if (url === "/api/projects/cleanup") {
-        return Promise.resolve({ ok: true, json: async () => ({ ok: true, preview_count: 0 }) });
-      }
-      return Promise.reject(new Error(`unexpected url: ${url}`));
-    })
-  );
+      const patch = readBody(init);
+      const existing = response.projects.find((project) => url === `/api/projects/${project.id}`);
+      return { ok: true, status: 200, json: async () => ({ ...existing, ...patch }) };
+    }
+    return Promise.reject(new Error(`unexpected url: ${url}`));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
 }
 
-function mockLocalStorage() {
-  const store: Record<string, string> = {};
+function mockLocalStorage(initial: Record<string, string> = {}) {
+  const store: Record<string, string> = {
+    // Keep auth helpers from issuing refresh/status requests in ProjectsPage tests.
+    oh_token: "test-token",
+    ...initial,
+  };
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => store[key] ?? null,
     setItem: (key: string, value: string) => { store[key] = value; },
     removeItem: (key: string) => { delete store[key]; },
     clear: () => { Object.keys(store).forEach((k) => delete store[k]); },
   });
+  return store;
 }
 
 beforeEach(() => {
+  cleanup();
   vi.clearAllMocks();
   mockLocalStorage();
 });
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
 
-async function waitForProjects(count: number) {
-  await waitFor(() => {
-    const headings = screen.queryAllByRole("heading", { level: 2 });
-    if (headings.length !== count) {
-      throw new Error(`Expected ${count} headings, got ${headings.length}`);
-    }
-  });
+async function waitForProjects(count: number, timeoutMs = 2000) {
+  await waitFor(
+    () => {
+      const headings = screen.queryAllByRole("heading", { level: 2 });
+      if (headings.length !== count) {
+        throw new Error(`Expected ${count} headings, got ${headings.length}`);
+      }
+    },
+    { timeout: timeoutMs },
+  );
 }
 
 function projectHeading(name: string) {
-  return screen.getAllByRole("heading", { level: 2 }).find((h) => h.textContent === name);
+  return screen.getByRole("heading", { level: 2, name });
 }
 
 // ── Rendering ────────────────────────────────────────────────────────────────
 
 describe("ProjectsPage rendering", () => {
   it("renders project cards after load", async () => {
-    mockFetch();
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi();
     render(<ProjectsPage />);
     await waitForProjects(3);
     expect(projectHeading("My App")).toBeTruthy();
@@ -91,7 +154,8 @@ describe("ProjectsPage rendering", () => {
   });
 
   it("shows Active badge on the active project", async () => {
-    mockFetch();
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi();
     render(<ProjectsPage />);
     await waitForProjects(3);
     const cliCard = projectHeading("CLI Tool")!.closest(".group");
@@ -99,7 +163,8 @@ describe("ProjectsPage rendering", () => {
   });
 
   it("pinned the active project first in the grid", async () => {
-    mockFetch();
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi();
     render(<ProjectsPage />);
     await waitForProjects(3);
     const headings = screen.getAllByRole("heading", { level: 2 });
@@ -109,7 +174,8 @@ describe("ProjectsPage rendering", () => {
   });
 
   it("shows pin emoji on active project card", async () => {
-    mockFetch();
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi();
     render(<ProjectsPage />);
     await waitForProjects(3);
     const cliCard = projectHeading("CLI Tool")!.closest(".group");
@@ -117,7 +183,7 @@ describe("ProjectsPage rendering", () => {
   });
 
   it("shows an empty state with a create CTA", async () => {
-    mockFetch({ projects: [], active_project_id: null });
+    mockProjectsApi({ projects: [], active_project_id: null });
     render(<ProjectsPage />);
     await waitFor(() => expect(screen.getByText("No projects yet.")).toBeTruthy());
     expect(screen.getByText("Create your first project to get started.")).toBeTruthy();
@@ -128,52 +194,68 @@ describe("ProjectsPage rendering", () => {
 // ── View Filters ─────────────────────────────────────────────────────────────
 
 describe("ProjectsPage view filters", () => {
-  beforeEach(async () => {
-    mockFetch();
+  it("defaults to the Active filter when no project filter is persisted", async () => {
+    mockProjectsApi();
     render(<ProjectsPage />);
-    await waitForProjects(3);
+    await waitForProjects(1);
+
+    expect(screen.getByRole("tab", { name: /^Active$/ })).toHaveAttribute("aria-selected", "true");
+    expect(projectHeading("CLI Tool")).toBeTruthy();
+    expect(screen.queryByRole("heading", { level: 2, name: "My App" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "Web Dashboard" })).toBeNull();
   });
 
-  it("shows All filter tab by default", async () => {
-    const allTab = screen.getByRole("tab", { name: /^All$/ });
-    expect(allTab).toBeTruthy();
+  it("restores a persisted project filter", async () => {
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi();
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    expect(screen.getByRole("tab", { name: /^All$/ })).toHaveAttribute("aria-selected", "true");
   });
 
   it("shows filter tabs: All, Active, Existing, Missing, Temp / Test, Worktrees", async () => {
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi();
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
     const filters = ["All", "Active", "Existing", "Missing", "Temp / Test", "Worktrees"];
     for (const f of filters) {
       expect(screen.getByRole("tab", { name: new RegExp(`^${f}`) })).toBeTruthy();
     }
   });
 
-  it('hides temp-like projects when switching to "Existing" filter', async () => {
-    const tempProjects: ProjectsResponse = {
+  it('shows only existing (non-missing) projects in the "Existing" filter', async () => {
+    const mixedProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p1", name: "Real App", path: "/workspace/real-app", is_temp_like: false }),
-        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+        makeProject({ id: "p1", name: "Real App", path: REAL_APP_PATH, exists: true }),
+        makeProject({ id: "p2", name: "Gone", path: MISSING_PROJECT_PATH, exists: false }),
       ],
-      active_project_id: "p1",
+      active_project_id: null,
     };
-    mockFetch(tempProjects);
+    mockProjectsApi(mixedProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(2);
 
-    // Switch to Existing filter
+    // Switch to Existing filter — only non-missing projects are shown
     fireEvent.click(screen.getByRole("tab", { name: /^Existing$/ }));
     await waitForProjects(1);
     expect(projectHeading("Real App")).toBeTruthy();
-    expect(screen.queryByRole("heading", { level: 2, name: "Pytest Temp" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "Gone" })).toBeNull();
   });
 
   it('shows temp-like projects when switching to "Temp / Test" filter', async () => {
     const tempProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p1", name: "Real App", path: "/workspace/real-app", is_temp_like: false }),
-        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+        makeProject({ id: "p1", name: "Real App", path: REAL_APP_PATH, is_temp_like: false }),
+        makeProject({ id: "p2", name: "Pytest Temp", path: TEMP_PROJECT_PATH, is_temp_like: true }),
       ],
       active_project_id: "p1",
     };
-    mockFetch(tempProjects);
+    mockProjectsApi(tempProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(2);
 
@@ -187,11 +269,12 @@ describe("ProjectsPage view filters", () => {
   it("shows temp badge on temp-like project cards", async () => {
     const tempProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p1", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+        makeProject({ id: "p1", name: "Pytest Temp", path: TEMP_PROJECT_PATH, is_temp_like: true }),
       ],
       active_project_id: null,
     };
-    mockFetch(tempProjects);
+    mockProjectsApi(tempProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(1);
     expect(screen.getByText("temp")).toBeTruthy();
@@ -200,11 +283,12 @@ describe("ProjectsPage view filters", () => {
   it("shows missing badge on missing project cards", async () => {
     const missingProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p1", name: "Gone", path: "/nonexistent/gone", exists: false }),
+        makeProject({ id: "p1", name: "Gone", path: MISSING_PROJECT_PATH, exists: false }),
       ],
       active_project_id: null,
     };
-    mockFetch(missingProjects);
+    mockProjectsApi(missingProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(1);
     expect(screen.getByText("missing")).toBeTruthy();
@@ -213,11 +297,12 @@ describe("ProjectsPage view filters", () => {
   it("shows worktree badge on worktree-like project cards", async () => {
     const wtProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p1", name: "WT Feature", path: "/repo/.git/worktrees/feature", is_worktree_like: true }),
+        makeProject({ id: "p1", name: "WT Feature", path: WORKTREE_PROJECT_PATH, is_worktree_like: true }),
       ],
       active_project_id: null,
     };
-    mockFetch(wtProjects);
+    mockProjectsApi(wtProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(1);
     expect(screen.getByText("worktree")).toBeTruthy();
@@ -226,11 +311,12 @@ describe("ProjectsPage view filters", () => {
   it('shows "No projects match" empty state when filter hides all', async () => {
     const missingProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p1", name: "Gone", path: "/nonexistent/gone", exists: false }),
+        makeProject({ id: "p1", name: "Gone", path: MISSING_PROJECT_PATH, exists: false }),
       ],
       active_project_id: null,
     };
-    mockFetch(missingProjects);
+    mockProjectsApi(missingProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(1);
 
@@ -242,11 +328,12 @@ describe("ProjectsPage view filters", () => {
   it("has a 'Clear filters' button when filter state hides all projects", async () => {
     const missingProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p1", name: "Gone", path: "/nonexistent/gone", exists: false }),
+        makeProject({ id: "p1", name: "Gone", path: MISSING_PROJECT_PATH, exists: false }),
       ],
       active_project_id: null,
     };
-    mockFetch(missingProjects);
+    mockProjectsApi(missingProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(1);
 
@@ -256,22 +343,22 @@ describe("ProjectsPage view filters", () => {
   });
 
   it("restores all projects after clearing filters", async () => {
-    const tempProjects: ProjectsResponse = {
+    const projectsWithNoActive: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p1", name: "Real App", path: "/workspace/real-app", is_temp_like: false }),
-        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+        makeProject({ id: "p1", name: "Real App", path: REAL_APP_PATH }),
+        makeProject({ id: "p2", name: "Pytest Temp", path: TEMP_PROJECT_PATH, is_temp_like: true }),
       ],
       active_project_id: null,
     };
-    mockFetch(tempProjects);
+    mockProjectsApi(projectsWithNoActive);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(2);
 
-    fireEvent.click(screen.getByRole("tab", { name: /^Temp \/ Test/ }));
-    await waitForProjects(1);
-    expect(projectHeading("Pytest Temp")).toBeTruthy();
-
+    fireEvent.click(screen.getByRole("tab", { name: /^Active$/ }));
+    await waitFor(() => expect(screen.getByText("No projects match the current filter.")).toBeTruthy());
     fireEvent.click(screen.getByText("Clear filters"));
+
     await waitForProjects(2);
     expect(projectHeading("Real App")).toBeTruthy();
     expect(projectHeading("Pytest Temp")).toBeTruthy();
@@ -282,7 +369,8 @@ describe("ProjectsPage view filters", () => {
 
 describe("ProjectsPage cleanup modal", () => {
   it("does not show cleanup button when no temp or missing projects exist", async () => {
-    mockFetch(MOCK_PROJECTS_RESPONSE);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
     render(<ProjectsPage />);
     await waitForProjects(3);
     expect(screen.queryByText("🧹 Cleanup")).toBeNull();
@@ -291,12 +379,13 @@ describe("ProjectsPage cleanup modal", () => {
   it("shows cleanup button when temp projects are present", async () => {
     const tempProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p1", name: "Real App", path: "/workspace/real-app", is_temp_like: false }),
-        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+        makeProject({ id: "p1", name: "Real App", path: REAL_APP_PATH, is_temp_like: false }),
+        makeProject({ id: "p2", name: "Pytest Temp", path: TEMP_PROJECT_PATH, is_temp_like: true }),
       ],
       active_project_id: null,
     };
-    mockFetch(tempProjects);
+    mockProjectsApi(tempProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(2);
     expect(screen.getByText("🧹 Cleanup")).toBeTruthy();
@@ -305,11 +394,12 @@ describe("ProjectsPage cleanup modal", () => {
   it("shows cleanup button when missing projects are present", async () => {
     const missingProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p1", name: "Gone", path: "/nonexistent/gone", exists: false }),
+        makeProject({ id: "p1", name: "Gone", path: MISSING_PROJECT_PATH, exists: false }),
       ],
       active_project_id: null,
     };
-    mockFetch(missingProjects);
+    mockProjectsApi(missingProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(1);
     expect(screen.getByText("🧹 Cleanup")).toBeTruthy();
@@ -318,56 +408,63 @@ describe("ProjectsPage cleanup modal", () => {
   it("opens cleanup modal when cleanup button is clicked", async () => {
     const tempProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+        makeProject({ id: "p2", name: "Pytest Temp", path: TEMP_PROJECT_PATH, is_temp_like: true }),
       ],
       active_project_id: null,
     };
-    mockFetch(tempProjects);
+    mockProjectsApi(tempProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(1);
     fireEvent.click(screen.getByText("🧹 Cleanup"));
-    await waitFor(() => expect(screen.getByText("Cleanup Projects")).toBeTruthy());
-    expect(screen.getByText("This will remove")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/🧹 Cleanup Projects/)).toBeTruthy());
+    expect(screen.getByText(/This will remove/)).toBeTruthy();
   });
 
   it("shows preview count after opening cleanup modal", async () => {
     const tempProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+        makeProject({ id: "p2", name: "Pytest Temp", path: TEMP_PROJECT_PATH, is_temp_like: true }),
       ],
       active_project_id: null,
     };
-    mockFetch(tempProjects);
+    mockProjectsApi(tempProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(1);
     fireEvent.click(screen.getByText("🧹 Cleanup"));
-    await waitFor(() => expect(screen.getByText(/This will remove.*1.*project.*registry/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/This will remove/)).toBeTruthy());
+    const preview = screen.getByText(/This will remove/).closest("div")!;
+    expect(preview.textContent).toContain("1");
+    expect(preview.textContent).toContain("from the registry");
   });
 
   it("closes cleanup modal on Cancel", async () => {
     const tempProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p2", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+        makeProject({ id: "p2", name: "Pytest Temp", path: TEMP_PROJECT_PATH, is_temp_like: true }),
       ],
       active_project_id: null,
     };
-    mockFetch(tempProjects);
+    mockProjectsApi(tempProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(1);
     fireEvent.click(screen.getByText("🧹 Cleanup"));
-    await waitFor(() => expect(screen.getByText("Cleanup Projects")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/🧹 Cleanup Projects/)).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /Cancel/ }));
-    await waitFor(() => expect(screen.queryByText("Cleanup Projects")).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/🧹 Cleanup Projects/)).toBeNull());
   });
 
   it("shows 'No matching projects found' when preview count is 0", async () => {
     const emptyProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p1", name: "Real App", path: "/workspace/real-app", is_temp_like: false }),
+        makeProject({ id: "p1", name: "Real App", path: REAL_APP_PATH, is_temp_like: false }),
       ],
       active_project_id: null,
     };
-    mockFetch(emptyProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(emptyProjects);
     render(<ProjectsPage />);
     await waitForProjects(1);
     expect(screen.queryByText("🧹 Cleanup")).toBeNull();
@@ -378,7 +475,8 @@ describe("ProjectsPage cleanup modal", () => {
 
 describe("ProjectsPage client-side search", () => {
   beforeEach(async () => {
-    mockFetch();
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi();
     render(<ProjectsPage />);
     await waitForProjects(3);
   });
@@ -390,7 +488,7 @@ describe("ProjectsPage client-side search", () => {
   });
 
   it("filters projects by path", async () => {
-    fireEvent.change(screen.getByPlaceholderText("Search by name or path…"), { target: { value: "/var/www" } });
+    fireEvent.change(screen.getByPlaceholderText("Search by name or path…"), { target: { value: "deployments" } });
     await waitForProjects(1);
     expect(projectHeading("Web Dashboard")).toBeTruthy();
   });
@@ -419,18 +517,20 @@ describe("ProjectsPage client-side search", () => {
 
 describe("ProjectsPage path truncation & copy", () => {
   it("displays full path when within maxLen", async () => {
-    mockFetch({
-      projects: [makeProject({ id: "p1", name: "X", path: "/tmp/abc" })],
+    mockProjectsApi({
+      projects: [makeProject({ id: "p1", name: "X", path: SHORT_PROJECT_PATH })],
       active_project_id: null,
     });
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(1);
-    // Both the CopyButton and the <p> carry title={path} — ensure at least one is present
-    expect(screen.getAllByTitle("/tmp/abc").length).toBeGreaterThan(0);
+    // The rendered path code carries title={path} for the full path tooltip.
+    expect(screen.getAllByTitle(SHORT_PROJECT_PATH).length).toBeGreaterThan(0);
   });
 
   it("has a copy path button next to each project path", async () => {
-    mockFetch();
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi();
     render(<ProjectsPage />);
     await waitForProjects(3);
     const copyBtns = screen.getAllByRole("button", { name: /^Copy path / });
@@ -438,17 +538,18 @@ describe("ProjectsPage path truncation & copy", () => {
   });
 
   it("copies full path to clipboard when copy button is clicked", async () => {
-    mockFetch();
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi();
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText: writeTextMock } });
+    vi.stubGlobal("navigator", { clipboard: { writeText: writeTextMock } });
 
     render(<ProjectsPage />);
     await waitForProjects(3);
-    const copyBtn = screen.getByRole("button", { name: /Copy path \/workspace\/my-app/ });
+    const copyBtn = screen.getByRole("button", { name: /^Copy path for My App$/ });
     fireEvent.click(copyBtn);
 
     await waitFor(() => {
-      expect(writeTextMock).toHaveBeenCalledWith("/workspace/my-app");
+      expect(writeTextMock).toHaveBeenCalledWith(MY_APP_PATH);
     });
   });
 });
@@ -457,13 +558,8 @@ describe("ProjectsPage path truncation & copy", () => {
 
 describe("ProjectsPage delete safety", () => {
   it("shows delete confirmation dialog before deleting", async () => {
-    const fetchMock = vi.fn((url: string) => {
-      if (url === "/api/projects") {
-        return Promise.resolve({ ok: true, json: async () => MOCK_PROJECTS_RESPONSE });
-      }
-      return Promise.reject(new Error(`unexpected: ${url}`));
-    });
-    vi.stubGlobal("fetch", fetchMock);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    const fetchMock = mockProjectsApi();
 
     render(<ProjectsPage />);
     await waitForProjects(3);
@@ -478,16 +574,8 @@ describe("ProjectsPage delete safety", () => {
   });
 
   it("calls delete API only after dialog confirmation", async () => {
-    const fetchMock = vi.fn((url: string) => {
-      if (url === "/api/projects") {
-        return Promise.resolve({ ok: true, json: async () => MOCK_PROJECTS_RESPONSE });
-      }
-      if (url === "/api/projects/proj-001") {
-        return Promise.resolve({ ok: true, status: 204 });
-      }
-      return Promise.reject(new Error(`unexpected: ${url}`));
-    });
-    vi.stubGlobal("fetch", fetchMock);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    const fetchMock = mockProjectsApi();
 
     render(<ProjectsPage />);
     await waitForProjects(3);
@@ -501,19 +589,14 @@ describe("ProjectsPage delete safety", () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringMatching(/^\/api\/projects\/[^/]+$/),
-        expect.objectContaining({ method: "DELETE" })
+        expect.objectContaining({ method: "DELETE" }),
       );
     });
   });
 
   it("closes dialog and does not delete when Cancel is clicked", async () => {
-    const fetchMock = vi.fn((url: string) => {
-      if (url === "/api/projects") {
-        return Promise.resolve({ ok: true, json: async () => MOCK_PROJECTS_RESPONSE });
-      }
-      return Promise.reject(new Error(`unexpected: ${url}`));
-    });
-    vi.stubGlobal("fetch", fetchMock);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    const fetchMock = mockProjectsApi();
 
     render(<ProjectsPage />);
     await waitForProjects(3);
@@ -528,17 +611,46 @@ describe("ProjectsPage delete safety", () => {
     expect(fetchMock).not.toHaveBeenCalledWith("/api/projects/proj-001", expect.any(Object));
   });
 
+  it("closes delete dialog on overlay click (outside modal content)", async () => {
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    const deleteButtons = screen.getAllByRole("button", { name: /Delete project My App/ });
+    fireEvent.click(deleteButtons[0]);
+    await waitFor(() => expect(screen.getByText(/Are you sure you want to delete/)).toBeTruthy());
+
+    // Click on the overlay backdrop (the div with fixed inset-0 that closes on click)
+    const overlay = document.querySelector<HTMLElement>('[class*="fixed inset-0"]');
+    expect(overlay).toBeTruthy();
+    fireEvent.click(overlay!);
+    await waitFor(() => expect(screen.queryByText(/Are you sure you want to delete/)).toBeNull());
+  });
+
+  it("closes delete dialog on Escape key even when focus is on overlay (outside content)", async () => {
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    const deleteButtons = screen.getAllByRole("button", { name: /Delete project My App/ });
+    fireEvent.click(deleteButtons[0]);
+    await waitFor(() => expect(screen.getByText(/Are you sure you want to delete/)).toBeTruthy());
+
+    // Focus is on the outer overlay div (outside the inner modal content div)
+    const modalContent = screen.getByText(/Are you sure you want to delete/).closest("div")!;
+    const overlay = modalContent.parentElement!;
+    overlay.setAttribute("tabindex", "0");
+    overlay.focus();
+    expect(document.activeElement).toBe(overlay);
+    fireEvent.keyDown(overlay, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByText(/Are you sure you want to delete/)).toBeNull());
+  });
+
   it("removes project card after successful deletion", async () => {
-    const fetchMock = vi.fn((url: string) => {
-      if (url === "/api/projects") {
-        return Promise.resolve({ ok: true, json: async () => MOCK_PROJECTS_RESPONSE });
-      }
-      if (url === "/api/projects/proj-001") {
-        return Promise.resolve({ ok: true, status: 204 });
-      }
-      return Promise.reject(new Error(`unexpected: ${url}`));
-    });
-    vi.stubGlobal("fetch", fetchMock);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi();
 
     render(<ProjectsPage />);
     await waitForProjects(3);
@@ -559,22 +671,23 @@ describe("ProjectsPage delete safety", () => {
 
 describe("shortenPath utility", () => {
   it("keeps short paths unchanged", async () => {
-    mockFetch({ projects: [makeProject({ id: "p1", name: "X", path: "/tmp/x" })], active_project_id: null });
+    mockProjectsApi({ projects: [makeProject({ id: "p1", name: "X", path: SHORT_X_PROJECT_PATH })], active_project_id: null });
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(1);
-    expect(screen.getAllByTitle("/tmp/x").length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle(SHORT_X_PROJECT_PATH).length).toBeGreaterThan(0);
   });
 
   it("truncates long paths", async () => {
-    const longPath = "/workspace/my-very-long-project-name-that-exceeds-limit-for-testing";
-    mockFetch({ projects: [makeProject({ id: "p1", name: "Y", path: longPath })], active_project_id: null });
+    const longPath = fixtureProjectPath("projects", "my-very-long-project-name-that-exceeds-limit-for-testing");
+    mockProjectsApi({ projects: [makeProject({ id: "p1", name: "Y", path: longPath })], active_project_id: null });
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(1);
-    // The <p> element with truncated text also carries title=longPath
     const pathEls = screen.getAllByTitle(longPath);
-    const pathPara = pathEls.find((el) => el.tagName === "P");
-    expect(pathPara).toBeTruthy();
-    expect(pathPara!.textContent).toContain("…");
+    const pathCode = pathEls.find((el) => el.tagName === "CODE");
+    expect(pathCode).toBeTruthy();
+    expect(pathCode!.textContent).toContain("…");
   });
 });
 
@@ -582,7 +695,8 @@ describe("shortenPath utility", () => {
 
 describe("ProjectsPage new project modal", () => {
   it("opens new project modal when clicking New Project button", async () => {
-    mockFetch(MOCK_PROJECTS_RESPONSE);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
     render(<ProjectsPage />);
     await waitForProjects(3);
 
@@ -593,7 +707,8 @@ describe("ProjectsPage new project modal", () => {
   });
 
   it("closes modal on Cancel click and resets form state", async () => {
-    mockFetch(MOCK_PROJECTS_RESPONSE);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
     render(<ProjectsPage />);
     await waitForProjects(3);
 
@@ -602,7 +717,7 @@ describe("ProjectsPage new project modal", () => {
 
     // Fill in some values
     fireEvent.change(screen.getByPlaceholderText("My App"), { target: { value: "Test Project" } });
-    fireEvent.change(screen.getByPlaceholderText("/path/to/project"), { target: { value: "/workspace/test" } });
+    fireEvent.change(screen.getByPlaceholderText("/path/to/project"), { target: { value: NEW_PROJECT_PATH } });
 
     // Click Cancel
     fireEvent.click(screen.getByRole("button", { name: /^Cancel$/ }));
@@ -616,7 +731,8 @@ describe("ProjectsPage new project modal", () => {
   });
 
   it("closes modal on X button click", async () => {
-    mockFetch(MOCK_PROJECTS_RESPONSE);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
     render(<ProjectsPage />);
     await waitForProjects(3);
 
@@ -628,7 +744,8 @@ describe("ProjectsPage new project modal", () => {
   });
 
   it("closes modal on Escape key", async () => {
-    mockFetch(MOCK_PROJECTS_RESPONSE);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
     render(<ProjectsPage />);
     await waitForProjects(3);
 
@@ -640,17 +757,22 @@ describe("ProjectsPage new project modal", () => {
   });
 
   it("closes new project modal on Escape key even when focus is on overlay (outside content)", async () => {
-    mockFetch(MOCK_PROJECTS_RESPONSE);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
     render(<ProjectsPage />);
     await waitForProjects(3);
 
     fireEvent.click(screen.getByRole("button", { name: /^\+ New Project$/ }));
     await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
 
-    // Focus is on the overlay (outside the inner modal content div)
-    // Simulate pressing Escape with focus on the outer overlay div
-    const overlay = screen.getByText("New Project").closest("div")!.parentElement!;
-    fireEvent.focus(overlay);
+    // Focus is on the outer overlay div (outside the inner modal content div)
+    // The outer overlay div is the grandparent of the "New Project" heading
+    const modalContent = screen.getByText("New Project").closest("div")!;
+    const overlay = modalContent.parentElement!;
+    // Ensure overlay is focusable
+    overlay.setAttribute("tabindex", "0");
+    overlay.focus();
+    expect(document.activeElement).toBe(overlay);
     fireEvent.keyDown(overlay, { key: "Escape" });
     await waitFor(() => expect(screen.queryByText("New Project")).toBeNull());
   });
@@ -658,40 +780,52 @@ describe("ProjectsPage new project modal", () => {
   it("closes cleanup modal on Escape key even when focus is on overlay (outside content)", async () => {
     const tempProjects: ProjectsResponse = {
       projects: [
-        makeProject({ id: "p1", name: "Pytest Temp", path: "/private/tmp/pytest123", is_temp_like: true }),
+        makeProject({ id: "p1", name: "Pytest Temp", path: TEMP_PROJECT_PATH, is_temp_like: true }),
       ],
       active_project_id: null,
     };
-    mockFetch(tempProjects);
+    mockProjectsApi(tempProjects);
+    mockLocalStorage({ oh_projects_filter: "all" });
     render(<ProjectsPage />);
     await waitForProjects(1);
 
-    fireEvent.click(screen.getByText("🧹 Cleanup"));
-    await waitFor(() => expect(screen.getByText("Cleanup Projects")).toBeTruthy());
+    // Wait for Cleanup button to appear (tempCount > 0 when is_temp_like === true)
+    await waitFor(() => expect(screen.getByRole("button", { name: /🧹 Cleanup/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /🧹 Cleanup/ }));
+    await waitFor(() => expect(screen.getByText(/🧹 Cleanup Projects/)).toBeTruthy());
 
-    // Focus is on the overlay (outside the inner modal content div)
-    const overlay = screen.getByText("Cleanup Projects").closest("div")!.parentElement!;
-    fireEvent.focus(overlay);
+    // Focus is on the outer overlay div (outside the inner modal content div)
+    const modalContent = screen.getByText(/🧹 Cleanup Projects/).closest("div")!;
+    const overlay = modalContent.parentElement!;
+    overlay.setAttribute("tabindex", "0");
+    overlay.focus();
+    expect(document.activeElement).toBe(overlay);
     fireEvent.keyDown(overlay, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByText("Cleanup Projects")).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/🧹 Cleanup Projects/)).toBeNull());
   });
 
   it("closes modal on overlay click (outside modal content)", async () => {
-    mockFetch(MOCK_PROJECTS_RESPONSE);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
     render(<ProjectsPage />);
     await waitForProjects(3);
 
     fireEvent.click(screen.getByRole("button", { name: /^\+ New Project$/ }));
     await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
 
-    // Click on the overlay (first div with fixed inset-0)
-    const overlay = screen.getByText("New Project").closest("div")!.parentElement!;
-    fireEvent.click(overlay);
+    // Click on the overlay backdrop (the div with fixed inset-0 that closes on click)
+    // The overlay is behind the modal content and has onClick={closeNewModal}
+    // We use the pointer event to target coordinates that land on the overlay
+    // The modal is centered, so clicking at position (10, 10) lands on the overlay
+    const overlay = document.querySelector<HTMLElement>('[class*="fixed inset-0"]');
+    expect(overlay).toBeTruthy();
+    fireEvent.click(overlay!);
     await waitFor(() => expect(screen.queryByText("New Project")).toBeNull());
   });
 
   it("disables Create button when name is empty", async () => {
-    mockFetch(MOCK_PROJECTS_RESPONSE);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
     render(<ProjectsPage />);
     await waitForProjects(3);
 
@@ -699,14 +833,15 @@ describe("ProjectsPage new project modal", () => {
     await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
 
     // Only fill path, leave name empty
-    fireEvent.change(screen.getByPlaceholderText("/path/to/project"), { target: { value: "/workspace/test" } });
+    fireEvent.change(screen.getByPlaceholderText("/path/to/project"), { target: { value: NEW_PROJECT_PATH } });
 
     const createBtn = screen.getByRole("button", { name: /^Create$/ });
     expect(createBtn).toBeDisabled();
   });
 
   it("disables Create button when path is empty", async () => {
-    mockFetch(MOCK_PROJECTS_RESPONSE);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
     render(<ProjectsPage />);
     await waitForProjects(3);
 
@@ -721,7 +856,8 @@ describe("ProjectsPage new project modal", () => {
   });
 
   it("enables Create button when name and path are filled", async () => {
-    mockFetch(MOCK_PROJECTS_RESPONSE);
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
     render(<ProjectsPage />);
     await waitForProjects(3);
 
@@ -729,7 +865,7 @@ describe("ProjectsPage new project modal", () => {
     await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
 
     fireEvent.change(screen.getByPlaceholderText("My App"), { target: { value: "Test Project" } });
-    fireEvent.change(screen.getByPlaceholderText("/path/to/project"), { target: { value: "/workspace/test" } });
+    fireEvent.change(screen.getByPlaceholderText("/path/to/project"), { target: { value: NEW_PROJECT_PATH } });
 
     const createBtn = screen.getByRole("button", { name: /^Create$/ });
     expect(createBtn).not.toBeDisabled();
