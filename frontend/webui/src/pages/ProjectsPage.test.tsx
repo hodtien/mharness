@@ -611,6 +611,43 @@ describe("ProjectsPage delete safety", () => {
     expect(fetchMock).not.toHaveBeenCalledWith("/api/projects/proj-001", expect.any(Object));
   });
 
+  it("closes delete dialog on overlay click (outside modal content)", async () => {
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    const deleteButtons = screen.getAllByRole("button", { name: /Delete project My App/ });
+    fireEvent.click(deleteButtons[0]);
+    await waitFor(() => expect(screen.getByText(/Are you sure you want to delete/)).toBeTruthy());
+
+    // Click on the overlay backdrop (the div with fixed inset-0 that closes on click)
+    const overlay = document.querySelector<HTMLElement>('[class*="fixed inset-0"]');
+    expect(overlay).toBeTruthy();
+    fireEvent.click(overlay!);
+    await waitFor(() => expect(screen.queryByText(/Are you sure you want to delete/)).toBeNull());
+  });
+
+  it("closes delete dialog on Escape key even when focus is on overlay (outside content)", async () => {
+    mockLocalStorage({ oh_projects_filter: "all" });
+    mockProjectsApi(MOCK_PROJECTS_RESPONSE);
+    render(<ProjectsPage />);
+    await waitForProjects(3);
+
+    const deleteButtons = screen.getAllByRole("button", { name: /Delete project My App/ });
+    fireEvent.click(deleteButtons[0]);
+    await waitFor(() => expect(screen.getByText(/Are you sure you want to delete/)).toBeTruthy());
+
+    // Focus is on the outer overlay div (outside the inner modal content div)
+    const modalContent = screen.getByText(/Are you sure you want to delete/).closest("div")!;
+    const overlay = modalContent.parentElement!;
+    overlay.setAttribute("tabindex", "0");
+    overlay.focus();
+    expect(document.activeElement).toBe(overlay);
+    fireEvent.keyDown(overlay, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByText(/Are you sure you want to delete/)).toBeNull());
+  });
+
   it("removes project card after successful deletion", async () => {
     mockLocalStorage({ oh_projects_filter: "all" });
     mockProjectsApi();

@@ -102,11 +102,13 @@ export default function ProjectsPage() {
       } else if (showCleanupModal) {
         setShowCleanupModal(false);
         setCleanupPreview(null);
+      } else if (confirmDeleteId) {
+        setConfirmDeleteId(null);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [showNewModal, showCleanupModal]);
+  }, [showNewModal, showCleanupModal, confirmDeleteId]);
 
   useEffect(() => {
     loadProjects();
@@ -608,8 +610,14 @@ export default function ProjectsPage() {
 
       {/* Delete confirmation dialog */}
       {confirmDeleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 shadow-2xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setConfirmDeleteId(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="mb-3 text-base font-semibold text-[var(--text)]">
               Delete Project
             </h2>
