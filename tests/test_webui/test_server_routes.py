@@ -401,10 +401,16 @@ def test_providers_endpoint_requires_auth_and_returns_list(tmp_path, monkeypatch
         assert "base_url" in item
         assert isinstance(item["has_credentials"], bool)
         assert isinstance(item["is_active"], bool)
+        assert item["health_label"] in {"Ready", "Healthy", "Probe failing"}
+        assert "reachable" in item
+        assert "probed" in item
 
     # Exactly one profile is active
     active = [p for p in body["providers"] if p["is_active"]]
     assert len(active) == 1
+    assert active[0]["health_label"] == "Healthy"
+    assert active[0]["reachable"] is True
+    assert active[0]["probed"] is True
 
 
 def test_providers_trailing_slash_behavior(tmp_path, monkeypatch) -> None:

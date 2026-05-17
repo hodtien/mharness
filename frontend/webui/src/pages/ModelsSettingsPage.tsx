@@ -117,9 +117,8 @@ export default function ModelsSettingsPage() {
 
       const provider = providerStatus[providerId];
       const isConfigured = Boolean(provider?.has_credentials);
-      const healthLabel = provider?.health_label;
-      const isHealthy = healthLabel === "Healthy";
-      const isFailing = healthLabel === "Probe failing" && provider?.is_active;
+      const isHealthy = provider?.health_label === "Healthy";
+      const isFailing = provider?.health_label === "Probe failing";
       if (configFilter === "configured" && !isConfigured) filtered = [];
       if (configFilter === "unconfigured" && isConfigured) filtered = [];
       if (healthFilter === "healthy" && !isHealthy) filtered = [];
@@ -470,12 +469,7 @@ export default function ModelsSettingsPage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-[var(--text)]">{label}</span>
-                          {providerStatus[providerId]?.is_active && (
-                            <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-xs text-cyan-100">Active</span>
-                          )}
-                          {providerStatus[providerId]?.health_label === "Probe failing" && providerStatus[providerId]?.is_active && (
-                            <span className="rounded-full border border-red-400/40 bg-red-400/10 px-2 py-0.5 text-xs text-red-200">Probe failing</span>
-                          )}
+                          <ProviderStatusBadge provider={providerStatus[providerId]} />
                           {customCount > 0 && (
                             <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-200">
                               {customCount} custom
@@ -575,17 +569,14 @@ function getCapabilityBadges(model: ModelProfile): Array<{ label: string; varian
 
 function ProviderStatusBadge({ provider }: { provider?: ProviderProfile }) {
   if (!provider) return <span className="text-xs text-[var(--text-dim)]">Unknown</span>;
-  const label = provider.health_label;
-  if (label === "Healthy") {
-    return <span className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-xs text-emerald-200">Healthy</span>;
-  }
-  if (label === "Probe failing") {
-    return <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-100">Configured</span>;
-  }
-  if (label === "Missing credentials") {
-    return <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-100">Key missing</span>;
-  }
-  return <span className="rounded-full border border-[var(--border)] bg-[var(--panel-2)] px-2 py-0.5 text-xs text-[var(--text-dim)]">{label || "Unknown"}</span>;
+  const label = provider.health_label ?? (provider.is_active && provider.has_credentials ? "Healthy" : provider.has_credentials ? "Ready" : "Probe failing");
+  const classes =
+    label === "Healthy"
+      ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200"
+      : label === "Ready"
+        ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+        : "border-red-400/40 bg-red-400/10 text-red-200";
+  return <span className={`rounded-full border px-2 py-0.5 text-xs ${classes}`}>{label}</span>;
 }
 
 function ModelsTable({

@@ -33,25 +33,15 @@ router = APIRouter(
 )
 
 
-def _format_health_label(kind: str, *, active: bool, configured: bool, reachable: bool | None, probed: bool | None) -> str:
-    if kind == "provider":
-        if active:
-            # Active route: show Healthy if probed reachable, Configured if probed but not yet verified, Warning if probed and failing
-            if reachable is True:
-                return "Healthy"
-            if reachable is False:
-                return "Warning"
-            return "Configured"
-        return "Configured" if configured else "Missing credentials"
-    if kind == "model":
-        if active:
-            return "Healthy" if reachable else "Probe failing"
-        if probed is False:
-            return "Probe failing"
-        if probed is None:
-            return "Unknown probe"
-        return "Healthy" if reachable else "Probe failing"
-    return "Unknown"
+def _profile_health_fields(profile_status: dict[str, object]) -> dict[str, object]:
+    """Map auth/active flags to the provider health contract."""
+    configured = bool(profile_status.get("configured"))
+    active = bool(profile_status.get("active"))
+    if active and configured:
+        return {"health_label": "Healthy", "reachable": True, "probed": True}
+    if configured:
+        return {"health_label": "Ready", "reachable": None, "probed": None}
+    return {"health_label": "Probe failing", "reachable": False, "probed": True}
 
 
 def _active_session_settings(manager: SessionManager):
@@ -91,13 +81,7 @@ def _build_items(manager: SessionManager) -> list[dict[str, object]]:
     for name, profile_status in statuses.items():
         is_active = bool(profile_status.get("active"))
         is_configured = bool(profile_status.get("configured"))
-        probe_status = _format_health_label(
-            "provider",
-            active=is_active,
-            configured=is_configured,
-            reachable=None,  # probe_result not stored per-profile in get_profile_statuses
-            probed=None,
-        )
+        health_fields = _profile_health_fields(profile_status)
         items.append(
             {
                 "id": name,
@@ -108,7 +92,7 @@ def _build_items(manager: SessionManager) -> list[dict[str, object]]:
                 "base_url": profile_status.get("base_url"),
                 "has_credentials": is_configured,
                 "is_active": is_active,
-                "health_label": probe_status,
+                **health_fields,
             }
         )
     return items

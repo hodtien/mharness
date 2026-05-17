@@ -34,7 +34,9 @@ const sampleProviders = {
       base_url: "https://api.openai.com/v1",
       has_credentials: false,
       is_active: false,
-      health_label: "Missing credentials",
+      health_label: "Probe failing",
+      reachable: false,
+      probed: true,
     },
     {
       id: "anthropic-default",
@@ -46,6 +48,21 @@ const sampleProviders = {
       has_credentials: true,
       is_active: true,
       health_label: "Healthy",
+      reachable: true,
+      probed: true,
+    },
+    {
+      id: "openrouter",
+      label: "OpenRouter",
+      provider: "openrouter",
+      api_format: "openai",
+      default_model: "openrouter/auto",
+      base_url: "https://openrouter.ai/api/v1",
+      has_credentials: true,
+      is_active: false,
+      health_label: "Ready",
+      reachable: null,
+      probed: null,
     },
   ],
 };
@@ -65,9 +82,10 @@ describe("ProviderSettingsPage", () => {
     });
     expect(screen.getAllByText("Anthropic").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Healthy").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Missing credentials").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Probe failing").length).toBeGreaterThan(0);
     expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0);
-    expect(screen.getByText(/healthy/i)).toBeTruthy();
+    expect(screen.getByText(/active route is usable for new sessions/i)).toBeTruthy();
     expect(screen.getByText(/latency and .*last verified/i)).toBeTruthy();
   });
 

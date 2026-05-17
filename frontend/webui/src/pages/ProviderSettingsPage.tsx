@@ -176,7 +176,7 @@ export default function ProviderSettingsPage() {
         metadata={[
           { label: "Providers", value: String(providers.length) },
           ...(providers.some((p) => p.is_active)
-            ? [{ label: "Active", value: providers.find((p) => p.is_active)?.label ?? "—", accent: "cyan" as const }]
+            ? [{ label: "Healthy", value: providers.find((p) => p.is_active)?.label ?? "—", accent: "cyan" as const }]
             : []),
         ]}
       />
@@ -189,9 +189,9 @@ export default function ProviderSettingsPage() {
         <div className="flex flex-wrap gap-2">
           {[
             ["all", "All"],
-            ["active", "Active"],
-            ["configured", "Configured"],
-            ["not-configured", "Not configured"],
+            ["active", "Healthy"],
+            ["configured", "Ready"],
+            ["not-configured", "Probe failing"],
             ["custom-router", "Custom/router"],
           ].map(([value, label]) => (
             <button
@@ -243,9 +243,9 @@ export default function ProviderSettingsPage() {
 
         {providers.length > 0 && (
           <p className="text-xs text-[var(--text-dim)]">
-            <strong className="font-medium text-[var(--text-dim)]">Healthy</strong> — active route verified and reachable.&nbsp;
-            <strong className="font-medium text-[var(--text-dim)]">Configured</strong> — credentials saved, but not yet verified.&nbsp;
-            <strong className="font-medium text-[var(--text-dim)]">Missing credentials</strong> — no API key stored yet.
+            <strong className="font-medium text-[var(--text-dim)]">Healthy</strong> — active route is usable for new sessions.&nbsp;
+            <strong className="font-medium text-[var(--text-dim)]">Ready</strong> — credentials are saved but this provider is not the active route.&nbsp;
+            <strong className="font-medium text-[var(--text-dim)]">Probe failing</strong> — the route cannot be used until credentials or connectivity are fixed.
             Latency and &ldquo;last verified&rdquo; time appear after running <em>Verify</em>.
           </p>
         )}
@@ -309,16 +309,15 @@ function ConnectionStatusRow({ status }: { status: ConnectionStatus }) {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status }: { status?: "Ready" | "Healthy" | "Probe failing" }) {
+  const label = status ?? "Probe failing";
   const classes =
-    status === "Healthy"
+    label === "Healthy"
       ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-100"
-      : status === "Warning" || status === "Probe failing"
-        ? "border-red-400/40 bg-red-400/10 text-red-200"
-        : status === "Missing credentials"
-          ? "border-amber-400/40 bg-amber-400/10 text-amber-100"
-          : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)]";
-  return <span className={`rounded-full border px-2 py-1 text-xs ${classes}`}>{status}</span>;
+      : label === "Ready"
+        ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+        : "border-red-400/40 bg-red-400/10 text-red-200";
+  return <span className={`rounded-full border px-2 py-1 text-xs ${classes}`}>{label}</span>;
 }
 
 function ProviderModal({
