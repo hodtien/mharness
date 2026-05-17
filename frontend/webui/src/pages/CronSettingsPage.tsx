@@ -212,7 +212,7 @@ export default function CronSettingsPage() {
     const patch: CronConfigPatch = { enabled: draftEnabled };
     if (scanChanged) patch.scan_cron = draftScanCron.trim();
     if (tickChanged) patch.tick_cron = draftTickCron.trim();
-    applyDraft(patch);
+    applyDraft(patch).catch(() => undefined);
   };
 
   const handlePreset = (scanVal: string, tickVal: string) => {
