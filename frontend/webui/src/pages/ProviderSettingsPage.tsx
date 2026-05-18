@@ -32,12 +32,6 @@ function providerIcon(provider: ProviderProfile): string {
   return "🔌";
 }
 
-function statusLabel(provider: ProviderProfile): "Active" | "Configured" | "Not configured" {
-  if (provider.is_active) return "Active";
-  if (provider.has_credentials) return "Configured";
-  return "Not configured";
-}
-
 function formatLatency(ms: number | undefined): string {
   if (ms === undefined) return "";
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
@@ -52,6 +46,10 @@ function formatTime(iso: string | undefined): string {
   }
 }
 
+function providerHealthLabel(provider: ProviderProfile): "Ready" | "Healthy" | "Probe failing" {
+  return provider.health_label ?? (provider.is_active && provider.has_credentials ? "Healthy" : provider.has_credentials ? "Ready" : "Probe failing");
+}
+
 export default function ProviderSettingsPage() {
   const [providers, setProviders] = useState<ProviderProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +57,7 @@ export default function ProviderSettingsPage() {
   const [selected, setSelected] = useState<ProviderProfile | null>(null);
   const [connectionStatuses, setConnectionStatuses] = useState<Record<string, ConnectionStatus>>({});
   const [batchVerifying, setBatchVerifying] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "configured" | "not-configured" | "custom-router">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "healthy" | "ready" | "probe-failing" | "custom-router">("all");
 
   const loadProviders = async () => {
     setError(null);
@@ -92,9 +90,9 @@ export default function ProviderSettingsPage() {
 
   const filteredProviders = useMemo(() => {
     if (statusFilter === "all") return providers;
-    if (statusFilter === "active") return providers.filter((p) => p.is_active);
-    if (statusFilter === "configured") return providers.filter((p) => p.has_credentials && !p.is_active);
-    if (statusFilter === "not-configured") return providers.filter((p) => !p.has_credentials);
+    if (statusFilter === "healthy") return providers.filter((p) => providerHealthLabel(p) === "Healthy");
+    if (statusFilter === "ready") return providers.filter((p) => providerHealthLabel(p) === "Ready");
+    if (statusFilter === "probe-failing") return providers.filter((p) => providerHealthLabel(p) === "Probe failing");
     return providers.filter((p) => {
       const key = `${p.provider} ${p.api_format} ${p.id} ${p.label}`.toLowerCase();
       return key.includes("custom") || key.includes("router") || key.includes("openrouter");
@@ -181,8 +179,8 @@ export default function ProviderSettingsPage() {
         }
         metadata={[
           { label: "Providers", value: String(providers.length) },
-          ...(providers.some((p) => p.is_active)
-            ? [{ label: "Active", value: providers.find((p) => p.is_active)?.label ?? "—", accent: "cyan" as const }]
+          ...(providers.some((p) => providerHealthLabel(p) === "Healthy")
+            ? [{ label: "Healthy", value: providers.find((p) => providerHealthLabel(p) === "Healthy")?.label ?? "—", accent: "cyan" as const }]
             : []),
         ]}
       />
@@ -195,15 +193,15 @@ export default function ProviderSettingsPage() {
         <div className="flex flex-wrap gap-2">
           {[
             ["all", "All"],
-            ["active", "Active"],
-            ["configured", "Configured"],
-            ["not-configured", "Not configured"],
+            ["healthy", "Healthy"],
+            ["ready", "Ready"],
+            ["probe-failing", "Probe failing"],
             ["custom-router", "Custom/router"],
           ].map(([value, label]) => (
             <button
               key={value}
               type="button"
-              onClick={() => setStatusFilter(value as "all" | "active" | "configured" | "not-configured" | "custom-router")}
+              onClick={() => setStatusFilter(value as "all" | "healthy" | "ready" | "probe-failing" | "custom-router")}
               className={`rounded-full border px-3 py-1 text-xs ${statusFilter === value ? "border-cyan-400/50 bg-cyan-500/10 text-cyan-100" : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)]"}`}
             >
               {label}
@@ -232,7 +230,7 @@ export default function ProviderSettingsPage() {
                       <div className="text-xs text-[var(--text-dim)]">{provider.provider}</div>
                     </div>
                   </div>
-                  <StatusBadge status={statusLabel(provider)} />
+                  <StatusBadge status={providerHealthLabel(provider)} />
                 </div>
                 <div className="mt-4 text-xs uppercase tracking-wide text-[var(--text-dim)]">Default model</div>
                 <div className="mt-1 truncate font-mono text-sm text-cyan-100">{provider.default_model || "—"}</div>
@@ -249,9 +247,9 @@ export default function ProviderSettingsPage() {
 
         {providers.length > 0 && (
           <p className="text-xs text-[var(--text-dim)]">
-            <strong className="font-medium text-[var(--text-dim)]">Active</strong> — currently used for new sessions.&nbsp;
-            <strong className="font-medium text-[var(--text-dim)]">Configured</strong> — credentials saved but not active.&nbsp;
-            <strong className="font-medium text-[var(--text-dim)]">Not configured</strong> — no API key stored yet.
+            <strong className="font-medium text-[var(--text-dim)]">Healthy</strong> — active route is usable for new sessions.&nbsp;
+            <strong className="font-medium text-[var(--text-dim)]">Ready</strong> — credentials are saved but this provider is not the active route.&nbsp;
+            <strong className="font-medium text-[var(--text-dim)]">Probe failing</strong> — the route cannot be used until credentials or connectivity are fixed.
             Latency and &ldquo;last verified&rdquo; time appear after running <em>Verify</em>.
           </p>
         )}
@@ -315,14 +313,15 @@ function ConnectionStatusRow({ status }: { status: ConnectionStatus }) {
   );
 }
 
-function StatusBadge({ status }: { status: "Active" | "Configured" | "Not configured" }) {
+function StatusBadge({ status }: { status: "Ready" | "Healthy" | "Probe failing" }) {
+  const label = status;
   const classes =
-    status === "Active"
-      ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
-      : status === "Configured"
-        ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-100"
-        : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)]";
-  return <span className={`rounded-full border px-2 py-1 text-xs ${classes}`}>{status}</span>;
+    label === "Healthy"
+      ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-100"
+      : label === "Ready"
+        ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+        : "border-red-400/40 bg-red-400/10 text-red-200";
+  return <span className={`rounded-full border px-2 py-1 text-xs ${classes}`}>{label}</span>;
 }
 
 function ProviderModal({

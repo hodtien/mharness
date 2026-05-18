@@ -34,6 +34,9 @@ const sampleProviders = {
       base_url: "https://api.openai.com/v1",
       has_credentials: false,
       is_active: false,
+      health_label: "Probe failing",
+      reachable: false,
+      probed: true,
     },
     {
       id: "anthropic-default",
@@ -44,6 +47,22 @@ const sampleProviders = {
       base_url: null,
       has_credentials: true,
       is_active: true,
+      health_label: "Healthy",
+      reachable: true,
+      probed: true,
+    },
+    {
+      id: "openrouter",
+      label: "OpenRouter",
+      provider: "openrouter",
+      api_format: "openai",
+      default_model: "openrouter/auto",
+      base_url: "https://openrouter.ai/api/v1",
+      has_credentials: true,
+      is_active: false,
+      health_label: "Ready",
+      reachable: null,
+      probed: null,
     },
   ],
 };
@@ -62,10 +81,11 @@ describe("ProviderSettingsPage", () => {
       expect(screen.getAllByText("OpenAI").length).toBeGreaterThan(0);
     });
     expect(screen.getAllByText("Anthropic").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Not configured").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Healthy").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Probe failing").length).toBeGreaterThan(0);
     expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0);
-    expect(screen.getByText(/currently used for new sessions/i)).toBeTruthy();
+    expect(screen.getByText(/active route is usable for new sessions/i)).toBeTruthy();
     expect(screen.getByText(/latency and .*last verified/i)).toBeTruthy();
   });
 
@@ -80,6 +100,65 @@ describe("ProviderSettingsPage", () => {
 
     await waitFor(() => expect(screen.getByText("OpenAI")).toBeTruthy());
     expect(screen.getByRole("button", { name: /verify all/i })).toBeTruthy();
+  });
+
+  it("filters providers by health label with legacy status fallback", async () => {
+    mockLocalStorage();
+    const filterProviders = {
+      providers: [
+        {
+          id: "ready-legacy",
+          label: "Ready Legacy",
+          provider: "openai",
+          api_format: "openai",
+          default_model: "gpt-ready",
+          base_url: null,
+          has_credentials: true,
+          is_active: false,
+        },
+        {
+          id: "healthy-legacy",
+          label: "Healthy Legacy",
+          provider: "anthropic",
+          api_format: "anthropic",
+          default_model: "claude-ready",
+          base_url: null,
+          has_credentials: true,
+          is_active: true,
+        },
+        {
+          id: "missing-legacy",
+          label: "Missing Legacy",
+          provider: "openai",
+          api_format: "openai",
+          default_model: "gpt-broken",
+          base_url: "https://api.example.test/v1",
+          has_credentials: false,
+          is_active: false,
+        },
+      ],
+    };
+    vi.stubGlobal("fetch", (url: string) => {
+      if (url === "/api/providers") return Promise.resolve(jsonResponse(filterProviders));
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+
+    render(<BrowserRouter><ProviderSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("Ready Legacy")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /^Ready$/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Ready Legacy/i })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /Healthy Legacy/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Missing Legacy/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Healthy$/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Healthy Legacy/i })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /Ready Legacy/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Probe failing$/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Missing Legacy/i })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /Ready Legacy/i })).toBeNull();
   });
 
   it("opens modal on card click and verifies provider", async () => {

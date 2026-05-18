@@ -37,6 +37,11 @@ interface DeleteConfirmState {
   error: string | null;
 }
 
+function providerHealthLabel(provider?: ProviderProfile): "Ready" | "Healthy" | "Probe failing" | "Unknown" {
+  if (!provider) return "Unknown";
+  return provider.health_label ?? (provider.is_active && provider.has_credentials ? "Healthy" : provider.has_credentials ? "Ready" : "Probe failing");
+}
+
 export default function ModelsSettingsPage() {
   const [models, setModels] = useState<ModelsResponse>({});
   const [providers, setProviders] = useState<ProviderProfile[]>([]);
@@ -50,7 +55,7 @@ export default function ModelsSettingsPage() {
   const [providerFilter, setProviderFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "built-in" | "custom">("all");
   const [configFilter, setConfigFilter] = useState<"all" | "configured" | "unconfigured">("all");
-  const [healthFilter, setHealthFilter] = useState<"all" | "healthy" | "failing">("all");
+  const [healthFilter, setHealthFilter] = useState<"all" | "ready" | "healthy" | "probe-failing">("all");
   const [capabilityFilter, setCapabilityFilter] = useState<"all" | "long-context" | "fast" | "vision" | "tools" | "code">("all");
   const [defaultOnly, setDefaultOnly] = useState(false);
 
@@ -117,11 +122,12 @@ export default function ModelsSettingsPage() {
 
       const provider = providerStatus[providerId];
       const isConfigured = Boolean(provider?.has_credentials);
-      const isHealthy = Boolean(provider?.is_active && provider?.has_credentials);
+      const healthLabel = providerHealthLabel(provider);
       if (configFilter === "configured" && !isConfigured) filtered = [];
       if (configFilter === "unconfigured" && isConfigured) filtered = [];
-      if (healthFilter === "healthy" && !isHealthy) filtered = [];
-      if (healthFilter === "failing" && isHealthy) filtered = [];
+      if (healthFilter === "ready" && healthLabel !== "Ready") filtered = [];
+      if (healthFilter === "healthy" && healthLabel !== "Healthy") filtered = [];
+      if (healthFilter === "probe-failing" && healthLabel !== "Probe failing") filtered = [];
       if (capabilityFilter !== "all") {
         filtered = filtered.filter((model) => modelMatchesCapability(model, capabilityFilter));
       }
@@ -146,13 +152,13 @@ export default function ModelsSettingsPage() {
       return [providerId, [...custom, ...builtIn]] as [string, ModelProfile[]];
     });
     return entries.filter(([, items]) => items.length > 0)
-      // Active providers first, then by label.
+      // Healthy providers first, then by label.
       .sort(([aId, aItems], [bId, bItems]) => {
         const pa = providerStatus[aId];
         const pb = providerStatus[bId];
-        if (pa?.is_active && !pb?.is_active) return -1;
-        if (!pa?.is_active && pb?.is_active) return 1;
-        // Within active (or inactive), default model first.
+        if (providerHealthLabel(pa) === "Healthy" && providerHealthLabel(pb) !== "Healthy") return -1;
+        if (providerHealthLabel(pa) !== "Healthy" && providerHealthLabel(pb) === "Healthy") return 1;
+        // Within each health group, default model first.
         const aDefault = aItems[0]?.is_default ? 0 : 1;
         const bDefault = bItems[0]?.is_default ? 0 : 1;
         if (aDefault !== bDefault) return aDefault - bDefault;
@@ -382,13 +388,14 @@ export default function ModelsSettingsPage() {
             </select>
             <select
               value={healthFilter}
-              onChange={(e) => setHealthFilter(e.target.value as "all" | "healthy" | "failing")}
+              onChange={(e) => setHealthFilter(e.target.value as "all" | "ready" | "healthy" | "probe-failing")}
               className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text)] outline-none focus:border-cyan-400/50"
               aria-label="Filter by health"
             >
               <option value="all">Any health</option>
+              <option value="ready">Ready</option>
               <option value="healthy">Healthy</option>
-              <option value="failing">Failing/unready</option>
+              <option value="probe-failing">Probe failing</option>
             </select>
             <select
               value={capabilityFilter}
@@ -468,12 +475,7 @@ export default function ModelsSettingsPage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-[var(--text)]">{label}</span>
-                          {providerStatus[providerId]?.is_active && (
-                            <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-xs text-cyan-100">Active</span>
-                          )}
-                          {providerStatus[providerId]?.is_active === false && providerStatus[providerId]?.has_credentials && (
-                            <span className="rounded-full border border-red-400/40 bg-red-400/10 px-2 py-0.5 text-xs text-red-200">Probe failing</span>
-                          )}
+                          <ProviderStatusBadge provider={providerStatus[providerId]} />
                           {customCount > 0 && (
                             <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-200">
                               {customCount} custom
@@ -572,10 +574,15 @@ function getCapabilityBadges(model: ModelProfile): Array<{ label: string; varian
 }
 
 function ProviderStatusBadge({ provider }: { provider?: ProviderProfile }) {
-  if (!provider) return <span className="text-xs text-[var(--text-dim)]">Unknown</span>;
-  if (!provider.has_credentials) return <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-100">Key missing</span>;
-  if (!provider.is_active) return <span className="rounded-full border border-red-400/40 bg-red-400/10 px-2 py-0.5 text-xs text-red-200">Probe failing</span>;
-  return <span className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-xs text-emerald-200">Healthy</span>;
+  const label = providerHealthLabel(provider);
+  if (label === "Unknown") return <span className="text-xs text-[var(--text-dim)]">Unknown</span>;
+  const classes =
+    label === "Healthy"
+      ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200"
+      : label === "Ready"
+        ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+        : "border-red-400/40 bg-red-400/10 text-red-200";
+  return <span className={`rounded-full border px-2 py-0.5 text-xs ${classes}`}>{label}</span>;
 }
 
 function ModelsTable({

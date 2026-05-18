@@ -40,6 +40,9 @@ const sampleProviders = {
       base_url: null,
       has_credentials: false,
       is_active: false,
+      health_label: "Probe failing",
+      reachable: false,
+      probed: true,
     },
     {
       id: "claude-api",
@@ -50,6 +53,22 @@ const sampleProviders = {
       base_url: null,
       has_credentials: true,
       is_active: true,
+      health_label: "Healthy",
+      reachable: true,
+      probed: true,
+    },
+    {
+      id: "openrouter",
+      label: "OpenRouter",
+      provider: "openrouter",
+      api_format: "openai",
+      default_model: "openrouter/auto",
+      base_url: "https://openrouter.ai/api/v1",
+      has_credentials: true,
+      is_active: false,
+      health_label: "Ready",
+      reachable: null,
+      probed: null,
     },
   ],
 };
@@ -62,6 +81,9 @@ const sampleModels = {
   ],
   "claude-api": [
     { id: "claude-3-5-sonnet", label: "Sonnet", context_window: 200000, is_default: true, is_custom: false },
+  ],
+  openrouter: [
+    { id: "openrouter/auto", label: "Auto Router", context_window: null, is_default: true, is_custom: false },
   ],
 };
 
@@ -200,13 +222,70 @@ describe("ModelsSettingsPage", () => {
     expect(screen.getAllByText("Anthropic")[0]).toBeTruthy();
 
     fireEvent.change(screen.getByRole("combobox", { name: /filter by configuration status/i }), { target: { value: "all" } });
-    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "failing" } });
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "ready" } });
+    await waitFor(() => expect(screen.getAllByText("OpenRouter")[0]).toBeTruthy());
+    expect(screen.queryAllByText("OpenAI").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
+    expect(screen.queryAllByText("Anthropic").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "probe-failing" } });
     await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
     expect(screen.queryAllByText("Anthropic").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
+    expect(screen.queryAllByText("OpenRouter").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
 
     fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "all" } });
     fireEvent.change(screen.getByRole("combobox", { name: /filter by capability/i }), { target: { value: "vision" } });
     await waitFor(() => expect(screen.getAllByText("vision").length).toBeGreaterThan(0));
+  });
+
+  it("uses provider health labels from the API contract", async () => {
+    mockLocalStorage();
+    setupFetch();
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getAllByText("OpenRouter")[0]).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /openrouter/i }));
+
+    await waitFor(() => expect(screen.getAllByText("Ready").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("Healthy").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Probe failing").length).toBeGreaterThan(0);
+  });
+
+  it("filters models by health with legacy provider status fallback", async () => {
+    mockLocalStorage();
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      if (url === "/api/models" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve(jsonResponse(sampleModels));
+      }
+      if (url === "/api/providers") {
+        return Promise.resolve(jsonResponse({
+          providers: [
+            { ...sampleProviders.providers[0], health_label: undefined, has_credentials: false, is_active: false },
+            { ...sampleProviders.providers[1], health_label: undefined, has_credentials: true, is_active: true },
+            { ...sampleProviders.providers[2], health_label: undefined, has_credentials: true, is_active: false },
+          ],
+        }));
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getAllByText("OpenRouter")[0]).toBeTruthy());
+
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "ready" } });
+    await waitFor(() => expect(screen.getAllByText("OpenRouter")[0]).toBeTruthy());
+    expect(screen.queryAllByText("Anthropic").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
+    expect(screen.queryAllByText("OpenAI").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "healthy" } });
+    await waitFor(() => expect(screen.getAllByText("Anthropic")[0]).toBeTruthy());
+    expect(screen.queryAllByText("OpenRouter").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "probe-failing" } });
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+    expect(screen.queryAllByText("OpenRouter").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
   });
 
   it("filters models by provider", async () => {
@@ -595,7 +674,7 @@ describe("ModelsSettingsPage", () => {
     await waitFor(() => expect(screen.getAllByText("gpt-4o-mini").length).toBeGreaterThan(0));
   });
 
-  it("shows Active badge on active provider header", async () => {
+  it("shows Healthy badge on active provider header", async () => {
     mockLocalStorage();
     setupFetch();
 
@@ -603,8 +682,7 @@ describe("ModelsSettingsPage", () => {
 
     await waitFor(() => expect(screen.getAllByText("Anthropic")[0]).toBeTruthy());
 
-    // Active provider (Anthropic) has "Active" badge in header.
-    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Healthy").length).toBeGreaterThan(0);
   });
 
   it("shows default model first within each section", async () => {

@@ -167,3 +167,24 @@ def test_verify_provider_with_mocked_httpx_response(tmp_path, monkeypatch) -> No
     # The httpx call must hit /models on the OpenAI base URL with the bearer.
     assert captured["url"] == "https://api.openai.com/v1/models"
     assert captured["headers"] == {"Authorization": "Bearer sk-test-key"}
+
+
+def test_provider_list_includes_health_label_for_active_profile(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+    client = _client(tmp_path)
+
+    response = client.get("/api/providers", headers=AUTH)
+    assert response.status_code == 200
+    providers = response.json()["providers"]
+    active = next(item for item in providers if item["is_active"])
+    assert active["has_credentials"] is True
+    assert active["health_label"] == "Ready"
+    assert active["reachable"] is None
+    assert active["probed"] is None
+
+
+def test_verify_provider_reports_missing_api_key(tmp_path) -> None:
+    response = _client(tmp_path).post("/api/providers/openai-compatible/verify", headers=AUTH)
+    assert response.status_code == 200
+    assert response.json()["ok"] is False
+    assert "No API key available" in response.json()["error"]
