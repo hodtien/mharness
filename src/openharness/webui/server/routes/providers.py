@@ -9,6 +9,9 @@ Web UI matches what the CLI and TUI display.
 
 from __future__ import annotations
 
+import os
+import time
+from datetime import datetime, timezone
 from urllib.parse import urljoin
 
 import httpx
@@ -33,15 +36,45 @@ router = APIRouter(
 )
 
 
-def _profile_health_fields(profile_status: dict[str, object]) -> dict[str, object]:
-    """Map auth/active flags to the provider health contract."""
+_PROVIDER_PROBE_CACHE: dict[str, dict[str, object]] = {}
+
+
+def _probe_cache_key(profile_name: str) -> str:
+    config_dir = os.environ.get("OPENHARNESS_CONFIG_DIR", "")
+    data_dir = os.environ.get("OPENHARNESS_DATA_DIR", "")
+    return f"{config_dir}\0{data_dir}\0{profile_name}"
+
+
+def _clear_probe_cache(profile_name: str) -> None:
+    _PROVIDER_PROBE_CACHE.pop(_probe_cache_key(profile_name), None)
+
+
+def _profile_health_fields(profile_name: str, profile_status: dict[str, object]) -> dict[str, object]:
+    """Return provider health without fabricating probe success."""
     configured = bool(profile_status.get("configured"))
     active = bool(profile_status.get("active"))
-    if active and configured:
-        return {"health_label": "Healthy", "reachable": True, "probed": True}
-    if configured:
+    if not configured:
+        return {"health_label": "Probe failing", "reachable": False, "probed": False}
+
+    probe = _PROVIDER_PROBE_CACHE.get(_probe_cache_key(profile_name))
+    if probe is None:
         return {"health_label": "Ready", "reachable": None, "probed": None}
-    return {"health_label": "Probe failing", "reachable": False, "probed": True}
+
+    reachable = bool(probe.get("reachable"))
+    if active and reachable:
+        health_label = "Healthy"
+    elif reachable:
+        health_label = "Ready"
+    else:
+        health_label = "Probe failing"
+    return {
+        "health_label": health_label,
+        "reachable": reachable,
+        "probed": probe.get("probed", True),
+        "last_verified_at": probe.get("last_verified_at"),
+        "verification_latency_ms": probe.get("verification_latency_ms"),
+        "model_count": probe.get("model_count"),
+    }
 
 
 def _active_session_settings(manager: SessionManager):
@@ -81,7 +114,7 @@ def _build_items(manager: SessionManager) -> list[dict[str, object]]:
     for name, profile_status in statuses.items():
         is_active = bool(profile_status.get("active"))
         is_configured = bool(profile_status.get("configured"))
-        health_fields = _profile_health_fields(profile_status)
+        health_fields = _profile_health_fields(name, profile_status)
         items.append(
             {
                 "id": name,
@@ -241,6 +274,7 @@ def set_provider_credentials(
         storage_provider = credential_storage_provider_name(name, profile)
         try:
             store_credential(storage_provider, "api_key", api_key)
+            _clear_probe_cache(name)
         except Exception as exc:  # pragma: no cover - storage failure
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -257,6 +291,7 @@ def set_provider_credentials(
         updated_settings = settings.model_copy(update={"profiles": merged})
         try:
             save_settings(updated_settings)
+            _clear_probe_cache(name)
         except Exception as exc:  # pragma: no cover - filesystem failure
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -455,6 +490,18 @@ async def verify_provider(name: str) -> VerifyResult:
 
     Timeout: 10 seconds total.
     """
+    start = time.monotonic()
+
+    def _record_probe(result: VerifyResult, *, probed: bool = True) -> VerifyResult:
+        _PROVIDER_PROBE_CACHE[_probe_cache_key(name)] = {
+            "reachable": result.ok,
+            "probed": probed,
+            "last_verified_at": datetime.now(timezone.utc).isoformat(),
+            "verification_latency_ms": int((time.monotonic() - start) * 1000),
+            "model_count": len(result.models or []),
+        }
+        return result
+
     settings = load_settings()
     profiles = settings.merged_profiles()
     if name not in profiles:
@@ -475,19 +522,25 @@ async def verify_provider(name: str) -> VerifyResult:
             profile.resolved_model,
         )
         if error:
-            return VerifyResult(ok=False, error=error)
-        return VerifyResult(ok=True)
+            return _record_probe(VerifyResult(ok=False, error=error))
+        return _record_probe(VerifyResult(ok=True))
 
     if profile.api_format == "copilot":
         # Copilot uses OAuth — we can't meaningfully probe it without OAuth tokens.
-        return VerifyResult(ok=False, error="Copilot uses OAuth; connection probing is not supported.")
+        return _record_probe(
+            VerifyResult(ok=False, error="Copilot uses OAuth; connection probing is not supported."),
+            probed=False,
+        )
 
     if not base_url:
         # No base_url means we can't reach the provider at all.
-        return VerifyResult(ok=False, error="No base_url configured for this provider.")
+        return _record_probe(
+            VerifyResult(ok=False, error="No base_url configured for this provider."),
+            probed=False,
+        )
 
     if not api_key:
-        return VerifyResult(ok=False, error="No API key available.")
+        return _record_probe(VerifyResult(ok=False, error="No API key available."), probed=False)
 
     # Priority: OpenAI client → httpx fallback → completion probe
     models_found: list[str] = []
@@ -501,12 +554,12 @@ async def verify_provider(name: str) -> VerifyResult:
         ok, models_error, models_found = await _fetch_models_via_httpx(base_url, api_key)
 
     if ok and models_found:
-        return VerifyResult(ok=True, models=models_found)
+        return _record_probe(VerifyResult(ok=True, models=models_found))
 
     # If models fetch failed or returned no models, try a completion probe.
     completion_error = await _completion_probe(base_url, api_key, profile.resolved_model)
 
     if completion_error:
         combined = "; ".join(filter(None, [models_error, completion_error]))
-        return VerifyResult(ok=False, error=combined or "Connection failed.")
-    return VerifyResult(ok=True)
+        return _record_probe(VerifyResult(ok=False, error=combined or "Connection failed."))
+    return _record_probe(VerifyResult(ok=True))

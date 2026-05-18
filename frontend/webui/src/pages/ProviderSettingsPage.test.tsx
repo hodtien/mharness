@@ -102,6 +102,56 @@ describe("ProviderSettingsPage", () => {
     expect(screen.getByRole("button", { name: /verify all/i })).toBeTruthy();
   });
 
+  it("filters providers by health label", async () => {
+    mockLocalStorage();
+    const filterProviders = {
+      providers: [
+        {
+          id: "ready-active",
+          label: "Ready Active",
+          provider: "openai",
+          api_format: "openai",
+          default_model: "gpt-ready",
+          base_url: null,
+          has_credentials: true,
+          is_active: true,
+          health_label: "Ready",
+          reachable: null,
+          probed: null,
+        },
+        {
+          id: "broken-configured",
+          label: "Broken Configured",
+          provider: "openai",
+          api_format: "openai",
+          default_model: "gpt-broken",
+          base_url: "https://api.example.test/v1",
+          has_credentials: true,
+          is_active: false,
+          health_label: "Probe failing",
+          reachable: false,
+          probed: true,
+        },
+      ],
+    };
+    vi.stubGlobal("fetch", (url: string) => {
+      if (url === "/api/providers") return Promise.resolve(jsonResponse(filterProviders));
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+
+    render(<BrowserRouter><ProviderSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getByText("Ready Active")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /^Ready$/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Ready Active/i })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /Broken Configured/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Probe failing$/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Broken Configured/i })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /Ready Active/i })).toBeNull();
+  });
+
   it("opens modal on card click and verifies provider", async () => {
     mockLocalStorage();
     const calls: Array<{ url: string; init?: RequestInit }> = [];

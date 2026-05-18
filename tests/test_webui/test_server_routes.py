@@ -405,12 +405,13 @@ def test_providers_endpoint_requires_auth_and_returns_list(tmp_path, monkeypatch
         assert "reachable" in item
         assert "probed" in item
 
-    # Exactly one profile is active
+    # Exactly one profile is active, but the list endpoint must not fabricate
+    # probe success before /verify has actually run.
     active = [p for p in body["providers"] if p["is_active"]]
     assert len(active) == 1
-    assert active[0]["health_label"] == "Healthy"
-    assert active[0]["reachable"] is True
-    assert active[0]["probed"] is True
+    assert active[0]["health_label"] == "Ready"
+    assert active[0]["reachable"] is None
+    assert active[0]["probed"] is None
 
 
 def test_providers_trailing_slash_behavior(tmp_path, monkeypatch) -> None:
@@ -611,6 +612,56 @@ def test_verify_provider_returns_models_from_openai_models_endpoint(tmp_path, mo
     assert response.status_code == 200
     assert response.json() == {"ok": True, "error": None, "models": ["gpt-test-a", "gpt-test-b"]}
 
+    providers_response = client.get(
+        "/api/providers", headers={"Authorization": "Bearer test-token"}
+    )
+    assert providers_response.status_code == 200
+    verified = next(
+        p for p in providers_response.json()["providers"] if p["id"] == "openai-compatible"
+    )
+    assert verified["health_label"] == "Ready"
+    assert verified["reachable"] is True
+    assert verified["probed"] is True
+    assert verified["model_count"] == 2
+
+
+def test_verify_provider_marks_active_route_healthy_after_success(tmp_path, monkeypatch) -> None:
+    """Only a successful verify call promotes the active route to Healthy."""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OPENHARNESS_CONFIG_DIR", str(config_dir))
+    monkeypatch.setenv("OPENHARNESS_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    save_settings(load_settings())
+
+    async def fake_completion_probe(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "openharness.webui.server.routes.providers._completion_probe",
+        fake_completion_probe,
+    )
+
+    client = _client(tmp_path)
+    response = client.post(
+        "/api/providers/claude-api/verify",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+    providers_response = client.get(
+        "/api/providers", headers={"Authorization": "Bearer test-token"}
+    )
+    assert providers_response.status_code == 200
+    active = next(p for p in providers_response.json()["providers"] if p["id"] == "claude-api")
+    assert active["is_active"] is True
+    assert active["health_label"] == "Healthy"
+    assert active["reachable"] is True
+    assert active["probed"] is True
+
 
 def test_verify_provider_falls_back_to_completion_probe(tmp_path, monkeypatch) -> None:
     """If /v1/models is unavailable, verify sends one tiny completion probe."""
@@ -684,6 +735,17 @@ def test_verify_provider_reports_missing_api_key(tmp_path, monkeypatch) -> None:
     assert response.json()["ok"] is False
     assert response.json()["error"] == "No API key available."
     assert response.json()["models"] is None
+
+    providers_response = client.get(
+        "/api/providers", headers={"Authorization": "Bearer test-token"}
+    )
+    assert providers_response.status_code == 200
+    failed = next(
+        p for p in providers_response.json()["providers"] if p["id"] == "openai-compatible"
+    )
+    assert failed["health_label"] == "Probe failing"
+    assert failed["reachable"] is False
+    assert failed["probed"] is False
 
 
 def test_pipeline_cards_requires_auth(tmp_path) -> None:

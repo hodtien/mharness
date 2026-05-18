@@ -178,7 +178,9 @@ def test_provider_list_includes_health_label_for_active_profile(tmp_path, monkey
     providers = response.json()["providers"]
     active = next(item for item in providers if item["is_active"])
     assert active["has_credentials"] is True
-    assert active["health_label"] in {"Healthy", "Configured"}
+    assert active["health_label"] == "Ready"
+    assert active["reachable"] is None
+    assert active["probed"] is None
 
 
 def test_verify_provider_reports_missing_api_key(tmp_path) -> None:

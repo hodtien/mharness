@@ -50,7 +50,7 @@ export default function ModelsSettingsPage() {
   const [providerFilter, setProviderFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "built-in" | "custom">("all");
   const [configFilter, setConfigFilter] = useState<"all" | "configured" | "unconfigured">("all");
-  const [healthFilter, setHealthFilter] = useState<"all" | "healthy" | "failing">("all");
+  const [healthFilter, setHealthFilter] = useState<"all" | "ready" | "healthy" | "probe-failing">("all");
   const [capabilityFilter, setCapabilityFilter] = useState<"all" | "long-context" | "fast" | "vision" | "tools" | "code">("all");
   const [defaultOnly, setDefaultOnly] = useState(false);
 
@@ -117,12 +117,12 @@ export default function ModelsSettingsPage() {
 
       const provider = providerStatus[providerId];
       const isConfigured = Boolean(provider?.has_credentials);
-      const isHealthy = provider?.health_label === "Healthy";
-      const isFailing = provider?.health_label === "Probe failing";
+      const healthLabel = provider?.health_label;
       if (configFilter === "configured" && !isConfigured) filtered = [];
       if (configFilter === "unconfigured" && isConfigured) filtered = [];
-      if (healthFilter === "healthy" && !isHealthy) filtered = [];
-      if (healthFilter === "failing" && !isFailing) filtered = [];
+      if (healthFilter === "ready" && healthLabel !== "Ready") filtered = [];
+      if (healthFilter === "healthy" && healthLabel !== "Healthy") filtered = [];
+      if (healthFilter === "probe-failing" && healthLabel !== "Probe failing") filtered = [];
       if (capabilityFilter !== "all") {
         filtered = filtered.filter((model) => modelMatchesCapability(model, capabilityFilter));
       }
@@ -147,13 +147,13 @@ export default function ModelsSettingsPage() {
       return [providerId, [...custom, ...builtIn]] as [string, ModelProfile[]];
     });
     return entries.filter(([, items]) => items.length > 0)
-      // Active providers first, then by label.
+      // Healthy providers first, then by label.
       .sort(([aId, aItems], [bId, bItems]) => {
         const pa = providerStatus[aId];
         const pb = providerStatus[bId];
-        if (pa?.is_active && !pb?.is_active) return -1;
-        if (!pa?.is_active && pb?.is_active) return 1;
-        // Within active (or inactive), default model first.
+        if (pa?.health_label === "Healthy" && pb?.health_label !== "Healthy") return -1;
+        if (pa?.health_label !== "Healthy" && pb?.health_label === "Healthy") return 1;
+        // Within each health group, default model first.
         const aDefault = aItems[0]?.is_default ? 0 : 1;
         const bDefault = bItems[0]?.is_default ? 0 : 1;
         if (aDefault !== bDefault) return aDefault - bDefault;
@@ -383,13 +383,14 @@ export default function ModelsSettingsPage() {
             </select>
             <select
               value={healthFilter}
-              onChange={(e) => setHealthFilter(e.target.value as "all" | "healthy" | "failing")}
+              onChange={(e) => setHealthFilter(e.target.value as "all" | "ready" | "healthy" | "probe-failing")}
               className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text)] outline-none focus:border-cyan-400/50"
               aria-label="Filter by health"
             >
               <option value="all">Any health</option>
+              <option value="ready">Ready</option>
               <option value="healthy">Healthy</option>
-              <option value="failing">Failing/unready</option>
+              <option value="probe-failing">Probe failing</option>
             </select>
             <select
               value={capabilityFilter}

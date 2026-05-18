@@ -53,7 +53,7 @@ export default function ProviderSettingsPage() {
   const [selected, setSelected] = useState<ProviderProfile | null>(null);
   const [connectionStatuses, setConnectionStatuses] = useState<Record<string, ConnectionStatus>>({});
   const [batchVerifying, setBatchVerifying] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "configured" | "not-configured" | "custom-router">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "healthy" | "ready" | "probe-failing" | "custom-router">("all");
 
   const loadProviders = async () => {
     setError(null);
@@ -86,9 +86,9 @@ export default function ProviderSettingsPage() {
 
   const filteredProviders = useMemo(() => {
     if (statusFilter === "all") return providers;
-    if (statusFilter === "active") return providers.filter((p) => p.is_active);
-    if (statusFilter === "configured") return providers.filter((p) => p.has_credentials && !p.is_active);
-    if (statusFilter === "not-configured") return providers.filter((p) => !p.has_credentials);
+    if (statusFilter === "healthy") return providers.filter((p) => p.health_label === "Healthy");
+    if (statusFilter === "ready") return providers.filter((p) => p.health_label === "Ready");
+    if (statusFilter === "probe-failing") return providers.filter((p) => p.health_label === "Probe failing");
     return providers.filter((p) => {
       const key = `${p.provider} ${p.api_format} ${p.id} ${p.label}`.toLowerCase();
       return key.includes("custom") || key.includes("router") || key.includes("openrouter");
@@ -175,8 +175,8 @@ export default function ProviderSettingsPage() {
         }
         metadata={[
           { label: "Providers", value: String(providers.length) },
-          ...(providers.some((p) => p.is_active)
-            ? [{ label: "Healthy", value: providers.find((p) => p.is_active)?.label ?? "—", accent: "cyan" as const }]
+          ...(providers.some((p) => p.health_label === "Healthy")
+            ? [{ label: "Healthy", value: providers.find((p) => p.health_label === "Healthy")?.label ?? "—", accent: "cyan" as const }]
             : []),
         ]}
       />
@@ -189,15 +189,15 @@ export default function ProviderSettingsPage() {
         <div className="flex flex-wrap gap-2">
           {[
             ["all", "All"],
-            ["active", "Healthy"],
-            ["configured", "Ready"],
-            ["not-configured", "Probe failing"],
+            ["healthy", "Healthy"],
+            ["ready", "Ready"],
+            ["probe-failing", "Probe failing"],
             ["custom-router", "Custom/router"],
           ].map(([value, label]) => (
             <button
               key={value}
               type="button"
-              onClick={() => setStatusFilter(value as "all" | "active" | "configured" | "not-configured" | "custom-router")}
+              onClick={() => setStatusFilter(value as "all" | "healthy" | "ready" | "probe-failing" | "custom-router")}
               className={`rounded-full border px-3 py-1 text-xs ${statusFilter === value ? "border-cyan-400/50 bg-cyan-500/10 text-cyan-100" : "border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-dim)]"}`}
             >
               {label}

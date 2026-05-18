@@ -222,7 +222,12 @@ describe("ModelsSettingsPage", () => {
     expect(screen.getAllByText("Anthropic")[0]).toBeTruthy();
 
     fireEvent.change(screen.getByRole("combobox", { name: /filter by configuration status/i }), { target: { value: "all" } });
-    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "failing" } });
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "ready" } });
+    await waitFor(() => expect(screen.getAllByText("OpenRouter")[0]).toBeTruthy());
+    expect(screen.queryAllByText("OpenAI").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
+    expect(screen.queryAllByText("Anthropic").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "probe-failing" } });
     await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
     expect(screen.queryAllByText("Anthropic").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
     expect(screen.queryAllByText("OpenRouter").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
