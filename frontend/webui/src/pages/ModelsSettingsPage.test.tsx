@@ -252,6 +252,42 @@ describe("ModelsSettingsPage", () => {
     expect(screen.getAllByText("Probe failing").length).toBeGreaterThan(0);
   });
 
+  it("filters models by health with legacy provider status fallback", async () => {
+    mockLocalStorage();
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      if (url === "/api/models" && (!init?.method || init.method === "GET")) {
+        return Promise.resolve(jsonResponse(sampleModels));
+      }
+      if (url === "/api/providers") {
+        return Promise.resolve(jsonResponse({
+          providers: [
+            { ...sampleProviders.providers[0], health_label: undefined, has_credentials: false, is_active: false },
+            { ...sampleProviders.providers[1], health_label: undefined, has_credentials: true, is_active: true },
+            { ...sampleProviders.providers[2], health_label: undefined, has_credentials: true, is_active: false },
+          ],
+        }));
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+
+    render(<BrowserRouter><ModelsSettingsPage /></BrowserRouter>);
+
+    await waitFor(() => expect(screen.getAllByText("OpenRouter")[0]).toBeTruthy());
+
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "ready" } });
+    await waitFor(() => expect(screen.getAllByText("OpenRouter")[0]).toBeTruthy());
+    expect(screen.queryAllByText("Anthropic").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
+    expect(screen.queryAllByText("OpenAI").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "healthy" } });
+    await waitFor(() => expect(screen.getAllByText("Anthropic")[0]).toBeTruthy());
+    expect(screen.queryAllByText("OpenRouter").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /filter by health/i }), { target: { value: "probe-failing" } });
+    await waitFor(() => expect(screen.getAllByText("OpenAI")[0]).toBeTruthy());
+    expect(screen.queryAllByText("OpenRouter").find((el) => el.tagName !== "OPTION") ?? null).toBeNull();
+  });
+
   it("filters models by provider", async () => {
     mockLocalStorage();
     setupFetch();

@@ -37,6 +37,11 @@ interface DeleteConfirmState {
   error: string | null;
 }
 
+function providerHealthLabel(provider?: ProviderProfile): "Ready" | "Healthy" | "Probe failing" | "Unknown" {
+  if (!provider) return "Unknown";
+  return provider.health_label ?? (provider.is_active && provider.has_credentials ? "Healthy" : provider.has_credentials ? "Ready" : "Probe failing");
+}
+
 export default function ModelsSettingsPage() {
   const [models, setModels] = useState<ModelsResponse>({});
   const [providers, setProviders] = useState<ProviderProfile[]>([]);
@@ -117,7 +122,7 @@ export default function ModelsSettingsPage() {
 
       const provider = providerStatus[providerId];
       const isConfigured = Boolean(provider?.has_credentials);
-      const healthLabel = provider?.health_label;
+      const healthLabel = providerHealthLabel(provider);
       if (configFilter === "configured" && !isConfigured) filtered = [];
       if (configFilter === "unconfigured" && isConfigured) filtered = [];
       if (healthFilter === "ready" && healthLabel !== "Ready") filtered = [];
@@ -151,8 +156,8 @@ export default function ModelsSettingsPage() {
       .sort(([aId, aItems], [bId, bItems]) => {
         const pa = providerStatus[aId];
         const pb = providerStatus[bId];
-        if (pa?.health_label === "Healthy" && pb?.health_label !== "Healthy") return -1;
-        if (pa?.health_label !== "Healthy" && pb?.health_label === "Healthy") return 1;
+        if (providerHealthLabel(pa) === "Healthy" && providerHealthLabel(pb) !== "Healthy") return -1;
+        if (providerHealthLabel(pa) !== "Healthy" && providerHealthLabel(pb) === "Healthy") return 1;
         // Within each health group, default model first.
         const aDefault = aItems[0]?.is_default ? 0 : 1;
         const bDefault = bItems[0]?.is_default ? 0 : 1;
@@ -569,8 +574,8 @@ function getCapabilityBadges(model: ModelProfile): Array<{ label: string; varian
 }
 
 function ProviderStatusBadge({ provider }: { provider?: ProviderProfile }) {
-  if (!provider) return <span className="text-xs text-[var(--text-dim)]">Unknown</span>;
-  const label = provider.health_label ?? (provider.is_active && provider.has_credentials ? "Healthy" : provider.has_credentials ? "Ready" : "Probe failing");
+  const label = providerHealthLabel(provider);
+  if (label === "Unknown") return <span className="text-xs text-[var(--text-dim)]">Unknown</span>;
   const classes =
     label === "Healthy"
       ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200"

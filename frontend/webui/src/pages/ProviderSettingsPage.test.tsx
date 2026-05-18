@@ -102,35 +102,39 @@ describe("ProviderSettingsPage", () => {
     expect(screen.getByRole("button", { name: /verify all/i })).toBeTruthy();
   });
 
-  it("filters providers by health label", async () => {
+  it("filters providers by health label with legacy status fallback", async () => {
     mockLocalStorage();
     const filterProviders = {
       providers: [
         {
-          id: "ready-active",
-          label: "Ready Active",
+          id: "ready-legacy",
+          label: "Ready Legacy",
           provider: "openai",
           api_format: "openai",
           default_model: "gpt-ready",
           base_url: null,
           has_credentials: true,
-          is_active: true,
-          health_label: "Ready",
-          reachable: null,
-          probed: null,
+          is_active: false,
         },
         {
-          id: "broken-configured",
-          label: "Broken Configured",
+          id: "healthy-legacy",
+          label: "Healthy Legacy",
+          provider: "anthropic",
+          api_format: "anthropic",
+          default_model: "claude-ready",
+          base_url: null,
+          has_credentials: true,
+          is_active: true,
+        },
+        {
+          id: "missing-legacy",
+          label: "Missing Legacy",
           provider: "openai",
           api_format: "openai",
           default_model: "gpt-broken",
           base_url: "https://api.example.test/v1",
-          has_credentials: true,
+          has_credentials: false,
           is_active: false,
-          health_label: "Probe failing",
-          reachable: false,
-          probed: true,
         },
       ],
     };
@@ -141,15 +145,20 @@ describe("ProviderSettingsPage", () => {
 
     render(<BrowserRouter><ProviderSettingsPage /></BrowserRouter>);
 
-    await waitFor(() => expect(screen.getByText("Ready Active")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Ready Legacy")).toBeTruthy());
 
     fireEvent.click(screen.getByRole("button", { name: /^Ready$/ }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /Ready Active/i })).toBeTruthy());
-    expect(screen.queryByRole("button", { name: /Broken Configured/i })).toBeNull();
+    await waitFor(() => expect(screen.getByRole("button", { name: /Ready Legacy/i })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /Healthy Legacy/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Missing Legacy/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Healthy$/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Healthy Legacy/i })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /Ready Legacy/i })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /^Probe failing$/ }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /Broken Configured/i })).toBeTruthy());
-    expect(screen.queryByRole("button", { name: /Ready Active/i })).toBeNull();
+    await waitFor(() => expect(screen.getByRole("button", { name: /Missing Legacy/i })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /Ready Legacy/i })).toBeNull();
   });
 
   it("opens modal on card click and verifies provider", async () => {

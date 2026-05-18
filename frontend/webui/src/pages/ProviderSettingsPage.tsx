@@ -46,6 +46,10 @@ function formatTime(iso: string | undefined): string {
   }
 }
 
+function providerHealthLabel(provider: ProviderProfile): "Ready" | "Healthy" | "Probe failing" {
+  return provider.health_label ?? (provider.is_active && provider.has_credentials ? "Healthy" : provider.has_credentials ? "Ready" : "Probe failing");
+}
+
 export default function ProviderSettingsPage() {
   const [providers, setProviders] = useState<ProviderProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,9 +90,9 @@ export default function ProviderSettingsPage() {
 
   const filteredProviders = useMemo(() => {
     if (statusFilter === "all") return providers;
-    if (statusFilter === "healthy") return providers.filter((p) => p.health_label === "Healthy");
-    if (statusFilter === "ready") return providers.filter((p) => p.health_label === "Ready");
-    if (statusFilter === "probe-failing") return providers.filter((p) => p.health_label === "Probe failing");
+    if (statusFilter === "healthy") return providers.filter((p) => providerHealthLabel(p) === "Healthy");
+    if (statusFilter === "ready") return providers.filter((p) => providerHealthLabel(p) === "Ready");
+    if (statusFilter === "probe-failing") return providers.filter((p) => providerHealthLabel(p) === "Probe failing");
     return providers.filter((p) => {
       const key = `${p.provider} ${p.api_format} ${p.id} ${p.label}`.toLowerCase();
       return key.includes("custom") || key.includes("router") || key.includes("openrouter");
@@ -175,8 +179,8 @@ export default function ProviderSettingsPage() {
         }
         metadata={[
           { label: "Providers", value: String(providers.length) },
-          ...(providers.some((p) => p.health_label === "Healthy")
-            ? [{ label: "Healthy", value: providers.find((p) => p.health_label === "Healthy")?.label ?? "—", accent: "cyan" as const }]
+          ...(providers.some((p) => providerHealthLabel(p) === "Healthy")
+            ? [{ label: "Healthy", value: providers.find((p) => providerHealthLabel(p) === "Healthy")?.label ?? "—", accent: "cyan" as const }]
             : []),
         ]}
       />
@@ -226,7 +230,7 @@ export default function ProviderSettingsPage() {
                       <div className="text-xs text-[var(--text-dim)]">{provider.provider}</div>
                     </div>
                   </div>
-                  <StatusBadge status={provider.health_label} />
+                  <StatusBadge status={providerHealthLabel(provider)} />
                 </div>
                 <div className="mt-4 text-xs uppercase tracking-wide text-[var(--text-dim)]">Default model</div>
                 <div className="mt-1 truncate font-mono text-sm text-cyan-100">{provider.default_model || "—"}</div>
@@ -309,8 +313,8 @@ function ConnectionStatusRow({ status }: { status: ConnectionStatus }) {
   );
 }
 
-function StatusBadge({ status }: { status?: "Ready" | "Healthy" | "Probe failing" }) {
-  const label = status ?? "Probe failing";
+function StatusBadge({ status }: { status: "Ready" | "Healthy" | "Probe failing" }) {
+  const label = status;
   const classes =
     label === "Healthy"
       ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-100"
